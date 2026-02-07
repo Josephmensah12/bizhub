@@ -37,19 +37,7 @@ const assetValidation = [
       return true;
     }),
 
-  // Serial number is conditionally required (only when quantity = 1 or not specified)
-  body('serial_number').custom((value, { req }) => {
-    const quantity = parseInt(req.body.quantity) || 1;
-    // If quantity > 1, serial_number is optional
-    if (quantity > 1) {
-      return true;
-    }
-    // If quantity = 1, serial_number is required
-    if (!value || value.trim() === '') {
-      throw new Error('Serial number is required when quantity is 1');
-    }
-    return true;
-  }),
+  body('serial_number').optional({ nullable: true }),
   body('make').notEmpty().withMessage('Make is required'),
   body('model').notEmpty().withMessage('Model is required'),
   body('status').optional(optionalFalsy).isIn(['In Stock', 'Processing', 'Reserved', 'Sold', 'In Repair', 'Returned']),

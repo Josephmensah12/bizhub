@@ -334,12 +334,6 @@ exports.validateImport = asyncHandler(async (req, res) => {
       if (!transformed.make) errors.push(`make is required`);
       if (!transformed.model) errors.push(`model is required`);
 
-      // Serial number is required only when quantity = 1
-      const qty = parseInt(transformed.quantity) || 1;
-      if (qty === 1 && !transformed.serial_number) {
-        errors.push(`serial_number is required when quantity is 1`);
-      }
-
       // Validate quantity
       if (transformed.quantity != null) {
         if (!Number.isInteger(transformed.quantity)) {
@@ -607,12 +601,6 @@ exports.commitImport = asyncHandler(async (req, res) => {
 
       if (!transformed.make) errors.push(`make is required`);
       if (!transformed.model) errors.push(`model is required`);
-
-      // Serial number required only when quantity = 1
-      const qty = parseInt(transformed.quantity) || 1;
-      if (qty === 1 && !transformed.serial_number) {
-        errors.push(`serial_number is required when quantity is 1`);
-      }
 
       // Validate quantity
       if (!Number.isInteger(transformed.quantity) || transformed.quantity < 1) {

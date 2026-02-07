@@ -60,7 +60,6 @@ function autoDetectColumns(headers) {
 
 /**
  * Get required fields for validation
- * Note: serial_number is conditionally required (only when quantity = 1)
  */
 function getRequiredFields() {
   return ['category', 'asset_type', 'make', 'model'];
@@ -70,12 +69,7 @@ function getRequiredFields() {
  * Get conditionally required fields
  */
 function getConditionalRequiredFields() {
-  return {
-    serial_number: {
-      requiredWhen: (row) => !row.quantity || row.quantity === 1,
-      message: 'serial_number is required when quantity is 1 (or not specified)'
-    }
-  };
+  return {};
 }
 
 /**
@@ -104,7 +98,7 @@ async function getFieldMetadata() {
     },
     make: { label: 'Make', required: true, type: 'text' },
     model: { label: 'Model', required: true, type: 'text' },
-    serial_number: { label: 'Serial Number', required: false, type: 'text', unique: true, conditionalRequired: 'Required when quantity = 1' },
+    serial_number: { label: 'Serial Number', required: false, type: 'text', unique: true },
     quantity: { label: 'Quantity', required: false, type: 'integer', min: 1, default: 1, description: 'Number of units (defaults to 1)' },
     ram_gb: { label: 'RAM (GB)', required: false, type: 'number' },
     storage_gb: { label: 'Storage (GB)', required: false, type: 'number' },
