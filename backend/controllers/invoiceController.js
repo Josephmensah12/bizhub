@@ -4,7 +4,7 @@
  * CRUD operations for invoices with payments and inventory locking
  */
 
-const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, User, CompanyProfile, ActivityLog, InventoryItemEvent, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const exchangeRateService = require('../services/exchangeRateService');
 const { checkAndReserve, computeAvailability } = require('../services/inventoryAvailabilityService');
@@ -28,7 +28,7 @@ async function recalculateInvoiceTotals(invoice, dbTransaction = null) {
     ...queryOptions
   });
 
-  // Calculate net paid: payments - refunds
+  // Calculate net paid: payments - refunds + credits applied
   let paymentsSum = 0;
   let refundsSum = 0;
 
@@ -41,9 +41,24 @@ async function recalculateInvoiceTotals(invoice, dbTransaction = null) {
     }
   }
 
-  const netPaid = Math.max(0, paymentsSum - refundsSum);
+  // Include store credit applications (matches returnController logic)
+  let creditsApplied = 0;
+  if (CustomerCreditApplication) {
+    const creditApps = await CustomerCreditApplication.findAll({
+      where: {
+        invoice_id: invoice.id,
+        voided_at: null
+      },
+      ...queryOptions
+    });
+    for (const app of creditApps) {
+      creditsApplied += parseFloat(app.amount_applied) || 0;
+    }
+  }
+
+  const netPaid = Math.max(0, paymentsSum - refundsSum + creditsApplied);
   const totalAmount = parseFloat(invoice.total_amount) || 0;
-  const balanceDue = totalAmount - netPaid;
+  const balanceDue = Math.max(0, totalAmount - netPaid);
 
   // Update invoice fields
   invoice.amount_paid = netPaid;
@@ -1150,14 +1165,18 @@ exports.createTransaction = asyncHandler(async (req, res) => {
     const totals = await recalculateInvoiceTotals(invoice, dbTransaction);
 
     // If invoice just became PAID, decrement on_hand and update status
+    // Only decrement units that haven't already been returned
     if (prevStatus !== 'PAID' && totals.status === 'PAID' && invoice.items) {
       for (const item of invoice.items) {
         if (item.asset && !item.voided_at) {
-          item.asset.quantity -= item.quantity;
-          await item.asset.save({ transaction: dbTransaction });
-          await item.asset.updateComputedStatus(dbTransaction);
-          // Log inventory event - item sold
-          await InventoryItemEvent.logSold(item.asset, invoice, req.user?.id, dbTransaction);
+          const unreturned = item.quantity - (item.quantity_returned_total || 0);
+          if (unreturned > 0) {
+            item.asset.quantity -= unreturned;
+            await item.asset.save({ transaction: dbTransaction });
+            await item.asset.updateComputedStatus(dbTransaction);
+            // Log inventory event - item sold
+            await InventoryItemEvent.logSold(item.asset, invoice, req.user?.id, dbTransaction);
+          }
         }
       }
     }
@@ -1374,12 +1393,16 @@ exports.voidTransaction = asyncHandler(async (req, res) => {
     await recalculateInvoiceTotals(invoice, dbTransaction);
 
     // If invoice was PAID and is no longer PAID, restore on_hand
+    // Only restore units that haven't already been returned (to avoid double-restore)
     if (prevStatus === 'PAID' && invoice.status !== 'PAID' && invoice.items) {
       for (const item of invoice.items) {
         if (item.asset && !item.voided_at) {
-          item.asset.quantity += item.quantity;
-          await item.asset.save({ transaction: dbTransaction });
-          await item.asset.updateComputedStatus(dbTransaction);
+          const unreturned = item.quantity - (item.quantity_returned_total || 0);
+          if (unreturned > 0) {
+            item.asset.quantity += unreturned;
+            await item.asset.save({ transaction: dbTransaction });
+            await item.asset.updateComputedStatus(dbTransaction);
+          }
         }
       }
     }
