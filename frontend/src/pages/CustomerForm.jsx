@@ -271,8 +271,13 @@ export default function CustomerForm() {
       errors.first_name = 'First name is required unless company name is provided';
     }
 
-    // Phone validation (if provided) - use client-side check as fallback
-    if (formData.phone_raw) {
+    // Phone is required
+    if (!formData.phone_raw || !formData.phone_raw.trim()) {
+      errors.phone_raw = 'Phone number is required';
+    }
+
+    // Phone format validation (if provided) - use client-side check as fallback
+    if (formData.phone_raw && !errors.phone_raw) {
       // If preview loaded and invalid, show error
       // If preview not loaded yet, do basic client-side validation
       const hasPreviewResult = phonePreview.e164 !== null || phonePreview.error;
@@ -511,7 +516,7 @@ export default function CustomerForm() {
             {/* Phone */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phone Number
+                Phone Number <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"

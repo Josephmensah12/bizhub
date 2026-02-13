@@ -212,11 +212,11 @@ module.exports = (sequelize, DataTypes) => {
     return `INV-${year}-${String(seq).padStart(6, '0')}`;
   };
 
-  // Recalculate totals (including balance_due)
+  // Recalculate totals (including balance_due), excluding voided items
   Invoice.prototype.recalculateTotals = async function() {
     const InvoiceItem = sequelize.models.InvoiceItem;
     const items = await InvoiceItem.findAll({
-      where: { invoice_id: this.id }
+      where: { invoice_id: this.id, voided_at: null }
     });
 
     let subtotal = 0;

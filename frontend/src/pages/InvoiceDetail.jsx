@@ -434,6 +434,132 @@ function CancelInvoiceModal({ invoice, onClose, onCancelled }) {
   );
 }
 
+/**
+ * Void Item Modal (for voiding line items on paid invoices)
+ */
+function VoidItemModal({ item, invoice, onClose, onVoided }) {
+  const [reason, setReason] = useState('');
+  const [voidQuantity, setVoidQuantity] = useState(item.quantity);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!reason.trim()) {
+      setError('A reason is required when voiding an item');
+      return;
+    }
+
+    if (voidQuantity <= 0 || voidQuantity > item.quantity) {
+      setError(`Quantity must be between 1 and ${item.quantity}`);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await axios.post(`/api/v1/invoices/${invoice.id}/items/${item.id}/void`, {
+        reason: reason.trim(),
+        quantity: voidQuantity
+      });
+      onVoided(response.data.data.invoice);
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Failed to void item');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const voidTotal = (item.unit_price_amount || 0) * voidQuantity;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="px-6 py-4 border-b bg-red-50">
+          <h2 className="text-lg font-semibold text-red-800">Void Item</h2>
+          <p className="text-sm text-red-600">
+            {item.description}
+          </p>
+          <p className="text-sm text-red-600">
+            Qty on invoice: {item.quantity} &bull; Line total: {formatCurrency(item.line_total_amount, invoice.currency)}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+            <strong>Warning:</strong> This will void {voidQuantity === item.quantity ? 'the entire item' : `${voidQuantity} of ${item.quantity} units`} and restore stock. The invoice balance will be recalculated, potentially making it overpaid (negative balance).
+          </div>
+
+          {error && (
+            <div className="p-3 bg-red-100 text-red-700 rounded text-sm">
+              {error}
+            </div>
+          )}
+
+          {item.quantity > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Quantity to void
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min={1}
+                  max={item.quantity}
+                  value={voidQuantity}
+                  onChange={(e) => setVoidQuantity(Math.min(item.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
+                  className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <span className="text-sm text-gray-500">
+                  of {item.quantity} &bull; Void amount: {formatCurrency(voidTotal, invoice.currency)}
+                </span>
+              </div>
+              {voidQuantity < item.quantity && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {item.quantity - voidQuantity} unit(s) will remain on the invoice
+                </p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Reason for voiding <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g., Item added in error, customer dispute, pricing correction"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              rows={3}
+              required
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 btn bg-red-600 hover:bg-red-700 text-white"
+            >
+              {loading ? 'Voiding...' : `Void ${voidQuantity === item.quantity ? 'Item' : voidQuantity + ' Unit(s)'}`}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 btn btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function InvoiceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -447,12 +573,21 @@ export default function InvoiceDetail() {
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [showVoidedTransactions, setShowVoidedTransactions] = useState(false);
 
+  // Void item state
+  const [showVoidItemModal, setShowVoidItemModal] = useState(false);
+  const [selectedVoidItem, setSelectedVoidItem] = useState(null);
+  const [showVoidedItems, setShowVoidedItems] = useState(false);
+
   // Returns state
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returns, setReturns] = useState([]);
 
   // Cancel modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
+
+  // Inline price editing
+  const [editingPriceItemId, setEditingPriceItemId] = useState(null);
+  const [editingPriceValue, setEditingPriceValue] = useState('');
 
   // Show/hide profit details
   const [showProfit, setShowProfit] = useState(false);
@@ -520,6 +655,37 @@ export default function InvoiceDetail() {
     }
   };
 
+  const handleStartEditPrice = (item) => {
+    setEditingPriceItemId(item.id);
+    setEditingPriceValue(item.unit_price_amount?.toString() || '0');
+  };
+
+  const handleSavePrice = async (itemId) => {
+    const newPrice = parseFloat(editingPriceValue);
+    if (isNaN(newPrice) || newPrice < 0) {
+      alert('Please enter a valid price');
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      await axios.patch(`/api/v1/invoices/${id}/items/${itemId}`, {
+        unit_price: newPrice
+      });
+      setEditingPriceItemId(null);
+      fetchInvoice();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to update price');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelEditPrice = () => {
+    setEditingPriceItemId(null);
+    setEditingPriceValue('');
+  };
+
   const handleDelete = async () => {
     if (!window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
       return;
@@ -539,6 +705,17 @@ export default function InvoiceDetail() {
   const handlePaymentReceived = (updatedInvoice) => {
     setInvoice(updatedInvoice);
     setShowPaymentModal(false);
+  };
+
+  const handleVoidItem = (item) => {
+    setSelectedVoidItem(item);
+    setShowVoidItemModal(true);
+  };
+
+  const handleItemVoided = (updatedInvoice) => {
+    setInvoice(updatedInvoice);
+    setShowVoidItemModal(false);
+    setSelectedVoidItem(null);
   };
 
   const handleVoidTransaction = (transaction) => {
@@ -631,10 +808,10 @@ export default function InvoiceDetail() {
   }
 
   const isAdmin = user?.role === 'Admin';
-  const canEdit = invoice.status === 'UNPAID';
+  const canEdit = isAdmin && invoice.status === 'UNPAID';
   const canReceivePayment = ['UNPAID', 'PARTIALLY_PAID'].includes(invoice.status);
   const canReturn = ['PARTIALLY_PAID', 'PAID'].includes(invoice.status) && invoice.items?.length > 0;
-  const canRemoveItems = ['UNPAID', 'PARTIALLY_PAID'].includes(invoice.status);
+  const canRemoveItems = isAdmin && invoice.status === 'UNPAID';
 
   // Cancel logic: Admin only, invoice not cancelled, net paid must be 0
   const netPaid = parseFloat(invoice.amount_paid) || 0;
@@ -643,6 +820,15 @@ export default function InvoiceDetail() {
 
   // Delete logic: Admin only, must be UNPAID or CANCELLED
   const canDelete = isAdmin && (invoice.status === 'UNPAID' || invoice.status === 'CANCELLED');
+
+  // Void item permission: admin + PAID invoice
+  const canVoidItems = isAdmin && invoice.status === 'PAID';
+
+  // Filter items for display
+  const voidedItemCount = (invoice.items || []).filter(item => item.voided_at).length;
+  const displayItems = showVoidedItems
+    ? (invoice.items || [])
+    : (invoice.items || []).filter(item => !item.voided_at);
 
   // Filter transactions for display
   const displayTransactions = showVoidedTransactions
@@ -686,6 +872,16 @@ export default function InvoiceDetail() {
           invoice={invoice}
           onClose={() => setShowCancelModal(false)}
           onCancelled={handleCancelled}
+        />
+      )}
+
+      {/* Void Item Modal */}
+      {showVoidItemModal && selectedVoidItem && (
+        <VoidItemModal
+          item={selectedVoidItem}
+          invoice={invoice}
+          onClose={() => { setShowVoidItemModal(false); setSelectedVoidItem(null); }}
+          onVoided={handleItemVoided}
         />
       )}
 
@@ -887,9 +1083,19 @@ export default function InvoiceDetail() {
 
           {/* Items */}
           <div className={`card ${invoice.status === 'CANCELLED' ? 'opacity-60' : ''}`}>
-            <h2 className="text-lg font-semibold mb-4">
-              {invoice.status === 'CANCELLED' ? 'Item History' : 'Items'} ({invoice.items?.length || 0})
-            </h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">
+                {invoice.status === 'CANCELLED' ? 'Item History' : 'Items'} ({(invoice.items || []).filter(i => !i.voided_at).length})
+              </h2>
+              {voidedItemCount > 0 && (
+                <button
+                  onClick={() => setShowVoidedItems(!showVoidedItems)}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  {showVoidedItems ? 'Hide voided' : `Show ${voidedItemCount} voided`}
+                </button>
+              )}
+            </div>
 
             {!invoice.items || invoice.items.length === 0 ? (
               <div className="text-gray-500 text-center py-8">No items on this invoice</div>
@@ -900,69 +1106,143 @@ export default function InvoiceDetail() {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qty</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                      {canRemoveItems && (
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                      )}
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {invoice.items.map((item) => (
-                      <tr key={item.id} className={invoice.status === 'CANCELLED' ? 'text-gray-400' : ''}>
-                        <td className="px-4 py-4">
-                          <div className={invoice.status === 'CANCELLED' ? 'font-medium text-gray-400 line-through' : 'font-medium'}>{item.description}</div>
-                          {item.asset && (
-                            <div className="text-sm text-gray-500">
-                              <Link
-                                to={`/inventory/${item.asset.id}`}
-                                className="text-blue-600 hover:text-blue-800"
-                              >
-                                {item.asset.asset_tag}
-                              </Link>
-                              {item.asset.serial_number && (
-                                <span> • S/N: {item.asset.serial_number}</span>
-                              )}
-                              {invoice.status !== 'CANCELLED' && (
-                                <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
-                                  item.asset.status === 'Sold' ? 'bg-green-100 text-green-700' :
-                                  item.asset.status === 'Processing' ? 'bg-blue-100 text-blue-700' :
-                                  item.asset.status === 'Reserved' ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-gray-100 text-gray-600'
-                                }`}>
-                                  {item.asset.status}
-                                </span>
-                              )}
+                    {displayItems.map((item) => {
+                      const isItemVoided = !!item.voided_at;
+
+                      return (
+                        <tr key={item.id} className={`${invoice.status === 'CANCELLED' ? 'text-gray-400' : ''} ${isItemVoided ? 'opacity-60' : ''}`}>
+                          <td className="px-4 py-4">
+                            <div className={`font-medium ${invoice.status === 'CANCELLED' || isItemVoided ? 'text-gray-400 line-through' : ''}`}>
+                              {item.description}
                             </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 text-center">{item.quantity}</td>
-                        <td className="px-4 py-4 text-right">
-                          {formatCurrency(item.unit_price_amount, invoice.currency)}
-                        </td>
-                        <td className="px-4 py-4 text-right font-medium">
-                          {formatCurrency(item.line_total_amount, invoice.currency)}
-                        </td>
-                        {canRemoveItems && (
-                          <td className="px-4 py-4 text-center">
-                            <button
-                              onClick={() => handleRemoveItem(item.id)}
-                              disabled={actionLoading}
-                              className="text-sm text-red-600 hover:text-red-800"
-                            >
-                              Remove
-                            </button>
+                            {item.asset && (
+                              <div className="text-sm text-gray-500">
+                                <Link
+                                  to={`/inventory/${item.asset.id}`}
+                                  className="text-blue-600 hover:text-blue-800"
+                                >
+                                  {item.asset.asset_tag}
+                                </Link>
+                                {item.asset.serial_number && (
+                                  <span> • S/N: {item.asset.serial_number}</span>
+                                )}
+                                {invoice.status !== 'CANCELLED' && !isItemVoided && (
+                                  <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
+                                    item.asset.status === 'Sold' ? 'bg-green-100 text-green-700' :
+                                    item.asset.status === 'Processing' ? 'bg-blue-100 text-blue-700' :
+                                    item.asset.status === 'Reserved' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    {item.asset.status}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {isItemVoided && item.void_reason && (
+                              <div className="text-xs text-red-600 mt-1">
+                                Void reason: {item.void_reason}
+                              </div>
+                            )}
+                            {isItemVoided && item.voidedBy && (
+                              <div className="text-xs text-red-500">
+                                Voided by {item.voidedBy.full_name} on {formatDateTime(item.voided_at)}
+                              </div>
+                            )}
                           </td>
-                        )}
-                      </tr>
-                    ))}
+                          <td className={`px-4 py-4 text-center ${isItemVoided ? 'line-through' : ''}`}>{item.quantity}</td>
+                          <td className={`px-4 py-4 text-right text-gray-500 ${isItemVoided ? 'line-through' : ''}`}>
+                            {formatCurrency(item.unit_cost_amount, invoice.currency)}
+                          </td>
+                          <td className={`px-4 py-4 text-right ${isItemVoided ? 'line-through' : ''}`}>
+                            {canEdit && !isItemVoided && editingPriceItemId === item.id ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editingPriceValue}
+                                  onChange={(e) => setEditingPriceValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSavePrice(item.id);
+                                    if (e.key === 'Escape') handleCancelEditPrice();
+                                  }}
+                                  className="w-24 px-2 py-1 text-right border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleSavePrice(item.id)}
+                                  disabled={actionLoading}
+                                  className="text-green-600 hover:text-green-800 p-1"
+                                  title="Save"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={handleCancelEditPrice}
+                                  className="text-gray-400 hover:text-gray-600 p-1"
+                                  title="Cancel"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ) : (
+                              <span
+                                className={canEdit && !isItemVoided ? 'cursor-pointer hover:text-blue-600 hover:underline' : ''}
+                                onClick={() => canEdit && !isItemVoided && handleStartEditPrice(item)}
+                                title={canEdit && !isItemVoided ? 'Click to edit price' : ''}
+                              >
+                                {formatCurrency(item.unit_price_amount, invoice.currency)}
+                              </span>
+                            )}
+                          </td>
+                          <td className={`px-4 py-4 text-right font-medium ${isItemVoided ? 'line-through' : ''}`}>
+                            {formatCurrency(item.line_total_amount, invoice.currency)}
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            {isItemVoided ? (
+                              <span className="text-xs text-red-500 font-medium">Voided</span>
+                            ) : canVoidItems ? (
+                              <button
+                                onClick={() => handleVoidItem(item)}
+                                disabled={actionLoading}
+                                className="text-sm text-red-600 hover:text-red-800"
+                              >
+                                Void
+                              </button>
+                            ) : canRemoveItems ? (
+                              <button
+                                onClick={() => handleRemoveItem(item.id)}
+                                disabled={actionLoading}
+                                className="text-sm text-red-600 hover:text-red-800"
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              <span className="text-gray-300">&mdash;</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                   <tfoot className="bg-gray-50">
                     <tr>
-                      <td colSpan={canRemoveItems ? 4 : 3} className="px-4 py-3 text-right font-semibold">Total</td>
+                      <td colSpan={4} className="px-4 py-3 text-right font-semibold">Total</td>
                       <td className="px-4 py-3 text-right font-bold text-lg">
                         {formatCurrency(invoice.total_amount, invoice.currency)}
                       </td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>

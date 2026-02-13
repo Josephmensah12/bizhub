@@ -91,6 +91,19 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0
+    },
+    // Void fields (soft-delete for paid invoice items)
+    voided_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    voided_by_user_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    void_reason: {
+      type: DataTypes.TEXT,
+      allowNull: true
     }
   }, {
     tableName: 'invoice_items',
@@ -103,7 +116,13 @@ module.exports = (sequelize, DataTypes) => {
   InvoiceItem.associate = (models) => {
     InvoiceItem.belongsTo(models.Invoice, { as: 'invoice', foreignKey: 'invoice_id' });
     InvoiceItem.belongsTo(models.Asset, { as: 'asset', foreignKey: 'asset_id' });
+    InvoiceItem.belongsTo(models.User, { as: 'voidedBy', foreignKey: 'voided_by_user_id' });
     InvoiceItem.hasMany(models.InvoiceReturnItem, { as: 'returnItems', foreignKey: 'invoice_item_id' });
+  };
+
+  // Check if item is voided
+  InvoiceItem.prototype.isVoided = function() {
+    return !!this.voided_at;
   };
 
   // Get returnable quantity (sold minus already returned)

@@ -268,7 +268,7 @@ class InvoicePdfService {
         // Table rows
         doc.font('Helvetica').fillColor('#333333');
 
-        const items = invoice.items || [];
+        const items = (invoice.items || []).filter(item => !item.voided_at);
         for (const item of items) {
           // Check if we need a new page
           if (yPos > doc.page.height - 200) {

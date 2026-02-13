@@ -64,7 +64,7 @@ function calculateMetrics(assets, rates) {
       // Convert to GHS
       if (costCurrency === 'GHS') {
         totalCostGHS += costAmount;
-        totalCostUSD += costAmount / rates.GHS_USD;
+        totalCostUSD += costAmount * rates.GHS_USD;
       } else if (costCurrency === 'USD') {
         totalCostGHS += costAmount * rates.USD_GHS;
         totalCostUSD += costAmount;
@@ -86,7 +86,7 @@ function calculateMetrics(assets, rates) {
       // Convert to GHS
       if (priceCurrency === 'GHS') {
         totalSellingGHS += priceAmount;
-        totalSellingUSD += priceAmount / rates.GHS_USD;
+        totalSellingUSD += priceAmount * rates.GHS_USD;
       } else if (priceCurrency === 'USD') {
         totalSellingGHS += priceAmount * rates.USD_GHS;
         totalSellingUSD += priceAmount;

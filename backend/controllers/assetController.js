@@ -1,6 +1,7 @@
-const { Asset, User, InventoryItemEvent } = require('../models');
+const { Asset, User, InventoryItemEvent, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { generateAssetTag } = require('../utils/assetTagGenerator');
+const { getReservedQuantity } = require('../services/inventoryAvailabilityService');
 const { validationResult } = require('express-validator');
 const { getValuationSummary } = require('../services/valuationService');
 
@@ -75,7 +76,35 @@ exports.list = asyncHandler(async (req, res) => {
     include: [
       { model: User, as: 'creator', attributes: ['id', 'full_name'] },
       { model: User, as: 'updater', attributes: ['id', 'full_name'] }
-    ]
+    ],
+    attributes: {
+      include: [
+        [
+          sequelize.literal(`(
+            SELECT COALESCE(SUM(ii.quantity), 0)
+            FROM invoice_items ii
+            JOIN invoices i ON ii.invoice_id = i.id
+            WHERE ii.asset_id = "Asset"."id"
+              AND i.status NOT IN ('CANCELLED', 'PAID')
+              AND ii.voided_at IS NULL
+          )`),
+          'reserved_quantity'
+        ],
+        [
+          sequelize.literal(`(
+            "Asset"."quantity" - (
+              SELECT COALESCE(SUM(ii.quantity), 0)
+              FROM invoice_items ii
+              JOIN invoices i ON ii.invoice_id = i.id
+              WHERE ii.asset_id = "Asset"."id"
+                AND i.status NOT IN ('CANCELLED', 'PAID')
+                AND ii.voided_at IS NULL
+            )
+          )`),
+          'available_quantity'
+        ]
+      ]
+    }
   });
 
   res.json({
@@ -243,13 +272,14 @@ exports.delete = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if sold
-  if (asset.status === 'Sold') {
+  // Check if asset has active reservations (on any non-cancelled invoice)
+  const reserved = await getReservedQuantity(asset.id);
+  if (reserved > 0) {
     return res.status(400).json({
       success: false,
       error: {
-        code: 'CANNOT_DELETE_SOLD',
-        message: 'Cannot delete sold items'
+        code: 'CANNOT_DELETE_RESERVED',
+        message: 'Cannot delete items that are on active invoices'
       }
     });
   }
@@ -304,15 +334,20 @@ exports.bulkDelete = asyncHandler(async (req, res) => {
   const foundIds = assets.map(a => a.id);
   const notFoundIds = ids.filter(id => !foundIds.includes(id));
 
-  // Check for sold items
-  const soldAssets = assets.filter(a => a.status === 'Sold');
-  if (soldAssets.length > 0) {
+  // Check for assets with active reservations
+  const { computeBulkAvailability } = require('../services/inventoryAvailabilityService');
+  const availabilityMap = await computeBulkAvailability(foundIds);
+  const reservedAssets = assets.filter(a => {
+    const info = availabilityMap.get(a.id);
+    return info && info.reserved > 0;
+  });
+  if (reservedAssets.length > 0) {
     return res.status(400).json({
       success: false,
       error: {
-        code: 'HAS_SOLD_ITEMS',
-        message: `Cannot delete ${soldAssets.length} sold item(s). Remove them from selection.`,
-        soldIds: soldAssets.map(a => a.id)
+        code: 'HAS_RESERVED_ITEMS',
+        message: `Cannot delete ${reservedAssets.length} item(s) that are on active invoices. Remove them from selection.`,
+        reservedIds: reservedAssets.map(a => a.id)
       }
     });
   }
@@ -683,15 +718,20 @@ exports.permanentDelete = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check for sold items (extra safety)
-  const soldAssets = deletedAssets.filter(a => a.status === 'Sold');
-  if (soldAssets.length > 0) {
+  // Check for assets with active reservations (extra safety)
+  const { computeBulkAvailability: computeBulkAvailPerm } = require('../services/inventoryAvailabilityService');
+  const permAvailMap = await computeBulkAvailPerm(foundIds);
+  const permReservedAssets = deletedAssets.filter(a => {
+    const info = permAvailMap.get(a.id);
+    return info && info.reserved > 0;
+  });
+  if (permReservedAssets.length > 0) {
     return res.status(400).json({
       success: false,
       error: {
-        code: 'HAS_SOLD_ITEMS',
-        message: `Cannot permanently delete ${soldAssets.length} sold item(s)`,
-        soldIds: soldAssets.map(a => a.id)
+        code: 'HAS_RESERVED_ITEMS',
+        message: `Cannot permanently delete ${permReservedAssets.length} item(s) that are on active invoices`,
+        reservedIds: permReservedAssets.map(a => a.id)
       }
     });
   }

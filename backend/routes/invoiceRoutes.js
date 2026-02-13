@@ -37,8 +37,14 @@ router.delete('/:id', invoiceController.delete);
 // POST /api/v1/invoices/:id/items - Add item to invoice
 router.post('/:id/items', invoiceController.addItem);
 
+// PATCH /api/v1/invoices/:id/items/:itemId - Update item price
+router.patch('/:id/items/:itemId', invoiceController.updateItemPrice);
+
 // DELETE /api/v1/invoices/:id/items/:itemId - Remove item from invoice
 router.delete('/:id/items/:itemId', invoiceController.removeItem);
+
+// POST /api/v1/invoices/:id/items/:itemId/void - Void item on paid invoice
+router.post('/:id/items/:itemId/void', invoiceController.voidItem);
 
 // POST /api/v1/invoices/:id/payments - Receive payment (legacy endpoint)
 router.post('/:id/payments', invoiceController.receivePayment);

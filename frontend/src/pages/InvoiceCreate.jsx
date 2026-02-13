@@ -69,9 +69,9 @@ export default function InvoiceCreate() {
       const response = await axios.get(`/api/v1/invoices/${invoiceId}`);
       const invoiceData = response.data.data.invoice;
 
-      // Only allow editing Draft invoices
-      if (invoiceData.status !== 'Draft') {
-        setError('Only draft invoices can be edited');
+      // Only allow editing invoices that are not fully paid or cancelled
+      if (['PAID', 'CANCELLED'].includes(invoiceData.status)) {
+        setError('Cannot edit paid or cancelled invoices');
         setLoading(false);
         return;
       }
@@ -124,8 +124,14 @@ export default function InvoiceCreate() {
 
       try {
         setSearchingAssets(true);
+        const params = { search, limit: 15 };
+        // Exclude current invoice's reservations so the frontend can do its own
+        // local subtraction without double-counting.
+        if (invoice?.id) {
+          params.excludeInvoiceId = invoice.id;
+        }
         const response = await axios.get('/api/v1/invoices/available-assets', {
-          params: { search, limit: 15 }
+          params
         });
         // Count how many of each asset are already on the invoice
         const usedQtyByAssetId = {};
@@ -134,7 +140,7 @@ export default function InvoiceCreate() {
         });
         // Only hide assets whose remaining available qty is 0
         const available = response.data.data.assets.filter(a => {
-          const totalAvailable = (a.quantity || 1) - (a.quantity_reserved || 0) - (a.quantity_sold || 0) + (a.quantity_returned || 0);
+          const totalAvailable = a.available_quantity != null ? Number(a.available_quantity) : ((a.quantity || 1));
           const usedOnInvoice = usedQtyByAssetId[a.id] || 0;
           return (totalAvailable - usedOnInvoice) > 0;
         });
@@ -145,7 +151,7 @@ export default function InvoiceCreate() {
         setSearchingAssets(false);
       }
     }, 300),
-    [items]
+    [items, invoice]
   );
 
   useEffect(() => {
@@ -425,7 +431,8 @@ export default function InvoiceCreate() {
                       type="text"
                       value={newCustomer.phone_raw}
                       onChange={(e) => setNewCustomer(prev => ({ ...prev, phone_raw: e.target.value }))}
-                      placeholder="Phone Number"
+                      placeholder="Phone Number *"
+                      required
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                     />
                     <input
@@ -477,7 +484,7 @@ export default function InvoiceCreate() {
               {assetResults.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-80 overflow-y-auto">
                   {assetResults.map((asset) => {
-                    const totalAvailable = (asset.quantity || 1) - (asset.quantity_reserved || 0) - (asset.quantity_sold || 0) + (asset.quantity_returned || 0);
+                    const totalAvailable = asset.available_quantity != null ? Number(asset.available_quantity) : (asset.quantity || 1);
                     const usedOnInvoice = items.filter(i => i.asset_id === asset.id).reduce((sum, i) => sum + i.quantity, 0);
                     const remainingForInvoice = totalAvailable - usedOnInvoice;
                     return (

@@ -7,6 +7,7 @@
 const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, User, CompanyProfile, ActivityLog, InventoryItemEvent, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const exchangeRateService = require('../services/exchangeRateService');
+const { checkAndReserve, computeAvailability } = require('../services/inventoryAvailabilityService');
 const invoicePdfService = require('../services/invoicePdfService');
 const path = require('path');
 const fs = require('fs');
@@ -129,13 +130,11 @@ exports.list = asyncHandler(async (req, res) => {
     ]
   });
 
-  // Calculate aggregated metrics for the date range
+  // Calculate aggregated metrics for the date range (all invoices)
   const metrics = await Invoice.findOne({
     where,
     attributes: [
       [sequelize.fn('SUM', sequelize.col('total_amount')), 'totalRevenue'],
-      [sequelize.fn('SUM', sequelize.col('total_cost_amount')), 'totalCost'],
-      [sequelize.fn('SUM', sequelize.col('total_profit_amount')), 'totalProfit'],
       [sequelize.fn('SUM', sequelize.col('amount_paid')), 'totalCollected'],
       [sequelize.fn('SUM', sequelize.col('balance_due')), 'totalOutstanding'],
       [sequelize.fn('COUNT', sequelize.col('id')), 'invoiceCount']
@@ -144,11 +143,26 @@ exports.list = asyncHandler(async (req, res) => {
   });
 
   const totalRevenue = parseFloat(metrics.totalRevenue) || 0;
-  const totalCost = parseFloat(metrics.totalCost) || 0;
-  const totalProfit = parseFloat(metrics.totalProfit) || 0;
   const totalCollected = parseFloat(metrics.totalCollected) || 0;
   const totalOutstanding = parseFloat(metrics.totalOutstanding) || 0;
-  const marginPercent = totalCost > 0 ? ((totalProfit / totalCost) * 100) : 0;
+
+  // Net metrics: non-cancelled invoices (for profit/margin and net total)
+  const netWhere = { ...where, status: { [Op.ne]: 'CANCELLED' } };
+  const netMetrics = await Invoice.findOne({
+    where: netWhere,
+    attributes: [
+      [sequelize.fn('SUM', sequelize.col('total_amount')), 'netTotal'],
+      [sequelize.fn('SUM', sequelize.col('total_cost_amount')), 'netCost'],
+      [sequelize.fn('SUM', sequelize.col('total_profit_amount')), 'netProfit'],
+      [sequelize.fn('COUNT', sequelize.col('id')), 'netCount']
+    ],
+    raw: true
+  });
+  const netTotal = parseFloat(netMetrics.netTotal) || 0;
+  const netCost = parseFloat(netMetrics.netCost) || 0;
+  const netProfit = parseFloat(netMetrics.netProfit) || 0;
+  const netCount = parseInt(netMetrics.netCount) || 0;
+  const netMarginPercent = netCost > 0 ? ((netProfit / netCost) * 100) : 0;
 
   // Add display name to invoices
   const invoices = rows.map(inv => {
@@ -167,12 +181,14 @@ exports.list = asyncHandler(async (req, res) => {
       invoices,
       metrics: {
         totalRevenue,
-        totalCost,
-        totalProfit,
+        totalCost: netCost,
+        totalProfit: netProfit,
         totalCollected,
         totalOutstanding,
-        marginPercent: parseFloat(marginPercent.toFixed(2)),
-        invoiceCount: parseInt(metrics.invoiceCount) || 0
+        marginPercent: parseFloat(netMarginPercent.toFixed(2)),
+        invoiceCount: parseInt(metrics.invoiceCount) || 0,
+        netTotal,
+        netCount
       },
       pagination: {
         total: count,
@@ -209,7 +225,8 @@ exports.getById = asyncHandler(async (req, res) => {
             model: Asset,
             as: 'asset',
             attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition']
-          }
+          },
+          { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
         ]
       },
       {
@@ -309,6 +326,15 @@ exports.create = asyncHandler(async (req, res) => {
  */
 exports.update = asyncHandler(async (req, res) => {
   const { id } = req.params;
+
+  // Admin only
+  if (!req.user || req.user.role !== 'Admin') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+    });
+  }
+
   const {
     customerId, customer_id,
     invoiceDate, invoice_date,
@@ -333,6 +359,9 @@ exports.update = asyncHandler(async (req, res) => {
     });
   }
 
+  // Track changes for audit log
+  const changes = {};
+
   const _customerId = customerId || customer_id;
   const _invoiceDate = invoiceDate || invoice_date;
 
@@ -347,23 +376,37 @@ exports.update = asyncHandler(async (req, res) => {
         });
       }
     }
+    changes.customer_id = { from: invoice.customer_id, to: _customerId };
     invoice.customer_id = _customerId;
   }
 
   if (_invoiceDate !== undefined) {
+    changes.invoice_date = { from: invoice.invoice_date, to: _invoiceDate };
     invoice.invoice_date = _invoiceDate;
   }
 
   if (currency !== undefined) {
+    changes.currency = { from: invoice.currency, to: currency };
     invoice.currency = currency;
   }
 
   if (notes !== undefined) {
+    changes.notes = { from: invoice.notes, to: notes };
     invoice.notes = notes;
   }
 
   invoice.updated_by = req.user?.id;
   await invoice.save();
+
+  // Log the edit
+  await ActivityLog.log({
+    actorUserId: req.user.id,
+    actionType: 'INVOICE_UPDATED',
+    entityType: 'INVOICE',
+    entityId: invoice.id,
+    summary: `Invoice ${invoice.invoice_number} updated`,
+    metadata: { invoiceNumber: invoice.invoice_number, changes }
+  });
 
   // Reload with associations
   await invoice.reload({
@@ -386,6 +429,15 @@ exports.update = asyncHandler(async (req, res) => {
  */
 exports.addItem = asyncHandler(async (req, res) => {
   const { id } = req.params;
+
+  // Admin only
+  if (!req.user || req.user.role !== 'Admin') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+    });
+  }
+
   const {
     assetId, asset_id,
     unitPrice, unit_price,
@@ -411,51 +463,68 @@ exports.addItem = asyncHandler(async (req, res) => {
     });
   }
 
-  // Can only add items to UNPAID invoices
-  if (invoice.status !== 'UNPAID') {
+  // Can only add items to invoices that are not paid (fully or partially) or cancelled
+  if (['PAID', 'PARTIALLY_PAID', 'CANCELLED'].includes(invoice.status)) {
+    const msg = invoice.status === 'CANCELLED'
+      ? 'Cannot add items to cancelled invoices'
+      : 'Cannot add items to invoices with payments. Void the payment first.';
     return res.status(400).json({
       success: false,
-      error: { code: 'INVOICE_LOCKED', message: 'Can only add items to unpaid invoices' }
+      error: { code: 'INVOICE_LOCKED', message: msg }
     });
   }
-
-  // Check if asset exists and is available
-  const asset = await Asset.findByPk(_assetId);
-
-  if (!asset) {
-    return res.status(404).json({
-      success: false,
-      error: { code: 'ASSET_NOT_FOUND', message: 'Inventory item not found' }
-    });
-  }
-
-  if (!asset.canBeSold()) {
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'ASSET_UNAVAILABLE',
-        message: `Inventory item is not available (${asset.quantityRemaining} remaining of ${asset.quantity})`
-      }
-    });
-  }
-
-  // Check if asset is already on this invoice
-  const existingItem = await InvoiceItem.findOne({
-    where: { invoice_id: id, asset_id: _assetId }
-  });
 
   const transaction = await sequelize.transaction();
 
   try {
-    // If item already exists on invoice, increment its quantity
-    if (existingItem) {
-      // Reserve one more unit (will throw if insufficient)
-      asset.reserve(quantity);
-      await asset.save({ transaction });
+    // Lock asset row and check availability (SELECT FOR UPDATE)
+    const { available, asset } = await computeAvailability(_assetId, { transaction });
 
+    if (!asset) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        error: { code: 'ASSET_NOT_FOUND', message: 'Inventory item not found' }
+      });
+    }
+
+    if (asset.deleted_at) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: { code: 'ASSET_DELETED', message: 'Inventory item has been deleted' }
+      });
+    }
+
+    // Check if asset is already on this invoice
+    const existingItem = await InvoiceItem.findOne({
+      where: { invoice_id: id, asset_id: _assetId },
+      transaction
+    });
+
+    // `available` already reflects current state:
+    //   - For new items: available = on_hand - all_reserved
+    //   - For existing items on this invoice: their qty IS counted in reserved,
+    //     and we're adding MORE on top, so we check the additional qty against available.
+    // In both cases, the check is: requested additional qty <= available.
+    if (quantity > available) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ASSET_UNAVAILABLE',
+          message: `Insufficient stock: ${available} available, ${quantity} requested`
+        }
+      });
+    }
+
+    if (existingItem) {
       // Increment quantity on existing line item (beforeSave hook recalculates totals)
       existingItem.quantity += quantity;
       await existingItem.save({ transaction });
+
+      // Update asset computed status
+      await asset.updateComputedStatus(transaction);
 
       // Log inventory event - added to invoice
       await InventoryItemEvent.logAddedToInvoice(asset, invoice, req.user?.id, transaction);
@@ -468,6 +537,16 @@ exports.addItem = asyncHandler(async (req, res) => {
       // Reload item with asset
       await existingItem.reload({
         include: [{ model: Asset, as: 'asset' }]
+      });
+
+      // Log the edit
+      await ActivityLog.log({
+        actorUserId: req.user.id,
+        actionType: 'INVOICE_ITEM_ADDED',
+        entityType: 'INVOICE',
+        entityId: invoice.id,
+        summary: `Item quantity updated on invoice ${invoice.invoice_number}: ${asset.asset_tag} qty +${quantity}`,
+        metadata: { invoiceNumber: invoice.invoice_number, assetTag: asset.asset_tag, assetId: _assetId, quantityAdded: quantity, newQuantity: existingItem.quantity }
       });
 
       return res.status(200).json({
@@ -505,7 +584,7 @@ exports.addItem = asyncHandler(async (req, res) => {
     // Create description from asset
     const description = `${asset.make} ${asset.model}${asset.serial_number ? ` (S/N: ${asset.serial_number})` : ''} [${asset.asset_tag}]`;
 
-    // Create invoice item
+    // Create invoice item — this IS the reservation (no counter update needed)
     const item = await InvoiceItem.create({
       invoice_id: id,
       asset_id: _assetId,
@@ -517,9 +596,8 @@ exports.addItem = asyncHandler(async (req, res) => {
       original_cost_amount: originalCostAmount
     }, { transaction });
 
-    // Reserve the asset (quantity-based)
-    asset.reserve(quantity);
-    await asset.save({ transaction });
+    // Update asset computed status
+    await asset.updateComputedStatus(transaction);
 
     // Log inventory event - added to invoice
     await InventoryItemEvent.logAddedToInvoice(asset, invoice, req.user?.id, transaction);
@@ -534,6 +612,16 @@ exports.addItem = asyncHandler(async (req, res) => {
       include: [{ model: Asset, as: 'asset' }]
     });
 
+    // Log the edit
+    await ActivityLog.log({
+      actorUserId: req.user.id,
+      actionType: 'INVOICE_ITEM_ADDED',
+      entityType: 'INVOICE',
+      entityId: invoice.id,
+      summary: `Item added to invoice ${invoice.invoice_number}: ${asset.asset_tag}`,
+      metadata: { invoiceNumber: invoice.invoice_number, assetTag: asset.asset_tag, assetId: _assetId, quantity, unitPrice: sellingPrice }
+    });
+
     res.status(201).json({
       success: true,
       data: { item, invoice },
@@ -546,11 +634,30 @@ exports.addItem = asyncHandler(async (req, res) => {
 });
 
 /**
- * DELETE /api/v1/invoices/:id/items/:itemId
- * Remove item from invoice
+ * PATCH /api/v1/invoices/:id/items/:itemId
+ * Update item selling price on invoice
  */
-exports.removeItem = asyncHandler(async (req, res) => {
+exports.updateItemPrice = asyncHandler(async (req, res) => {
   const { id, itemId } = req.params;
+
+  // Admin only
+  if (!req.user || req.user.role !== 'Admin') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+    });
+  }
+
+  const { unitPrice, unit_price } = req.body;
+
+  const newPrice = parseFloat(unitPrice ?? unit_price);
+
+  if (isNaN(newPrice) || newPrice < 0) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_PRICE', message: 'Unit price must be a non-negative number' }
+    });
+  }
 
   const invoice = await Invoice.findByPk(id);
 
@@ -561,11 +668,88 @@ exports.removeItem = asyncHandler(async (req, res) => {
     });
   }
 
-  // Can only remove items from invoices that are not fully paid or cancelled
   if (['PAID', 'CANCELLED'].includes(invoice.status)) {
     return res.status(400).json({
       success: false,
-      error: { code: 'INVOICE_LOCKED', message: 'Cannot remove items from paid or cancelled invoices' }
+      error: { code: 'INVOICE_LOCKED', message: 'Cannot update items on paid or cancelled invoices' }
+    });
+  }
+
+  const item = await InvoiceItem.findOne({
+    where: { id: itemId, invoice_id: id }
+  });
+
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'ITEM_NOT_FOUND', message: 'Invoice item not found' }
+    });
+  }
+
+  // Track old price for audit
+  const oldPrice = item.unit_price_amount;
+
+  // Update selling price (beforeSave hook recalculates line totals)
+  item.unit_price_amount = newPrice;
+  await item.save();
+
+  // Recalculate invoice totals
+  await invoice.recalculateTotals();
+
+  // Reload item with asset
+  await item.reload({
+    include: [{ model: Asset, as: 'asset' }]
+  });
+
+  // Log the edit
+  await ActivityLog.log({
+    actorUserId: req.user.id,
+    actionType: 'INVOICE_UPDATED',
+    entityType: 'INVOICE',
+    entityId: invoice.id,
+    summary: `Item price updated on invoice ${invoice.invoice_number}: ${item.description} ${oldPrice} -> ${newPrice}`,
+    metadata: { invoiceNumber: invoice.invoice_number, itemId, description: item.description, oldPrice, newPrice }
+  });
+
+  res.json({
+    success: true,
+    data: { item, invoice },
+    message: 'Item price updated'
+  });
+});
+
+/**
+ * DELETE /api/v1/invoices/:id/items/:itemId
+ * Remove item from invoice
+ */
+exports.removeItem = asyncHandler(async (req, res) => {
+  const { id, itemId } = req.params;
+
+  // Admin only
+  if (!req.user || req.user.role !== 'Admin') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+    });
+  }
+
+  const invoice = await Invoice.findByPk(id);
+
+  if (!invoice) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  // Can only remove items from invoices that are not paid (fully or partially) or cancelled
+  if (['PAID', 'PARTIALLY_PAID', 'CANCELLED'].includes(invoice.status)) {
+    const msg = invoice.status === 'CANCELLED'
+      ? 'Cannot remove items from cancelled invoices'
+      : 'Cannot remove items from invoices with payments. Void the payment first.';
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVOICE_LOCKED', message: msg }
     });
   }
 
@@ -584,19 +768,34 @@ exports.removeItem = asyncHandler(async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    // Restore reserved quantity to stock
-    if (item.asset) {
-      item.asset.restoreToStock(item.quantity);
-      await item.asset.save({ transaction });
-    }
+    // Capture item info before deletion for logging
+    const removedDescription = item.description;
+    const removedAssetTag = item.asset?.asset_tag;
+    const removedQuantity = item.quantity;
+    const assetRef = item.asset;
 
-    // Delete the item
+    // Delete the item — this releases the reservation automatically
     await item.destroy({ transaction });
+
+    // Update asset computed status (will go back to 'In Stock' if no other active items)
+    if (assetRef) {
+      await assetRef.updateComputedStatus(transaction);
+    }
 
     await transaction.commit();
 
     // Recalculate invoice totals
     await invoice.recalculateTotals();
+
+    // Log the edit
+    await ActivityLog.log({
+      actorUserId: req.user.id,
+      actionType: 'INVOICE_ITEM_REMOVED',
+      entityType: 'INVOICE',
+      entityId: invoice.id,
+      summary: `Item removed from invoice ${invoice.invoice_number}: ${removedAssetTag || removedDescription}`,
+      metadata: { invoiceNumber: invoice.invoice_number, itemId, description: removedDescription, assetTag: removedAssetTag, quantity: removedQuantity }
+    });
 
     res.json({
       success: true,
@@ -605,6 +804,179 @@ exports.removeItem = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     await transaction.rollback();
+    throw error;
+  }
+});
+
+/**
+ * POST /api/v1/invoices/:id/items/:itemId/void
+ * Void a line item on a PAID invoice (admin only, soft-delete with audit trail)
+ */
+exports.voidItem = asyncHandler(async (req, res) => {
+  const { id, itemId } = req.params;
+  const { reason, quantity: voidQty } = req.body;
+  const userId = req.user?.id;
+
+  // Admin only
+  if (!req.user || req.user.role !== 'Admin') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Only admins can void invoice items' }
+    });
+  }
+
+  if (!reason || reason.trim() === '') {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'REASON_REQUIRED', message: 'A reason is required when voiding an item' }
+    });
+  }
+
+  const invoice = await Invoice.findByPk(id);
+
+  if (!invoice) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  if (invoice.status !== 'PAID') {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NOT_PAID', message: 'Items can only be voided on paid invoices. For unpaid invoices, remove the item instead.' }
+    });
+  }
+
+  const item = await InvoiceItem.findOne({
+    where: { id: itemId, invoice_id: id },
+    include: [{ model: Asset, as: 'asset' }]
+  });
+
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'ITEM_NOT_FOUND', message: 'Invoice item not found' }
+    });
+  }
+
+  if (item.voided_at) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'ALREADY_VOIDED', message: 'This item has already been voided' }
+    });
+  }
+
+  // Determine how many to void (default: all)
+  const quantityToVoid = voidQty ? parseInt(voidQty) : item.quantity;
+
+  if (quantityToVoid <= 0 || quantityToVoid > item.quantity) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_QUANTITY', message: `Void quantity must be between 1 and ${item.quantity}` }
+    });
+  }
+
+  const isFullVoid = quantityToVoid === item.quantity;
+
+  // Block voiding if this would leave a paid invoice with zero non-voided items
+  if (isFullVoid) {
+    const nonVoidedCount = await InvoiceItem.count({
+      where: { invoice_id: id, voided_at: null }
+    });
+
+    if (nonVoidedCount <= 1) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'LAST_ITEM',
+          message: 'Cannot void the last item on a paid invoice. Void the payment first, then remove or cancel the invoice.'
+        }
+      });
+    }
+  }
+
+  const dbTransaction = await sequelize.transaction();
+
+  try {
+    if (isFullVoid) {
+      // Full void — mark the entire item as voided
+      item.voided_at = new Date();
+      item.voided_by_user_id = userId;
+      item.void_reason = reason.trim();
+      await item.save({ transaction: dbTransaction });
+    } else {
+      // Partial void — reduce original item qty, create a voided split line
+      item.quantity -= quantityToVoid;
+      await item.save({ transaction: dbTransaction }); // beforeSave hook recalculates totals
+
+      await InvoiceItem.create({
+        invoice_id: id,
+        asset_id: item.asset_id,
+        description: item.description,
+        quantity: quantityToVoid,
+        unit_price_amount: item.unit_price_amount,
+        unit_cost_amount: item.unit_cost_amount,
+        original_cost_currency: item.original_cost_currency,
+        original_cost_amount: item.original_cost_amount,
+        voided_at: new Date(),
+        voided_by_user_id: userId,
+        void_reason: reason.trim()
+      }, { transaction: dbTransaction });
+    }
+
+    // Restore on_hand for voided quantity since payment had decremented it
+    if (item.asset) {
+      item.asset.quantity += quantityToVoid;
+      await item.asset.save({ transaction: dbTransaction });
+      await item.asset.updateComputedStatus(dbTransaction);
+    }
+
+    await dbTransaction.commit();
+
+    // Recalculate invoice totals (excludes voided items)
+    await invoice.recalculateTotals();
+
+    // Log activity
+    await ActivityLog.logInvoiceItemVoided(item, invoice, userId, reason.trim());
+
+    // Reload invoice with all data
+    const updatedInvoice = await Invoice.findByPk(id, {
+      include: [
+        { model: Customer, as: 'customer' },
+        {
+          model: InvoiceItem,
+          as: 'items',
+          include: [
+            { model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition'] },
+            { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+          ]
+        },
+        {
+          model: InvoicePayment,
+          as: 'payments',
+          include: [
+            { model: User, as: 'receivedBy', attributes: ['id', 'full_name'] },
+            { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+          ]
+        }
+      ]
+    });
+
+    const data = updatedInvoice.toJSON();
+    if (data.customer) {
+      data.customer.displayName = data.customer.first_name
+        ? `${data.customer.first_name} ${data.customer.last_name || ''}`.trim()
+        : data.customer.company_name || 'Unknown';
+    }
+
+    res.json({
+      success: true,
+      data: { invoice: data },
+      message: 'Item voided successfully. Invoice totals recalculated.'
+    });
+  } catch (error) {
+    await dbTransaction.rollback();
     throw error;
   }
 });
@@ -777,12 +1149,13 @@ exports.createTransaction = asyncHandler(async (req, res) => {
     invoice.updated_by = req.user?.id;
     const totals = await recalculateInvoiceTotals(invoice, dbTransaction);
 
-    // If invoice just became PAID, mark assets as Sold (move reserved → sold)
+    // If invoice just became PAID, decrement on_hand and update status
     if (prevStatus !== 'PAID' && totals.status === 'PAID' && invoice.items) {
       for (const item of invoice.items) {
-        if (item.asset && item.asset.quantity_reserved > 0) {
-          item.asset.markAsSold(item.quantity);
+        if (item.asset && !item.voided_at) {
+          item.asset.quantity -= item.quantity;
           await item.asset.save({ transaction: dbTransaction });
+          await item.asset.updateComputedStatus(dbTransaction);
           // Log inventory event - item sold
           await InventoryItemEvent.logSold(item.asset, invoice, req.user?.id, dbTransaction);
         }
@@ -815,10 +1188,18 @@ exports.createTransaction = asyncHandler(async (req, res) => {
       ]
     });
 
-    // Reload invoice with all data
+    // Reload invoice with all data (including items so frontend doesn't lose them)
     await invoice.reload({
       include: [
         { model: Customer, as: 'customer' },
+        {
+          model: InvoiceItem,
+          as: 'items',
+          include: [
+            { model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition'] },
+            { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+          ]
+        },
         {
           model: InvoicePayment,
           as: 'payments',
@@ -936,7 +1317,15 @@ exports.voidTransaction = asyncHandler(async (req, res) => {
     });
   }
 
-  const invoice = await Invoice.findByPk(id);
+  const invoice = await Invoice.findByPk(id, {
+    include: [
+      {
+        model: InvoiceItem,
+        as: 'items',
+        include: [{ model: Asset, as: 'asset' }]
+      }
+    ]
+  });
 
   if (!invoice) {
     return res.status(404).json({
@@ -973,6 +1362,8 @@ exports.voidTransaction = asyncHandler(async (req, res) => {
   const dbTransaction = await sequelize.transaction();
 
   try {
+    const prevStatus = invoice.status;
+
     // Void the transaction
     transaction.voided_at = new Date();
     transaction.voided_by_user_id = userId;
@@ -981,6 +1372,17 @@ exports.voidTransaction = asyncHandler(async (req, res) => {
 
     // Recalculate invoice totals
     await recalculateInvoiceTotals(invoice, dbTransaction);
+
+    // If invoice was PAID and is no longer PAID, restore on_hand
+    if (prevStatus === 'PAID' && invoice.status !== 'PAID' && invoice.items) {
+      for (const item of invoice.items) {
+        if (item.asset && !item.voided_at) {
+          item.asset.quantity += item.quantity;
+          await item.asset.save({ transaction: dbTransaction });
+          await item.asset.updateComputedStatus(dbTransaction);
+        }
+      }
+    }
 
     // Log activity
     await ActivityLog.logTransactionVoided(transaction, invoice, userId, reason.trim());
@@ -997,8 +1399,23 @@ exports.voidTransaction = asyncHandler(async (req, res) => {
 
     const updatedInvoice = await Invoice.findByPk(id, {
       include: [
-        { model: InvoiceItem, as: 'items', include: [{ model: Asset, as: 'asset' }] },
-        { model: Customer, as: 'customer' }
+        { model: Customer, as: 'customer' },
+        {
+          model: InvoiceItem,
+          as: 'items',
+          include: [
+            { model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition'] },
+            { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+          ]
+        },
+        {
+          model: InvoicePayment,
+          as: 'payments',
+          include: [
+            { model: User, as: 'receivedBy', attributes: ['id', 'full_name'] },
+            { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+          ]
+        }
       ]
     });
 
@@ -1142,16 +1559,30 @@ exports.cancel = asyncHandler(async (req, res) => {
   const dbTransaction = await sequelize.transaction();
 
   try {
+    // Set invoice to CANCELLED first so asset status queries exclude this invoice
+    invoice.status = 'CANCELLED';
+    invoice.subtotal_amount = 0;
+    invoice.total_amount = 0;
+    invoice.balance_due = 0;
+    invoice.amount_paid = 0;
+    invoice.total_cost_amount = 0;
+    invoice.total_profit_amount = 0;
+    invoice.margin_percent = null;
+    invoice.cancelled_at = new Date();
+    invoice.cancelled_by_user_id = userId;
+    invoice.cancellation_reason = reason || null;
+    invoice.updated_by = userId;
+    await invoice.save({ transaction: dbTransaction });
+
     const releasedItems = [];
 
-    // Restore all assets to stock and log events
+    // Update asset statuses — CANCELLED invoices are automatically excluded from reserved count
     for (const item of invoice.items) {
-      if (item.asset) {
+      if (item.asset && !item.voided_at) {
         const previousStatus = item.asset.status;
 
-        // Restore reserved quantity to stock
-        item.asset.restoreToStock(item.quantity);
-        await item.asset.save({ transaction: dbTransaction });
+        // Update computed status (will go back to 'In Stock' if no other active items)
+        await item.asset.updateComputedStatus(dbTransaction);
 
         const newStatus = item.asset.status;
 
@@ -1182,15 +1613,6 @@ exports.cancel = asyncHandler(async (req, res) => {
       }
     }
 
-    // Update invoice status and cancellation fields
-    invoice.status = 'CANCELLED';
-    invoice.balance_due = 0;
-    invoice.cancelled_at = new Date();
-    invoice.cancelled_by_user_id = userId;
-    invoice.cancellation_reason = reason || null;
-    invoice.updated_by = userId;
-    await invoice.save({ transaction: dbTransaction });
-
     // Log activity
     await ActivityLog.logInvoiceCancelled(invoice, userId, reason);
 
@@ -1204,7 +1626,18 @@ exports.cancel = asyncHandler(async (req, res) => {
         {
           model: InvoiceItem,
           as: 'items',
-          include: [{ model: Asset, as: 'asset' }]
+          include: [
+            { model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition'] },
+            { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+          ]
+        },
+        {
+          model: InvoicePayment,
+          as: 'payments',
+          include: [
+            { model: User, as: 'receivedBy', attributes: ['id', 'full_name'] },
+            { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+          ]
         }
       ]
     });
@@ -1309,42 +1742,58 @@ exports.delete = asyncHandler(async (req, res) => {
  * Get inventory items available for invoicing
  */
 exports.getAvailableAssets = asyncHandler(async (req, res) => {
-  const { search, category, limit = 20 } = req.query;
+  const { search, category, limit = 20, excludeInvoiceId } = req.query;
 
-  // Show assets with remaining quantity > 0 (quantity-based availability)
-  const where = {
-    deleted_at: null,
-    [Op.and]: [
-      sequelize.literal(`("Asset"."quantity" - "Asset"."quantity_reserved" - "Asset"."quantity_sold" + "Asset"."quantity_returned") > 0`)
-    ]
-  };
+  // Use subquery to compute available quantity from invoice_items
+  // When excludeInvoiceId is provided, that invoice's items are excluded from
+  // the reserved count so the caller can do its own local subtraction.
+  let searchClause = '';
+  const replacements = {};
 
   if (search) {
-    where[Op.or] = [
-      { asset_tag: { [Op.iLike]: `%${search}%` } },
-      { serial_number: { [Op.iLike]: `%${search}%` } },
-      { make: { [Op.iLike]: `%${search}%` } },
-      { model: { [Op.iLike]: `%${search}%` } }
-    ];
+    searchClause = `AND (a.asset_tag ILIKE :search OR a.serial_number ILIKE :search OR a.make ILIKE :search OR a.model ILIKE :search)`;
+    replacements.search = `%${search}%`;
   }
 
+  let categoryClause = '';
   if (category) {
-    where.category = category;
+    categoryClause = `AND a.category = :category`;
+    replacements.category = category;
   }
 
-  const assets = await Asset.findAll({
-    where,
-    limit: parseInt(limit),
-    order: [['created_at', 'DESC']],
-    attributes: [
-      'id', 'asset_tag', 'make', 'model', 'serial_number',
-      'condition', 'status', 'quantity',
-      'quantity_reserved', 'quantity_sold', 'quantity_returned',
-      'cost_amount', 'cost_currency',
-      'price_amount', 'price_currency',
-      'category', 'asset_type'
-    ]
-  });
+  let excludeInvoiceClause = '';
+  if (excludeInvoiceId) {
+    excludeInvoiceClause = `AND i.id != :excludeInvoiceId`;
+    replacements.excludeInvoiceId = excludeInvoiceId;
+  }
+
+  const [assets] = await sequelize.query(
+    `SELECT a.id, a.asset_tag, a.make, a.model, a.serial_number,
+            a.condition, a.status, a.quantity,
+            a.cost_amount, a.cost_currency,
+            a.price_amount, a.price_currency,
+            a.category, a.asset_type,
+            COALESCE(reserved.total, 0) AS reserved_quantity,
+            (a.quantity - COALESCE(reserved.total, 0)) AS available_quantity
+     FROM assets a
+     LEFT JOIN (
+       SELECT ii.asset_id, SUM(ii.quantity) AS total
+       FROM invoice_items ii
+       JOIN invoices i ON ii.invoice_id = i.id
+       WHERE i.status NOT IN ('CANCELLED', 'PAID') AND ii.voided_at IS NULL
+         ${excludeInvoiceClause}
+       GROUP BY ii.asset_id
+     ) reserved ON a.id = reserved.asset_id
+     WHERE a.deleted_at IS NULL
+       AND (a.quantity - COALESCE(reserved.total, 0)) > 0
+       ${searchClause}
+       ${categoryClause}
+     ORDER BY a.created_at DESC
+     LIMIT :limit`,
+    {
+      replacements: { ...replacements, limit: parseInt(limit) }
+    }
+  );
 
   res.json({
     success: true,

@@ -868,9 +868,10 @@ export default function Inventory() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {assets.map((asset) => {
-                  const remaining = (asset.quantity || 1) - (asset.quantity_reserved || 0) - (asset.quantity_sold || 0) + (asset.quantity_returned || 0);
+                  const remaining = asset.available_quantity != null ? Number(asset.available_quantity) : (asset.quantity || 1);
                   const isUnavailable = remaining <= 0;
-                  const isPartial = remaining > 0 && ((asset.quantity_reserved || 0) > 0 || (asset.quantity_sold || 0) > 0);
+                  const reserved = asset.reserved_quantity != null ? Number(asset.reserved_quantity) : 0;
+                  const isPartial = remaining > 0 && reserved > 0;
                   const rowClasses = `hover:bg-gray-50 ${selectedIds.has(asset.id) ? 'bg-blue-50' : ''} ${isUnavailable ? 'opacity-50' : ''}`;
 
                   return (

@@ -281,6 +281,14 @@ exports.create = asyncHandler(async (req, res) => {
   const _heardAboutUs = heardAboutUs || heard_about_us;
   const _heardAboutUsOtherText = heardAboutUsOtherText || heard_about_us_other_text;
 
+  // Phone number is required
+  if (!_phoneRaw || !_phoneRaw.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'PHONE_REQUIRED', message: 'Phone number is required' }
+    });
+  }
+
   // Check for duplicates unless explicitly skipped
   if (!skipDuplicateCheck) {
     const duplicates = await findDuplicates({ phoneRaw: _phoneRaw, whatsappRaw: _whatsappRaw, email });

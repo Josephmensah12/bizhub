@@ -15,6 +15,7 @@ const ACTION_TYPES = {
   INVOICE_CANCELLED: 'INVOICE_CANCELLED',
   INVOICE_ITEM_ADDED: 'INVOICE_ITEM_ADDED',
   INVOICE_ITEM_REMOVED: 'INVOICE_ITEM_REMOVED',
+  INVOICE_ITEM_VOIDED: 'INVOICE_ITEM_VOIDED',
 
   // Transaction/Payment actions
   PAYMENT_RECEIVED: 'PAYMENT_RECEIVED',
@@ -177,6 +178,28 @@ module.exports = (sequelize, DataTypes) => {
         metadata: {
           invoiceNumber: invoice.invoice_number,
           reason
+        }
+      });
+    }
+
+    /**
+     * Log invoice item voided
+     */
+    static async logInvoiceItemVoided(item, invoice, userId, reason) {
+      return await this.log({
+        actorUserId: userId,
+        actionType: ACTION_TYPES.INVOICE_ITEM_VOIDED,
+        entityType: ENTITY_TYPES.INVOICE,
+        entityId: invoice.id,
+        summary: `Item voided on invoice ${invoice.invoice_number}: ${item.description}`,
+        metadata: {
+          invoiceNumber: invoice.invoice_number,
+          invoiceItemId: item.id,
+          description: item.description,
+          assetId: item.asset_id,
+          quantity: item.quantity,
+          lineTotal: item.line_total_amount,
+          voidReason: reason
         }
       });
     }

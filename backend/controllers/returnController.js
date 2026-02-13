@@ -385,14 +385,17 @@ exports.finalizeReturn = asyncHandler(async (req, res) => {
       await invoiceItem.save({ transaction: dbTransaction });
     }
 
-    // 2. Release inventory (process return — move sold → returned)
+    // 2. Release inventory — restore on_hand and update computed status
     for (const returnItem of invoiceReturn.items) {
       if (returnItem.asset) {
         const asset = returnItem.asset;
 
-        // Process return: decrements quantity_sold, increments quantity_returned
-        asset.processReturn(returnItem.quantity_returned);
+        // Restore on_hand: returned items become available again
+        asset.quantity += returnItem.quantity_returned;
         await asset.save({ transaction: dbTransaction });
+
+        // Update computed status
+        await asset.updateComputedStatus(dbTransaction);
 
         const newStatus = asset.status;
 

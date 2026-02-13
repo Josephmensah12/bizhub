@@ -18,12 +18,20 @@ function formatCurrency(amount, currency = 'GHS') {
  * Format date for display
  */
 function formatDate(dateString) {
-  if (!dateString) return '—';
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+  if (!dateString) return { date: '—', time: '' };
+  const d = new Date(dateString);
+  return {
+    date: d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    }),
+    time: d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+  };
 }
 
 /**
@@ -143,7 +151,9 @@ export default function Invoices() {
         dateFrom,
         dateTo,
         page: pagination.page,
-        limit: pagination.limit
+        limit: pagination.limit,
+        sortBy: 'invoice_date',
+        sortOrder: 'DESC'
       };
 
       if (statusFilter.length > 0) {
@@ -187,7 +197,7 @@ export default function Invoices() {
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
         {/* Total Revenue - Always visible */}
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">Total Revenue</div>
@@ -196,6 +206,17 @@ export default function Invoices() {
           </div>
           <div className="text-xs text-gray-400 mt-1">
             {metrics.invoiceCount} invoice{metrics.invoiceCount !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        {/* Net Total - Excludes cancelled invoices */}
+        <div className="card">
+          <div className="text-sm text-gray-500 mb-1">Net Total</div>
+          <div className="text-2xl font-bold text-emerald-600">
+            {formatCurrency(metrics.netTotal)}
+          </div>
+          <div className="text-xs text-gray-400 mt-1">
+            {metrics.netCount || 0} active invoice{(metrics.netCount || 0) !== 1 ? 's' : ''}
           </div>
         </div>
 
@@ -417,7 +438,8 @@ export default function Invoices() {
                       {invoice.invoice_number}
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-500">
-                      {formatDate(invoice.invoice_date)}
+                      <div>{formatDate(invoice.invoice_date).date}</div>
+                      <div className="text-xs text-gray-400">{formatDate(invoice.updated_at).time}</div>
                     </td>
                     <td className="px-4 py-4 text-sm">
                       {invoice.customer?.displayName || (

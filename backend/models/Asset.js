@@ -1,4 +1,5 @@
 const { validateTaxonomyAsync } = require('../utils/inventoryTaxonomy');
+const { Op, QueryTypes } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
   const Asset = sequelize.define('Asset', {
@@ -49,9 +50,9 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 1,
       allowNull: false,
       validate: {
-        min: 1
+        min: 0
       },
-      comment: 'Number of units. Must be >= 1'
+      comment: 'On-hand quantity. Starts >= 1, decremented on payment, restored on void/return'
     },
     quantity_reserved: {
       type: DataTypes.INTEGER,
@@ -71,12 +72,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       comment: 'Units returned after sale'
     },
-    quantityRemaining: {
-      type: DataTypes.VIRTUAL,
-      get() {
-        return this.quantity - (this.quantity_reserved || 0) - (this.quantity_sold || 0) + (this.quantity_returned || 0);
-      }
-    },
+    // quantityRemaining removed — availability is now computed from invoice_items
     // Basic product fields
     make: {
       type: DataTypes.STRING(50),
@@ -258,51 +254,60 @@ module.exports = (sequelize, DataTypes) => {
     Asset.hasMany(models.InvoiceItem, { as: 'invoiceItems', foreignKey: 'asset_id' });
   };
 
-  // Derive status from quantity breakdown
-  Asset.prototype.deriveStatus = function() {
-    const remaining = this.quantityRemaining;
-    if (this.quantity_sold > 0 && remaining <= 0) return 'Sold';
-    if (this.quantity_reserved > 0 && remaining <= 0) return 'Processing';
+  /**
+   * Compute asset status from invoice_items (the source of truth).
+   * - Has items on PAID invoice (non-voided) with no full returns → 'Sold'
+   * - Has items on active non-PAID invoice (non-voided) → 'Processing'
+   * - Otherwise → 'In Stock'
+   */
+  Asset.prototype.computeStatus = async function(transaction = null) {
+    const queryOptions = { type: QueryTypes.SELECT };
+    if (transaction) queryOptions.transaction = transaction;
+
+    // Check for items on PAID invoices (not voided, not fully returned)
+    const [paidResult] = await sequelize.query(
+      `SELECT COUNT(*) AS cnt
+       FROM invoice_items ii
+       JOIN invoices i ON ii.invoice_id = i.id
+       WHERE ii.asset_id = :assetId
+         AND i.status = 'PAID'
+         AND ii.voided_at IS NULL
+         AND ii.quantity > ii.quantity_returned_total`,
+      { replacements: { assetId: this.id }, ...queryOptions }
+    );
+
+    if (parseInt(paidResult.cnt) > 0) {
+      return 'Sold';
+    }
+
+    // Check for items on active (UNPAID/PARTIALLY_PAID) invoices
+    const [activeResult] = await sequelize.query(
+      `SELECT COUNT(*) AS cnt
+       FROM invoice_items ii
+       JOIN invoices i ON ii.invoice_id = i.id
+       WHERE ii.asset_id = :assetId
+         AND i.status NOT IN ('CANCELLED', 'PAID')
+         AND ii.voided_at IS NULL`,
+      { replacements: { assetId: this.id }, ...queryOptions }
+    );
+
+    if (parseInt(activeResult.cnt) > 0) {
+      return 'Processing';
+    }
+
     return 'In Stock';
   };
 
-  // Check if asset can be sold/reserved (quantity-based)
-  Asset.prototype.canBeSold = function() {
-    return this.quantityRemaining > 0 && !this.deleted_at;
-  };
-
-  // Reserve units for an invoice (caller must save with transaction)
-  Asset.prototype.reserve = function(qty = 1) {
-    if (qty > this.quantityRemaining) {
-      throw new Error(`Insufficient quantity: ${this.quantityRemaining} available, ${qty} requested`);
+  /**
+   * Compute and save the asset status.
+   */
+  Asset.prototype.updateComputedStatus = async function(transaction = null) {
+    const newStatus = await this.computeStatus(transaction);
+    if (this.status !== newStatus) {
+      this.status = newStatus;
+      const saveOptions = transaction ? { transaction } : {};
+      await this.save(saveOptions);
     }
-    this.quantity_reserved += qty;
-    this.status = this.deriveStatus();
-    return this;
-  };
-
-  // Mark units as sold — move from reserved → sold (caller must save with transaction)
-  Asset.prototype.markAsSold = function(qty) {
-    const units = qty || this.quantity_reserved;
-    this.quantity_reserved = Math.max(0, this.quantity_reserved - units);
-    this.quantity_sold += units;
-    this.status = this.deriveStatus();
-    return this;
-  };
-
-  // Restore reserved units to stock (caller must save with transaction)
-  Asset.prototype.restoreToStock = function(qty) {
-    const units = qty || this.quantity_reserved;
-    this.quantity_reserved = Math.max(0, this.quantity_reserved - units);
-    this.status = this.deriveStatus();
-    return this;
-  };
-
-  // Process a return — move from sold back to available (caller must save with transaction)
-  Asset.prototype.processReturn = function(qty = 1) {
-    this.quantity_sold = Math.max(0, this.quantity_sold - qty);
-    this.quantity_returned += qty;
-    this.status = this.deriveStatus();
     return this;
   };
 
