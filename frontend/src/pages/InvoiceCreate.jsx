@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import axios from 'axios';
-import debounce from 'lodash/debounce';
+import CustomerPickerModal from '../components/CustomerPickerModal';
+import InventoryPickerModal from '../components/InventoryPickerModal';
 
 /**
  * Format currency for display
@@ -31,9 +32,7 @@ export default function InvoiceCreate() {
 
   // Customer state
   const [customer, setCustomer] = useState(null);
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [customerResults, setCustomerResults] = useState([]);
-  const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
 
   // New customer form
@@ -47,9 +46,7 @@ export default function InvoiceCreate() {
 
   // Inventory state
   const [items, setItems] = useState([]);
-  const [assetSearch, setAssetSearch] = useState('');
-  const [assetResults, setAssetResults] = useState([]);
-  const [searchingAssets, setSearchingAssets] = useState(false);
+  const [showInventoryPicker, setShowInventoryPicker] = useState(false);
 
   // Calculate totals
   const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price_amount), 0);
@@ -91,81 +88,8 @@ export default function InvoiceCreate() {
     }
   };
 
-  // Debounced customer search
-  const searchCustomers = useCallback(
-    debounce(async (search) => {
-      if (!search || search.length < 2) {
-        setCustomerResults([]);
-        return;
-      }
-
-      try {
-        setSearchingCustomers(true);
-        const response = await axios.get('/api/v1/customers', {
-          params: { search, limit: 10 }
-        });
-        setCustomerResults(response.data.data.customers);
-      } catch (err) {
-        console.error('Customer search error:', err);
-      } finally {
-        setSearchingCustomers(false);
-      }
-    }, 300),
-    []
-  );
-
-  // Debounced asset search
-  const searchAssets = useCallback(
-    debounce(async (search) => {
-      if (!search || search.length < 2) {
-        setAssetResults([]);
-        return;
-      }
-
-      try {
-        setSearchingAssets(true);
-        const params = { search, limit: 15 };
-        // Exclude current invoice's reservations so the frontend can do its own
-        // local subtraction without double-counting.
-        if (invoice?.id) {
-          params.excludeInvoiceId = invoice.id;
-        }
-        const response = await axios.get('/api/v1/invoices/available-assets', {
-          params
-        });
-        // Count how many of each asset are already on the invoice
-        const usedQtyByAssetId = {};
-        items.forEach(i => {
-          usedQtyByAssetId[i.asset_id] = (usedQtyByAssetId[i.asset_id] || 0) + i.quantity;
-        });
-        // Only hide assets whose remaining available qty is 0
-        const available = response.data.data.assets.filter(a => {
-          const totalAvailable = a.available_quantity != null ? Number(a.available_quantity) : ((a.quantity || 1));
-          const usedOnInvoice = usedQtyByAssetId[a.id] || 0;
-          return (totalAvailable - usedOnInvoice) > 0;
-        });
-        setAssetResults(available);
-      } catch (err) {
-        console.error('Asset search error:', err);
-      } finally {
-        setSearchingAssets(false);
-      }
-    }, 300),
-    [items, invoice]
-  );
-
-  useEffect(() => {
-    searchCustomers(customerSearch);
-  }, [customerSearch]);
-
-  useEffect(() => {
-    searchAssets(assetSearch);
-  }, [assetSearch]);
-
   const handleSelectCustomer = (cust) => {
     setCustomer(cust);
-    setCustomerSearch('');
-    setCustomerResults([]);
   };
 
   const handleCreateCustomer = async () => {
@@ -192,6 +116,12 @@ export default function InvoiceCreate() {
       setError(err.response?.data?.error?.message || 'Failed to create customer');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddMultipleItems = async (assets) => {
+    for (const asset of assets) {
+      await handleAddItem(asset);
     }
   };
 
@@ -237,8 +167,6 @@ export default function InvoiceCreate() {
         }
         return [...prev, returnedItem];
       });
-      setAssetSearch('');
-      setAssetResults([]);
       setError(null);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to add item');
@@ -362,47 +290,15 @@ export default function InvoiceCreate() {
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Search */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
-                    placeholder="Search by name, phone, or email..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                  {searchingCustomers && (
-                    <div className="absolute right-3 top-2.5 text-gray-400">Searching...</div>
-                  )}
+                <button
+                  onClick={() => setShowCustomerPicker(true)}
+                  className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                >
+                  + Add Customer
+                </button>
 
-                  {/* Search Results */}
-                  {customerResults.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                      {customerResults.map((cust) => (
-                        <button
-                          key={cust.id}
-                          onClick={() => handleSelectCustomer(cust)}
-                          className="w-full px-4 py-2 text-left hover:bg-gray-50 border-b last:border-b-0"
-                        >
-                          <div className="font-medium">{cust.displayName}</div>
-                          <div className="text-sm text-gray-500">
-                            {cust.phone_e164 || cust.email || 'No contact info'}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Create New Customer */}
-                {!showCustomerForm ? (
-                  <button
-                    onClick={() => setShowCustomerForm(true)}
-                    className="text-sm text-primary-600 hover:text-primary-800"
-                  >
-                    + Create new customer
-                  </button>
-                ) : (
+                {/* Inline Create New Customer form */}
+                {showCustomerForm && (
                   <div className="p-4 border border-gray-200 rounded-lg space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <input
@@ -461,68 +357,36 @@ export default function InvoiceCreate() {
                 )}
               </div>
             )}
+
+            <CustomerPickerModal
+              open={showCustomerPicker}
+              onClose={() => setShowCustomerPicker(false)}
+              onSelect={handleSelectCustomer}
+              onCreateNew={() => setShowCustomerForm(true)}
+            />
           </div>
 
           {/* Add Items */}
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Items</h2>
 
-            {/* Search Inventory */}
-            <div className="relative mb-4">
-              <input
-                type="text"
-                value={assetSearch}
-                onChange={(e) => setAssetSearch(e.target.value)}
-                placeholder="Search inventory by asset tag, serial, make/model..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              {searchingAssets && (
-                <div className="absolute right-3 top-2.5 text-gray-400">Searching...</div>
-              )}
-
-              {/* Search Results */}
-              {assetResults.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-80 overflow-y-auto">
-                  {assetResults.map((asset) => {
-                    const totalAvailable = asset.available_quantity != null ? Number(asset.available_quantity) : (asset.quantity || 1);
-                    const usedOnInvoice = items.filter(i => i.asset_id === asset.id).reduce((sum, i) => sum + i.quantity, 0);
-                    const remainingForInvoice = totalAvailable - usedOnInvoice;
-                    return (
-                      <button
-                        key={asset.id}
-                        onClick={() => handleAddItem(asset)}
-                        disabled={saving}
-                        className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b last:border-b-0"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="font-medium">{asset.make} {asset.model}</div>
-                            <div className="text-sm text-gray-500">
-                              {asset.asset_tag}
-                              {asset.serial_number && ` • S/N: ${asset.serial_number}`}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              {asset.condition} • {asset.category}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-medium text-green-600">
-                              {formatCurrency(asset.price_amount, asset.price_currency)}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              Cost: {formatCurrency(asset.cost_amount, asset.cost_currency)}
-                            </div>
-                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                              {remainingForInvoice} of {totalAvailable} available
-                            </span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+            {/* Add Inventory Button */}
+            <div className="mb-4">
+              <button
+                onClick={() => setShowInventoryPicker(true)}
+                className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+              >
+                + Add Inventory Items
+              </button>
             </div>
+
+            <InventoryPickerModal
+              open={showInventoryPicker}
+              onClose={() => setShowInventoryPicker(false)}
+              onAddItems={handleAddMultipleItems}
+              invoiceId={invoice?.id}
+              existingItems={items}
+            />
 
             {/* Items List */}
             {items.length === 0 ? (
