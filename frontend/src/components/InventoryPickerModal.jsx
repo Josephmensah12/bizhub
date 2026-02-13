@@ -57,8 +57,11 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
 
   const debouncedSearch = useCallback(
     debounce((query) => fetchAssets(query), 300),
-    [invoiceId, existingItems]
+    [invoiceId] // existingItems filtering happens post-fetch, no need to recreate debounce
   );
+
+  // Cleanup debounce on unmount
+  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
   const handleSearchChange = (e) => {
     const val = e.target.value;

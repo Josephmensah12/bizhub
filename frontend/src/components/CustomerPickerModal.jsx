@@ -36,6 +36,9 @@ export default function CustomerPickerModal({ open, onClose, onSelect, onCreateN
     []
   );
 
+  // Cleanup debounce on unmount
+  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearch(val);

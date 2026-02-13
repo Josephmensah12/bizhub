@@ -119,55 +119,80 @@ export default function InvoiceCreate() {
     }
   };
 
+  const ensureInvoiceExists = async () => {
+    if (invoice?.id) return invoice.id;
+
+    const response = await axios.post('/api/v1/invoices', {
+      customer_id: customer?.id,
+      invoice_date: invoiceDate,
+      currency,
+      notes
+    });
+    const created = response.data.data.invoice;
+    setInvoice(created);
+    return created.id;
+  };
+
   const handleAddMultipleItems = async (assets) => {
-    for (const asset of assets) {
-      await handleAddItem(asset);
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Ensure invoice exists once, then reuse the ID for all items
+      const invoiceId = await ensureInvoiceExists();
+
+      for (const asset of assets) {
+        try {
+          const response = await axios.post(`/api/v1/invoices/${invoiceId}/items`, {
+            asset_id: asset.id,
+            unit_price: asset.price_amount || 0,
+            quantity: 1
+          });
+
+          const returnedItem = response.data.data.item;
+          setItems(prev => {
+            const existingIndex = prev.findIndex(i => i.asset_id === returnedItem.asset_id);
+            if (existingIndex >= 0) {
+              const updated = [...prev];
+              updated[existingIndex] = returnedItem;
+              return updated;
+            }
+            return [...prev, returnedItem];
+          });
+        } catch (err) {
+          setError(err.response?.data?.error?.message || `Failed to add item: ${asset.make} ${asset.model}`);
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Failed to create invoice');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleAddItem = async (asset) => {
-    // Create invoice if not exists
-    let invoiceId = invoice?.id;
+    setSaving(true);
+    setError(null);
 
-    if (!invoiceId) {
-      try {
-        setSaving(true);
-        const response = await axios.post('/api/v1/invoices', {
-          customer_id: customer?.id,
-          invoice_date: invoiceDate,
-          currency,
-          notes
-        });
-        setInvoice(response.data.data.invoice);
-        invoiceId = response.data.data.invoice.id;
-      } catch (err) {
-        setError(err.response?.data?.error?.message || 'Failed to create invoice');
-        setSaving(false);
-        return;
-      }
-    }
-
-    // Add item to invoice
     try {
+      const invoiceId = await ensureInvoiceExists();
+
       const response = await axios.post(`/api/v1/invoices/${invoiceId}/items`, {
         asset_id: asset.id,
         unit_price: asset.price_amount || 0,
         quantity: 1
       });
 
-      // Update local items list - either add new or update existing quantity
       const returnedItem = response.data.data.item;
       setItems(prev => {
         const existingIndex = prev.findIndex(i => i.asset_id === returnedItem.asset_id);
         if (existingIndex >= 0) {
-          // Update existing item's quantity
           const updated = [...prev];
           updated[existingIndex] = returnedItem;
           return updated;
         }
         return [...prev, returnedItem];
       });
-      setError(null);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to add item');
     } finally {
