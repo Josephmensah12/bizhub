@@ -195,6 +195,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'References the bulk import batch this item was created in'
     },
+    salesbinder_id: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      unique: true,
+      comment: 'Original SalesBinder item ID for tracking imports'
+    },
     // Audit fields
     created_by: {
       type: DataTypes.INTEGER,

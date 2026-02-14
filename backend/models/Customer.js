@@ -105,6 +105,13 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    // Import tracking
+    salesbinder_id: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      unique: true,
+      comment: 'Original SalesBinder customer ID for tracking imports'
+    },
     // Audit
     created_by: {
       type: DataTypes.INTEGER,

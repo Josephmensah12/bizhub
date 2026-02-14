@@ -153,6 +153,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    // Import tracking
+    salesbinder_id: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      unique: true,
+      comment: 'Original SalesBinder invoice ID for tracking imports'
+    },
+    salesbinder_invoice_number: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      comment: 'Original SalesBinder invoice number for reference'
+    },
     // Cancellation fields
     cancelled_at: {
       type: DataTypes.DATE,
