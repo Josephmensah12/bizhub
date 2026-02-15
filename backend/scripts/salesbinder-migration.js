@@ -391,11 +391,11 @@ async function setupUserMapping() {
   info('Setting up user mapping...')
   
   const users = await User.findAll({
-    attributes: ['id', 'first_name', 'last_name']
+    attributes: ['id', 'full_name']
   })
-  
+
   users.forEach(user => {
-    const fullName = `${user.first_name} ${user.last_name}`.trim()
+    const fullName = user.full_name?.trim() || ''
     if (USER_MAPPING.hasOwnProperty(fullName)) {
       USER_MAPPING[fullName] = user.id
       info(`Mapped user: ${fullName} → ID ${user.id}`)

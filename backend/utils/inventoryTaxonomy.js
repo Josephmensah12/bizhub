@@ -6,9 +6,9 @@
  */
 
 const TAXONOMY = {
-  'Computer': ['Laptop', 'Desktop', 'Other'],
+  'Computer': ['Laptop', 'Desktop', 'MacBook', 'Tablet', 'Monitor', 'Storage Device', 'Memory', 'Other'],
   'Smartphone': ['iPhone', 'Samsung Galaxy', 'Google Pixel', 'Other'],
-  'Consumer Electronics': ['Bluetooth Speaker', 'Home Theatre System', 'Television', 'Other'],
+  'Consumer Electronics': ['Bluetooth Speaker', 'Home Theatre System', 'Television', 'Audio Equipment', 'Other'],
   'Appliance': ['Refrigerator', 'Washing Machine', 'Air Conditioner', 'Other']
 };
 
@@ -72,6 +72,29 @@ const ASSET_TYPE_NORMALIZATION = {
   'pixel': 'Google Pixel',
   'google': 'Google Pixel',
 
+  // Computer types (extended)
+  'macbook': 'MacBook',
+  'mac book': 'MacBook',
+  'macbooks': 'MacBook',
+  'tablet': 'Tablet',
+  'tablets': 'Tablet',
+  'surface': 'Tablet',
+  'microsoft surface': 'Tablet',
+  'ipad': 'Tablet',
+  'monitor': 'Monitor',
+  'monitors': 'Monitor',
+  'display': 'Monitor',
+  'storage device': 'Storage Device',
+  'storage': 'Storage Device',
+  'hard drive': 'Storage Device',
+  'hard drives': 'Storage Device',
+  'ssd': 'Storage Device',
+  'hdd': 'Storage Device',
+  'memory': 'Memory',
+  'ram': 'Memory',
+  'ddr4': 'Memory',
+  'ddr5': 'Memory',
+
   // Consumer Electronics types
   'bluetooth speaker': 'Bluetooth Speaker',
   'bluetoothspeaker': 'Bluetooth Speaker',
@@ -87,6 +110,14 @@ const ASSET_TYPE_NORMALIZATION = {
   'television': 'Television',
   'tv': 'Television',
   'tvs': 'Television',
+
+  // Consumer Electronics types (extended)
+  'audio equipment': 'Audio Equipment',
+  'audio': 'Audio Equipment',
+  'headphones': 'Audio Equipment',
+  'earbuds': 'Audio Equipment',
+  'airpods': 'Audio Equipment',
+  'soundbar': 'Audio Equipment',
 
   // Appliance types
   'refrigerator': 'Refrigerator',
