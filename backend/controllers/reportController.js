@@ -349,8 +349,8 @@ exports.customerInsights = asyncHandler(async (req, res) => {
   const topCustomers = await sequelize.query(`
     SELECT 
       c.id as customer_id,
-      c.name,
-      c.phone,
+      COALESCE(c.first_name || ' ' || c.last_name, c.first_name, c.company_name, 'Unknown') as name,
+      c.phone_raw as phone,
       COUNT(i.id) as invoice_count,
       COALESCE(SUM(i.total_amount), 0) as total_spent,
       COALESCE(SUM(i.total_profit_amount), 0) as total_profit,
@@ -362,7 +362,7 @@ exports.customerInsights = asyncHandler(async (req, res) => {
       AND i.invoice_date BETWEEN :startDate AND :endDate
       AND i.status != 'CANCELLED'
       AND i.is_deleted = false
-    GROUP BY c.id, c.name, c.phone
+    GROUP BY c.id, c.first_name, c.last_name, c.company_name, c.phone_raw
     ORDER BY total_spent DESC
     LIMIT :limit
   `, {
@@ -645,7 +645,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     SELECT 
       i.id, i.invoice_number, i.invoice_date,
       i.total_amount, i.total_cost_amount, i.total_profit_amount, i.margin_percent,
-      c.name as customer_name
+      COALESCE(c.first_name || ' ' || c.last_name, c.first_name, c.company_name, 'Unknown') as customer_name
     FROM invoices i
     LEFT JOIN customers c ON i.customer_id = c.id
     WHERE i.invoice_date BETWEEN :startDate AND :endDate
