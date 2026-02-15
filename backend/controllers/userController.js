@@ -4,7 +4,7 @@
  */
 
 const bcrypt = require('bcrypt');
-const { User } = require('../models');
+const { User, ActivityLog } = require('../models');
 const { Op } = require('sequelize');
 const { defaultMaxDiscount } = require('../middleware/permissions');
 
@@ -134,6 +134,15 @@ exports.create = asyncHandler(async (req, res) => {
   const userData = user.toJSON();
   delete userData.password_hash;
 
+  await ActivityLog.log({
+    actionType: 'USER_CREATED',
+    entityType: 'USER',
+    entityId: user.id,
+    userId: req.user.id,
+    summary: `Created user ${user.full_name} (${user.role})`,
+    metadata: { username: user.username, role: user.role }
+  });
+
   res.status(201).json({ success: true, data: { user: userData } });
 });
 
@@ -190,6 +199,15 @@ exports.update = asyncHandler(async (req, res) => {
 
   await user.save();
 
+  await ActivityLog.log({
+    actionType: 'USER_UPDATED',
+    entityType: 'USER',
+    entityId: user.id,
+    userId: req.user.id,
+    summary: `Updated user ${user.full_name}`,
+    metadata: { changes: Object.keys(req.body) }
+  });
+
   const userData = user.toJSON();
   delete userData.password_hash;
 
@@ -220,6 +238,14 @@ exports.deactivate = asyncHandler(async (req, res) => {
   user.is_active = false;
   await user.save();
 
+  await ActivityLog.log({
+    actionType: 'USER_DEACTIVATED',
+    entityType: 'USER',
+    entityId: user.id,
+    userId: req.user.id,
+    summary: `Deactivated user ${user.full_name}`
+  });
+
   res.json({ success: true, message: 'User deactivated' });
 });
 
@@ -246,6 +272,14 @@ exports.resetPassword = asyncHandler(async (req, res) => {
 
   user.password_hash = await bcrypt.hash(new_password, 10);
   await user.save();
+
+  await ActivityLog.log({
+    actionType: 'PASSWORD_RESET',
+    entityType: 'USER',
+    entityId: user.id,
+    userId: req.user.id,
+    summary: `Admin reset password for ${user.full_name}`
+  });
 
   res.json({ success: true, message: 'Password reset successfully' });
 });
