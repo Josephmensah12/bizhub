@@ -327,6 +327,39 @@ export default function InvoiceCreate() {
     }
   }, [invoice?.id]);
 
+  // Update line-item quantity via PATCH
+  const handleUpdateItemQuantity = useCallback(async (itemId, newQty) => {
+    if (!invoice?.id || newQty < 1) return;
+
+    // Capture old qty for revert
+    let oldQty;
+    setItems(prev => {
+      const found = prev.find(i => i.id === itemId);
+      oldQty = found?.quantity;
+      return prev.map(item =>
+        item.id === itemId ? { ...item, quantity: newQty } : item
+      );
+    });
+
+    try {
+      const response = await axios.patch(`/api/v1/invoices/${invoice.id}/items/${itemId}`, { quantity: newQty });
+      const updatedItem = response.data.data.item;
+      setItems(prev => prev.map(item =>
+        item.id === updatedItem.id ? updatedItem : item
+      ));
+      if (response.data.data?.invoice) {
+        setInvoice(prev => prev ? { ...prev, ...response.data.data.invoice } : response.data.data.invoice);
+      }
+      setError(null);
+    } catch (err) {
+      // Revert optimistic update on failure
+      setItems(prev => prev.map(item =>
+        item.id === itemId ? { ...item, quantity: oldQty } : item
+      ));
+      setError(err.response?.data?.error?.message || 'Failed to update quantity');
+    }
+  }, [invoice?.id]);
+
   // Save invoice-level discount to server (accepts overrides for immediate saves before state updates)
   const handleSaveInvoiceDiscount = useCallback(async (typeOverride, valueOverride) => {
     if (!invoice?.id) return;
@@ -575,8 +608,32 @@ export default function InvoiceCreate() {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="font-medium">{item.description}</div>
-                          <div className="text-sm text-gray-500">
-                            Qty: {item.quantity} × {formatCurrency(item.unit_price_amount, currency)}
+                          <div className="text-sm text-gray-500 flex items-center gap-1">
+                            {item.quantity > 1 ? (
+                              <>
+                                <span>Qty:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItemQuantity(item.id, item.quantity - 1)}
+                                  disabled={saving}
+                                  className="w-6 h-6 flex items-center justify-center rounded border border-gray-300 bg-gray-50 hover:bg-gray-100 text-sm font-medium disabled:opacity-50"
+                                >
+                                  −
+                                </button>
+                                <span className="w-6 text-center font-medium text-gray-700">{item.quantity}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItemQuantity(item.id, item.quantity + 1)}
+                                  disabled={saving}
+                                  className="w-6 h-6 flex items-center justify-center rounded border border-gray-300 bg-gray-50 hover:bg-gray-100 text-sm font-medium disabled:opacity-50"
+                                >
+                                  +
+                                </button>
+                                <span>× {formatCurrency(item.unit_price_amount, currency)}</span>
+                              </>
+                            ) : (
+                              <>Qty: {item.quantity} × {formatCurrency(item.unit_price_amount, currency)}</>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">

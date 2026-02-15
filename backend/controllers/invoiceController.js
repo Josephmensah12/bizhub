@@ -666,7 +666,8 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
   const {
     unitPrice, unit_price,
     discount_type, discountType,
-    discount_value, discountValue
+    discount_value, discountValue,
+    quantity
   } = req.body;
 
   const invoice = await Invoice.findByPk(id);
@@ -697,6 +698,17 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
   }
 
   const changes = {};
+
+  // Validate quantity if provided
+  if (quantity !== undefined) {
+    const newQty = parseInt(quantity, 10);
+    if (!Number.isInteger(newQty) || newQty < 1) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_QUANTITY', message: 'Quantity must be an integer >= 1' }
+      });
+    }
+  }
 
   // Update price if provided
   const priceVal = unitPrice ?? unit_price;
@@ -752,11 +764,64 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
   changes.discount_type = item.discount_type;
   changes.discount_value = item.discount_value;
 
-  // beforeSave hook recalculates totals including discount
-  await item.save();
+  // Handle quantity update
+  const newQty = quantity !== undefined ? parseInt(quantity, 10) : null;
+  const needsAvailabilityCheck = newQty !== null && newQty > item.quantity;
 
-  // Recalculate invoice totals
-  await invoice.recalculateTotals();
+  if (needsAvailabilityCheck) {
+    // Increasing quantity — must check stock within a transaction
+    const transaction = await sequelize.transaction();
+    try {
+      const delta = newQty - item.quantity;
+      const { available } = await computeAvailability(item.asset_id, { transaction });
+      // available = onHand - reserved (reserved includes this item's current qty)
+      // We need delta more units, so check: delta <= available
+      if (delta > available) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INSUFFICIENT_STOCK', message: `Only ${available} more units available (need ${delta})` }
+        });
+      }
+      changes.oldQuantity = item.quantity;
+      changes.newQuantity = newQty;
+      item.quantity = newQty;
+
+      // beforeSave hook recalculates totals including discount
+      await item.save({ transaction });
+
+      // Update asset computed status
+      const asset = await Asset.findByPk(item.asset_id, { transaction });
+      if (asset) await asset.updateComputedStatus(transaction);
+
+      await transaction.commit();
+
+      // Recalculate invoice totals (outside transaction, follows existing pattern)
+      await invoice.recalculateTotals();
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } else {
+    // Decreasing or unchanged quantity, or no quantity change — no availability check needed
+    if (newQty !== null && newQty !== item.quantity) {
+      changes.oldQuantity = item.quantity;
+      changes.newQuantity = newQty;
+      item.quantity = newQty;
+    }
+
+    // beforeSave hook recalculates totals including discount
+    await item.save();
+
+    // Recalculate invoice totals
+    await invoice.recalculateTotals();
+
+    // Update asset computed status if quantity changed
+    if (changes.oldQuantity !== undefined) {
+      const asset = await Asset.findByPk(item.asset_id);
+      if (asset) await asset.updateComputedStatus();
+    }
+  }
 
   // Reload item with asset
   await item.reload({
