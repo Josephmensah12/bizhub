@@ -29,6 +29,8 @@ import CurrencySettings from './pages/CurrencySettings'
 import CompanyProfile from './pages/CompanyProfile'
 import Payments from './pages/Payments'
 import UserManagement from './pages/UserManagement'
+import StockTakes from './pages/StockTakes'
+import StockTakeDetail from './pages/StockTakeDetail'
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -90,6 +92,8 @@ function App() {
         <Route path="sales/invoices/:id/edit" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><InvoiceCreate /></RoleRoute>} />
         <Route path="sales/payments" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><Payments /></RoleRoute>} />
         <Route path="preorders" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><Preorders /></RoleRoute>} />
+        <Route path="stock-takes" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><StockTakes /></RoleRoute>} />
+        <Route path="stock-takes/:id" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><StockTakeDetail /></RoleRoute>} />
         <Route path="repairs" element={<RoleRoute roles={['Admin', 'Manager', 'Technician']}><Repairs /></RoleRoute>} />
         <Route path="customers" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><Customers /></RoleRoute>} />
         <Route path="customers/add" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><CustomerForm /></RoleRoute>} />

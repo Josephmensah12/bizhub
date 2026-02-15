@@ -31,6 +31,12 @@ const navigation = [
     roles: ['Admin', 'Manager', 'Sales']
   },
   {
+    name: 'Stock Takes',
+    path: '/stock-takes',
+    icon: '📋',
+    roles: ['Admin', 'Manager', 'Warehouse']
+  },
+  {
     name: 'Repairs',
     path: '/repairs',
     icon: '🔧',

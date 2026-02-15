@@ -20,7 +20,8 @@ const EVENT_TYPES = [
   'RESTORED',
   'BULK_UPLOAD_REVERTED',
   'INVOICE_CANCELLED',
-  'INVOICE_CANCELLED_INVENTORY_RELEASED'
+  'INVOICE_CANCELLED_INVENTORY_RELEASED',
+  'STOCK_ADJUSTED'
 ];
 
 const SOURCES = ['SYSTEM', 'USER', 'IMPORT', 'INVOICE', 'RETURN', 'PAYMENT'];
@@ -43,7 +44,8 @@ const EVENT_LABELS = {
   'RESTORED': 'Restored',
   'BULK_UPLOAD_REVERTED': 'Import Reverted',
   'INVOICE_CANCELLED': 'Invoice Cancelled',
-  'INVOICE_CANCELLED_INVENTORY_RELEASED': 'Released (Invoice Cancelled)'
+  'INVOICE_CANCELLED_INVENTORY_RELEASED': 'Released (Invoice Cancelled)',
+  'STOCK_ADJUSTED': 'Stock Adjusted'
 };
 
 module.exports = (sequelize, DataTypes) => {
