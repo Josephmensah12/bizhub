@@ -595,13 +595,15 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
 
   // Overall margin stats
   const overallMargin = await sequelize.query(`
-    SELECT 
+    SELECT
       COALESCE(SUM(total_amount), 0) as total_revenue,
       COALESCE(SUM(total_cost_amount), 0) as total_cost,
       COALESCE(SUM(total_profit_amount), 0) as total_profit,
-      COALESCE(AVG(margin_percent), 0) as avg_margin,
-      MIN(margin_percent) as min_margin,
-      MAX(margin_percent) as max_margin
+      CASE WHEN SUM(total_amount) > 0
+        THEN (SUM(total_profit_amount) / SUM(total_amount) * 100)
+        ELSE 0 END as avg_margin,
+      MIN(CASE WHEN total_amount > 0 THEN (total_profit_amount / total_amount * 100) END) as min_margin,
+      MAX(CASE WHEN total_amount > 0 THEN (total_profit_amount / total_amount * 100) END) as max_margin
     FROM invoices
     WHERE invoice_date BETWEEN :startDate AND :endDate
       AND status != 'CANCELLED'
@@ -659,9 +661,11 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
 
   // Margin trend over time
   const marginTrend = await sequelize.query(`
-    SELECT 
+    SELECT
       DATE(invoice_date) as date,
-      AVG(margin_percent) as avg_margin,
+      CASE WHEN SUM(total_amount) > 0
+        THEN (SUM(total_profit_amount) / SUM(total_amount) * 100)
+        ELSE 0 END as avg_margin,
       SUM(total_profit_amount) as total_profit,
       SUM(total_amount) as total_revenue
     FROM invoices

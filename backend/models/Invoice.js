@@ -240,7 +240,7 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     const totalProfit = subtotal - totalCost;
-    const marginPercent = totalCost > 0 ? ((totalProfit / totalCost) * 100) : null;
+    const marginPercent = subtotal > 0 ? ((totalProfit / subtotal) * 100) : null;
 
     this.subtotal_amount = subtotal;
     this.total_amount = subtotal; // Can add tax/discounts later
