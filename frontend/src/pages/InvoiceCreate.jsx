@@ -233,7 +233,7 @@ export default function InvoiceCreate() {
           const response = await axios.post(`/api/v1/invoices/${invoiceId}/items`, {
             asset_id: asset.id,
             unit_price: asset.price_amount || 0,
-            quantity: 1
+            quantity: asset._selectedQty || 1
           });
 
           const returnedItem = response.data.data.item;
@@ -267,7 +267,7 @@ export default function InvoiceCreate() {
       const response = await axios.post(`/api/v1/invoices/${invoiceId}/items`, {
         asset_id: asset.id,
         unit_price: asset.price_amount || 0,
-        quantity: 1
+        quantity: asset._selectedQty || 1
       });
 
       const returnedItem = response.data.data.item;

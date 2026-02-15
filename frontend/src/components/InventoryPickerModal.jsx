@@ -16,7 +16,7 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [selected, setSelected] = useState(new Map()); // Map<assetId, asset>
+  const [selected, setSelected] = useState(new Map()); // Map<assetId, { asset, quantity }>
 
   useEffect(() => {
     if (open) {
@@ -69,20 +69,37 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
     debouncedSearch(val);
   };
 
-  const toggleSelect = (asset) => {
+  const toggleSelect = (asset, remaining) => {
     setSelected(prev => {
       const next = new Map(prev);
       if (next.has(asset.id)) {
         next.delete(asset.id);
       } else {
-        next.set(asset.id, asset);
+        next.set(asset.id, { asset, quantity: 1, max: remaining });
       }
       return next;
     });
   };
 
+  const updateQuantity = (assetId, qty) => {
+    setSelected(prev => {
+      const next = new Map(prev);
+      const entry = next.get(assetId);
+      if (entry) {
+        next.set(assetId, { ...entry, quantity: Math.max(1, Math.min(qty, entry.max)) });
+      }
+      return next;
+    });
+  };
+
+  const totalUnits = Array.from(selected.values()).reduce((sum, e) => sum + e.quantity, 0);
+
   const handleDone = () => {
-    onAddItems(Array.from(selected.values()));
+    const items = Array.from(selected.values()).map(({ asset, quantity }) => ({
+      ...asset,
+      _selectedQty: quantity
+    }));
+    onAddItems(items);
     onClose();
   };
 
@@ -103,9 +120,9 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-gray-900">Select Inventory</h2>
-            {selected.size > 0 && (
+            {totalUnits > 0 && (
               <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-primary-100 text-primary-700">
-                {selected.size}
+                {totalUnits}
               </span>
             )}
           </div>
@@ -141,56 +158,94 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
                 const remaining = totalAvailable - usedOnInvoice;
                 const isSelected = selected.has(asset.id);
 
+                const selectedEntry = selected.get(asset.id);
+                const selectedQty = selectedEntry?.quantity || 1;
+
                 return (
-                  <button
+                  <div
                     key={asset.id}
-                    onClick={() => toggleSelect(asset)}
                     className={`w-full px-4 py-3 text-left transition-colors ${
                       isSelected ? 'bg-primary-50' : 'hover:bg-gray-50'
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      {/* Checkbox */}
-                      <div className="pt-0.5 shrink-0">
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                          isSelected
-                            ? 'bg-primary-600 border-primary-600 text-white'
-                            : 'border-gray-300 bg-white'
-                        }`}>
-                          {isSelected && (
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
+                    <button
+                      onClick={() => toggleSelect(asset, remaining)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Checkbox */}
+                        <div className="pt-0.5 shrink-0">
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                            isSelected
+                              ? 'bg-primary-600 border-primary-600 text-white'
+                              : 'border-gray-300 bg-white'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900">{asset.make} {asset.model}</div>
-                        <div className="text-sm text-gray-500">
-                          {asset.asset_tag}
-                          {asset.serial_number && ` • S/N: ${asset.serial_number}`}
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900">{asset.make} {asset.model}</div>
+                          <div className="text-sm text-gray-500">
+                            {asset.asset_tag}
+                            {asset.serial_number && ` • S/N: ${asset.serial_number}`}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {asset.condition} • {asset.category}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-400">
-                          {asset.condition} • {asset.category}
-                        </div>
-                      </div>
 
-                      {/* Price & availability */}
-                      <div className="text-right shrink-0">
-                        <div className="font-medium text-green-600">
-                          {formatCurrency(asset.price_amount, asset.price_currency)}
+                        {/* Price & availability */}
+                        <div className="text-right shrink-0">
+                          <div className="font-medium text-green-600">
+                            {formatCurrency(asset.price_amount, asset.price_currency)}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Cost: {formatCurrency(asset.cost_amount, asset.cost_currency)}
+                          </div>
+                          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                            {remaining} available
+                          </span>
                         </div>
-                        <div className="text-xs text-gray-400">
-                          Cost: {formatCurrency(asset.cost_amount, asset.cost_currency)}
-                        </div>
-                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                          {remaining} available
-                        </span>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+
+                    {/* Quantity stepper — only for selected items with remaining > 1 */}
+                    {isSelected && remaining > 1 && (
+                      <div className="flex items-center gap-2 mt-2 ml-8">
+                        <span className="text-xs text-gray-500">Qty:</span>
+                        <button
+                          onClick={() => updateQuantity(asset.id, selectedQty - 1)}
+                          disabled={selectedQty <= 1}
+                          className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                          &minus;
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          max={remaining}
+                          value={selectedQty}
+                          onChange={(e) => updateQuantity(asset.id, parseInt(e.target.value, 10) || 1)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-14 text-center text-sm border border-gray-300 rounded py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                        <button
+                          onClick={() => updateQuantity(asset.id, selectedQty + 1)}
+                          disabled={selectedQty >= remaining}
+                          className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                          +
+                        </button>
+                        <span className="text-xs text-gray-400">of {remaining}</span>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -207,10 +262,10 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
           </button>
           <button
             onClick={handleDone}
-            disabled={selected.size === 0}
+            disabled={totalUnits === 0}
             className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Add Selected ({selected.size})
+            Add Selected ({totalUnits})
           </button>
         </div>
       </div>
