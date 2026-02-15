@@ -11,7 +11,7 @@ const asyncHandler = fn => (req, res, next) => {
 const crypto = require('crypto');
 const axios = require('axios');
 const { Op, QueryTypes } = require('sequelize');
-const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, ActivityLog, InventoryItemEvent, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, ActivityLog, sequelize } = require('../models');
 const { computeAvailability, computeBulkAvailability } = require('../services/inventoryAvailabilityService');
 
 // ---------------------------------------------------------------------------
@@ -130,6 +130,8 @@ async function findOrCreateCustomer({ first_name, last_name, email, phone }, tra
  */
 exports.getProducts = asyncHandler(async (req, res) => {
   let { page, limit, category, asset_type, condition, brand, minPrice, maxPrice, search, sort, inStock } = req.query;
+
+  if (search && search.length > 100) search = search.substring(0, 100);
 
   page = Math.max(1, parseInt(page) || 1);
   limit = Math.min(100, Math.max(1, parseInt(limit) || 20));
@@ -319,7 +321,7 @@ exports.getCategories = asyncHandler(async (req, res) => {
  * Create a new order (Invoice) from website checkout.
  */
 exports.createOrder = asyncHandler(async (req, res) => {
-  const { customer: customerData, items, fulfillment, delivery_address, source, notes } = req.body;
+  let { customer: customerData, items, fulfillment, delivery_address, source, notes } = req.body;
 
   // Validate request
   if (!customerData || (!customerData.phone && !customerData.email)) {
@@ -334,6 +336,36 @@ exports.createOrder = asyncHandler(async (req, res) => {
       success: false,
       error: { code: 'INVALID_ITEMS', message: 'At least one item is required' }
     });
+  }
+
+  if (items.length > 20) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'TOO_MANY_ITEMS', message: 'Maximum 20 items per order' }
+    });
+  }
+
+  // Input length limits — truncate silently
+  if (notes && notes.length > 500) notes = notes.substring(0, 500);
+  if (delivery_address && delivery_address.length > 500) delivery_address = delivery_address.substring(0, 500);
+
+  // Customer field limits
+  if (customerData.first_name && customerData.first_name.length > 100) customerData.first_name = customerData.first_name.substring(0, 100);
+  if (customerData.last_name && customerData.last_name.length > 100) customerData.last_name = customerData.last_name.substring(0, 100);
+  if (customerData.phone && customerData.phone.length > 20) customerData.phone = customerData.phone.substring(0, 20);
+  if (customerData.email) {
+    if (customerData.email.length > 254) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_EMAIL', message: 'Email address is too long' }
+      });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerData.email)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_EMAIL', message: 'Invalid email format' }
+      });
+    }
   }
 
   const transaction = await sequelize.transaction();
@@ -753,19 +785,9 @@ exports.handlePaystackWebhook = asyncHandler(async (req, res) => {
 
     await invoice.save({ transaction: dbTransaction });
 
-    // If invoice just became PAID, decrement on-hand quantity & update asset status
-    if (prevStatus !== 'PAID' && invoice.status === 'PAID' && invoice.items) {
-      for (const item of invoice.items) {
-        if (item.asset && !item.voided_at) {
-          const unreturned = item.quantity - (item.quantity_returned_total || 0);
-          if (unreturned > 0) {
-            item.asset.quantity -= unreturned;
-            await item.asset.save({ transaction: dbTransaction });
-            await item.asset.updateComputedStatus(dbTransaction);
-            await InventoryItemEvent.logSold(item.asset, invoice, null, dbTransaction);
-          }
-        }
-      }
+    // If invoice just became PAID, decrement on-hand quantity via shared method
+    if (prevStatus !== 'PAID' && invoice.status === 'PAID') {
+      await invoice.handlePaidTransition(dbTransaction);
     }
 
     await dbTransaction.commit();
@@ -780,8 +802,8 @@ exports.handlePaystackWebhook = asyncHandler(async (req, res) => {
     });
   } catch (err) {
     if (!dbTransaction.finished) await dbTransaction.rollback();
-    // Log but still return 200 so Paystack doesn't retry on transient errors
     console.error('Paystack webhook processing error:', err);
+    return res.sendStatus(500);
   }
 
   res.sendStatus(200);

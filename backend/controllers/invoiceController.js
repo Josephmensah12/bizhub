@@ -1495,20 +1495,8 @@ exports.createTransaction = asyncHandler(async (req, res) => {
     const totals = await recalculateInvoiceTotals(invoice, dbTransaction);
 
     // If invoice just became PAID, decrement on_hand and update status
-    // Only decrement units that haven't already been returned
-    if (prevStatus !== 'PAID' && totals.status === 'PAID' && invoice.items) {
-      for (const item of invoice.items) {
-        if (item.asset && !item.voided_at) {
-          const unreturned = item.quantity - (item.quantity_returned_total || 0);
-          if (unreturned > 0) {
-            item.asset.quantity -= unreturned;
-            await item.asset.save({ transaction: dbTransaction });
-            await item.asset.updateComputedStatus(dbTransaction);
-            // Log inventory event - item sold
-            await InventoryItemEvent.logSold(item.asset, invoice, req.user?.id, dbTransaction);
-          }
-        }
-      }
+    if (prevStatus !== 'PAID' && totals.status === 'PAID') {
+      await invoice.handlePaidTransition(dbTransaction, req.user?.id);
     }
 
     // Log payment received event for each item on the invoice
@@ -1723,18 +1711,8 @@ exports.voidTransaction = asyncHandler(async (req, res) => {
     await recalculateInvoiceTotals(invoice, dbTransaction);
 
     // If invoice was PAID and is no longer PAID, restore on_hand
-    // Only restore units that haven't already been returned (to avoid double-restore)
-    if (prevStatus === 'PAID' && invoice.status !== 'PAID' && invoice.items) {
-      for (const item of invoice.items) {
-        if (item.asset && !item.voided_at) {
-          const unreturned = item.quantity - (item.quantity_returned_total || 0);
-          if (unreturned > 0) {
-            item.asset.quantity += unreturned;
-            await item.asset.save({ transaction: dbTransaction });
-            await item.asset.updateComputedStatus(dbTransaction);
-          }
-        }
-      }
+    if (prevStatus === 'PAID' && invoice.status !== 'PAID') {
+      await invoice.handleUnpaidTransition(dbTransaction);
     }
 
     // Log activity

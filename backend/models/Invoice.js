@@ -411,5 +411,60 @@ module.exports = (sequelize, DataTypes) => {
     return payment;
   };
 
+  /**
+   * Handle inventory decrement when an invoice transitions to PAID.
+   * Decrements on-hand quantity for unreturned items and logs sold events.
+   * Shared by in-app payment recording and Paystack webhook.
+   */
+  Invoice.prototype.handlePaidTransition = async function(transaction, userId = null) {
+    const InvoiceItem = sequelize.models.InvoiceItem;
+    const Asset = sequelize.models.Asset;
+    const InventoryItemEvent = sequelize.models.InventoryItemEvent;
+
+    const items = await InvoiceItem.findAll({
+      where: { invoice_id: this.id, voided_at: null },
+      include: [{ model: Asset, as: 'asset' }],
+      transaction
+    });
+
+    for (const item of items) {
+      if (item.asset) {
+        const unreturned = item.quantity - (item.quantity_returned_total || 0);
+        if (unreturned > 0) {
+          item.asset.quantity -= unreturned;
+          await item.asset.save({ transaction });
+          await item.asset.updateComputedStatus(transaction);
+          await InventoryItemEvent.logSold(item.asset, this, userId, transaction);
+        }
+      }
+    }
+  };
+
+  /**
+   * Handle inventory restore when an invoice transitions from PAID to non-PAID.
+   * Restores on-hand quantity for unreturned items.
+   */
+  Invoice.prototype.handleUnpaidTransition = async function(transaction) {
+    const InvoiceItem = sequelize.models.InvoiceItem;
+    const Asset = sequelize.models.Asset;
+
+    const items = await InvoiceItem.findAll({
+      where: { invoice_id: this.id, voided_at: null },
+      include: [{ model: Asset, as: 'asset' }],
+      transaction
+    });
+
+    for (const item of items) {
+      if (item.asset) {
+        const unreturned = item.quantity - (item.quantity_returned_total || 0);
+        if (unreturned > 0) {
+          item.asset.quantity += unreturned;
+          await item.asset.save({ transaction });
+          await item.asset.updateComputedStatus(transaction);
+        }
+      }
+    }
+  };
+
   return Invoice;
 };
