@@ -27,6 +27,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 // const warrantyRoutes = require('./routes/warrantyRoutes');
 // const repairRoutes = require('./routes/repairRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const storefrontRoutes = require('./routes/storefrontRoutes');
 
 const app = express();
 
@@ -84,6 +85,7 @@ app.use(`${API_BASE}/payments`, paymentRoutes);
 // app.use(`${API_BASE}/warranties`, warrantyRoutes);
 // app.use(`${API_BASE}/repair-tickets`, repairRoutes);
 app.use(`${API_BASE}/reports`, reportRoutes);
+app.use(`${API_BASE}/storefront`, storefrontRoutes);
 
 // 404 handler
 app.use((req, res) => {

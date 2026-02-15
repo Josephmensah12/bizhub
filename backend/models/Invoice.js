@@ -211,6 +211,23 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    // Storefront / payment gateway fields
+    source: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: 'in_store',
+      comment: 'Order source: in_store, website, jiji, instagram, whatsapp, phone, other'
+    },
+    payment_reference: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'External payment reference (e.g. Paystack reference)'
+    },
+    payment_method: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      comment: 'Invoice-level payment method: cash, momo, bank_transfer, paystack, card, other'
+    },
     // Soft-delete fields
     is_deleted: {
       type: DataTypes.BOOLEAN,

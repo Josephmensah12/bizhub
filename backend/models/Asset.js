@@ -201,6 +201,12 @@ module.exports = (sequelize, DataTypes) => {
       unique: true,
       comment: 'Original SalesBinder item ID for tracking imports'
     },
+    // Storefront
+    featured: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     // Audit fields
     created_by: {
       type: DataTypes.INTEGER,
