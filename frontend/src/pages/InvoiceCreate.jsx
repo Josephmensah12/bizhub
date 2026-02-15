@@ -318,20 +318,31 @@ export default function InvoiceCreate() {
       setItems(prev => prev.map(item =>
         item.id === updatedItem.id ? updatedItem : item
       ));
+      // Merge updated invoice totals so revenue/margin reflect item discount changes
+      if (response.data.data?.invoice) {
+        setInvoice(prev => prev ? { ...prev, ...response.data.data.invoice } : response.data.data.invoice);
+      }
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to update item discount');
     }
   }, [invoice?.id]);
 
-  // Save invoice-level discount to server
-  const handleSaveInvoiceDiscount = useCallback(async () => {
+  // Save invoice-level discount to server (accepts overrides for immediate saves before state updates)
+  const handleSaveInvoiceDiscount = useCallback(async (typeOverride, valueOverride) => {
     if (!invoice?.id) return;
 
+    const type = typeOverride ?? invoiceDiscountType;
+    const value = valueOverride ?? invoiceDiscountValue;
+
     try {
-      await axios.patch(`/api/v1/invoices/${invoice.id}/discount`, {
-        discount_type: invoiceDiscountType,
-        discount_value: parseFloat(invoiceDiscountValue) || 0
+      const res = await axios.patch(`/api/v1/invoices/${invoice.id}/discount`, {
+        discount_type: type,
+        discount_value: parseFloat(value) || 0
       });
+      // Merge updated invoice totals so revenue/margin reflect the discount
+      if (res.data.data?.invoice) {
+        setInvoice(prev => prev ? { ...prev, ...res.data.data.invoice } : res.data.data.invoice);
+      }
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to update invoice discount');
     }
@@ -350,10 +361,14 @@ export default function InvoiceCreate() {
       });
 
       // Also save invoice-level discount
-      await axios.patch(`/api/v1/invoices/${invoice.id}/discount`, {
+      const discRes = await axios.patch(`/api/v1/invoices/${invoice.id}/discount`, {
         discount_type: invoiceDiscountType,
         discount_value: parseFloat(invoiceDiscountValue) || 0
       });
+      // Merge updated invoice totals so revenue/margin are current
+      if (discRes.data.data?.invoice) {
+        setInvoice(prev => prev ? { ...prev, ...discRes.data.data.invoice } : discRes.data.data.invoice);
+      }
 
       setError(null);
     } catch (err) {
@@ -650,8 +665,12 @@ export default function InvoiceCreate() {
                 <select
                   value={invoiceDiscountType}
                   onChange={(e) => {
-                    setInvoiceDiscountType(e.target.value);
-                    if (e.target.value === 'none') setInvoiceDiscountValue('');
+                    const newType = e.target.value;
+                    setInvoiceDiscountType(newType);
+                    if (newType === 'none') {
+                      setInvoiceDiscountValue('');
+                      handleSaveInvoiceDiscount('none', 0);
+                    }
                   }}
                   className="px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
                 >
