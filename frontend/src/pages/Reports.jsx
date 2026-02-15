@@ -35,12 +35,40 @@ function formatPercent(val) {
   return `${Number(val).toFixed(1)}%`
 }
 
+// ─── Info Tooltip ─────────────────────────────────────────────
+function InfoTooltip({ text }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span className="relative inline-block">
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={() => setShow(s => !s)}
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-500 text-[10px] font-bold leading-none cursor-help transition-colors"
+        aria-label="More info"
+      >
+        i
+      </button>
+      {show && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg">
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px w-2 h-2 bg-white border-r border-b border-gray-200 rotate-45" />
+        </div>
+      )}
+    </span>
+  )
+}
+
 // ─── Metric Card ──────────────────────────────────────────────
-function MetricCard({ title, value, subtitle, icon, trend, trendUp }) {
+function MetricCard({ title, value, subtitle, icon, trend, trendUp, info }) {
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-500">{title}</span>
+        <span className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
+          {title}
+          {info && <InfoTooltip text={info} />}
+        </span>
         <span className="text-2xl">{icon}</span>
       </div>
       <div className="text-2xl font-bold text-gray-900">{value}</div>
@@ -72,24 +100,28 @@ function SalesTab({ data, loading }) {
           value={formatCurrency(summary.total_revenue)}
           subtitle={`${summary.total_invoices} invoices`}
           icon="💰"
+          info="Sum of all invoice totals for the period. Formula: SUM(invoice total_amount) where status is not cancelled."
         />
         <MetricCard
           title="Total Profit"
           value={formatCurrency(summary.total_profit)}
           subtitle={`${formatPercent(summary.overall_margin_percent)} margin`}
           icon="📈"
+          info="Revenue minus cost across all invoices. Formula: SUM(total_amount) - SUM(total_cost_amount)."
         />
         <MetricCard
           title="Avg Invoice"
           value={formatCurrency(summary.avg_invoice_value)}
           subtitle={`Max: ${formatCurrency(summary.max_invoice_value)}`}
           icon="🧾"
+          info="Average value per invoice in the period. Formula: Total Revenue / Number of Invoices."
         />
         <MetricCard
           title="Daily Average"
           value={formatCurrency(daily_trend.length > 0 ? summary.total_revenue / daily_trend.length : 0)}
           subtitle={`${daily_trend.length > 0 ? (summary.total_invoices / daily_trend.length).toFixed(1) : 0} invoices/day`}
           icon="📅"
+          info="Average revenue per active selling day. Formula: Total Revenue / Number of Days with Sales."
         />
       </div>
 
@@ -178,15 +210,31 @@ function MarginsTab({ data, loading }) {
     <div className="space-y-6">
       {/* Overall Margin */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard title="Total Revenue" value={formatCurrency(overall.total_revenue)} icon="💰" />
-        <MetricCard title="Total Profit" value={formatCurrency(overall.total_profit)} icon="📈" />
+        <MetricCard
+          title="Total Revenue"
+          value={formatCurrency(overall.total_revenue)}
+          icon="💰"
+          info="Sum of all invoice totals in the period. Formula: SUM(invoice total_amount)."
+        />
+        <MetricCard
+          title="Total Profit"
+          value={formatCurrency(overall.total_profit)}
+          icon="📈"
+          info="Total revenue minus total cost. Formula: Total Revenue - Total Cost."
+        />
         <MetricCard
           title="Avg Margin"
           value={formatPercent(overall.avg_margin)}
           subtitle={`Min: ${formatPercent(overall.min_margin)} / Max: ${formatPercent(overall.max_margin)}`}
           icon="📊"
+          info="Average profit margin across invoices. Formula: AVG(Profit / Revenue * 100) per invoice."
         />
-        <MetricCard title="Total Cost" value={formatCurrency(overall.total_cost)} icon="🏷️" />
+        <MetricCard
+          title="Total Cost"
+          value={formatCurrency(overall.total_cost)}
+          icon="🏷️"
+          info="Sum of cost prices for all items sold. Formula: SUM(invoice total_cost_amount)."
+        />
       </div>
 
       {/* Margin Trend */}
@@ -386,10 +434,30 @@ function CustomersTab({ data, loading }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <MetricCard title="Total Customers" value={total_customers} icon="👥" />
-        <MetricCard title="Active This Period" value={period_customers.total_unique} icon="🎯" />
-        <MetricCard title="New Customers" value={period_customers.new_customers} icon="🆕" />
-        <MetricCard title="Returning" value={period_customers.returning_customers} icon="🔄" />
+        <MetricCard
+          title="Total Customers"
+          value={total_customers}
+          icon="👥"
+          info="Total number of customers in the system, regardless of period."
+        />
+        <MetricCard
+          title="Active This Period"
+          value={period_customers.total_unique}
+          icon="🎯"
+          info="Customers with at least one non-cancelled invoice in this period. Formula: COUNT(DISTINCT customer_id)."
+        />
+        <MetricCard
+          title="New Customers"
+          value={period_customers.new_customers}
+          icon="🆕"
+          info="Customers whose first-ever invoice falls within this period."
+        />
+        <MetricCard
+          title="Returning"
+          value={period_customers.returning_customers}
+          icon="🔄"
+          info="Customers who purchased before this period and also purchased during it."
+        />
       </div>
 
       {/* New vs Returning Pie */}
