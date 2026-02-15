@@ -133,6 +133,22 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true
     },
+    discount_percent: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('discount_percent');
+        return val === null ? null : parseFloat(val);
+      }
+    },
+    discount_amount: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('discount_amount');
+        return val === null ? null : parseFloat(val);
+      }
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
