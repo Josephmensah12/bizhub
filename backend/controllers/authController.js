@@ -42,8 +42,15 @@ exports.login = asyncHandler(async (req, res, next) => {
   // Find user
   const user = await User.findOne({ where: { username } });
 
-  if (!user || !user.is_active) {
+  if (!user) {
     throw new AppError('Invalid username or password', 401, 'INVALID_CREDENTIALS');
+  }
+
+  if (!user.is_active) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'ACCOUNT_DISABLED', message: 'Your account has been deactivated. Contact an administrator.' }
+    });
   }
 
   // Verify password

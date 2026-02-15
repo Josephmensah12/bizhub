@@ -2,9 +2,10 @@ const jwt = require('jsonwebtoken');
 const { AppError } = require('./errorHandler');
 
 /**
- * Verify JWT token and attach user to request
+ * Verify JWT token and attach user to request.
+ * Also checks that the user account is still active.
  */
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   try {
     // Get token from header
     const authHeader = req.headers.authorization;
@@ -18,11 +19,18 @@ const authenticate = (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Attach user info to request
+    // Check that user is still active in the database
+    const { User } = require('../models');
+    const dbUser = await User.findByPk(decoded.userId, { attributes: ['id', 'is_active', 'role'] });
+    if (!dbUser || !dbUser.is_active) {
+      return next(new AppError('Account deactivated', 401, 'ACCOUNT_DEACTIVATED'));
+    }
+
+    // Attach user info to request (use DB role in case it changed since token was issued)
     req.user = {
       id: decoded.userId,
       username: decoded.username,
-      role: decoded.role
+      role: dbUser.role
     };
 
     next();

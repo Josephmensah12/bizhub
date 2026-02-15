@@ -168,6 +168,17 @@ exports.update = asyncHandler(async (req, res) => {
     });
   }
 
+  // Last admin protection: prevent removing the last active Admin
+  if (user.role === 'Admin' && ((role && role !== 'Admin') || (is_active === false))) {
+    const adminCount = await User.count({ where: { role: 'Admin', is_active: true } });
+    if (adminCount <= 1) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'LAST_ADMIN', message: 'Cannot remove the last active Admin. Promote another user first.' }
+      });
+    }
+  }
+
   // Check uniqueness if changing username/email
   if (username && username !== user.username) {
     const dup = await User.findOne({ where: { username } });
@@ -233,6 +244,17 @@ exports.deactivate = asyncHandler(async (req, res) => {
       success: false,
       error: { code: 'VALIDATION_ERROR', message: 'Cannot deactivate your own account' }
     });
+  }
+
+  // Last admin protection
+  if (user.role === 'Admin') {
+    const adminCount = await User.count({ where: { role: 'Admin', is_active: true } });
+    if (adminCount <= 1) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'LAST_ADMIN', message: 'Cannot remove the last active Admin. Promote another user first.' }
+      });
+    }
   }
 
   user.is_active = false;
