@@ -4,6 +4,7 @@ const { generateAssetTag } = require('../utils/assetTagGenerator');
 const { getReservedQuantity } = require('../services/inventoryAvailabilityService');
 const { validationResult } = require('express-validator');
 const { getValuationSummary } = require('../services/valuationService');
+const { sanitizeAssetForRole, canSeeCost } = require('../middleware/permissions');
 
 // Async handler wrapper
 const asyncHandler = fn => (req, res, next) => {
@@ -110,7 +111,7 @@ exports.list = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: {
-      assets: rows,
+      assets: rows.map(a => sanitizeAssetForRole(a, req.user?.role)),
       pagination: {
         total: count,
         page: parseInt(page),
@@ -147,7 +148,7 @@ exports.getById = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: { asset }
+    data: { asset: sanitizeAssetForRole(asset, req.user?.role) }
   });
 });
 
@@ -510,6 +511,21 @@ exports.getValuationSummary = asyncHandler(async (req, res) => {
 
   const summary = await getValuationSummary(filters);
 
+  // Strip cost/profit data for non-privileged roles
+  if (!canSeeCost(req.user?.role)) {
+    if (summary.totals) {
+      delete summary.totals.totalCost;
+      delete summary.totals.projectedProfit;
+      delete summary.totals.markupPercent;
+    }
+    if (summary.breakdown) {
+      summary.breakdown = summary.breakdown.map(b => {
+        const { totalCost, profit, markupPercent, ...rest } = b;
+        return rest;
+      });
+    }
+  }
+
   res.json({
     success: true,
     data: summary
@@ -568,7 +584,7 @@ exports.listDeleted = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: {
-      assets: rows,
+      assets: rows.map(a => sanitizeAssetForRole(a, req.user?.role)),
       pagination: {
         total: count,
         page: parseInt(page),

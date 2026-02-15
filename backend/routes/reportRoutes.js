@@ -5,6 +5,9 @@ const { authenticate, requireRole } = require('../middleware/auth');
 
 router.use(authenticate);
 
+// Personal performance — available to ALL authenticated users
+router.get('/my-performance', reportController.myPerformance);
+
 // GET /api/v1/reports/sales
 router.get('/sales', requireRole(['Manager', 'Admin']), reportController.salesReport);
 
@@ -17,11 +20,11 @@ router.get('/staff-performance', requireRole(['Manager', 'Admin']), reportContro
 // GET /api/v1/reports/customer-insights
 router.get('/customer-insights', requireRole(['Manager', 'Admin']), reportController.customerInsights);
 
-// GET /api/v1/reports/margin-analysis
-router.get('/margin-analysis', requireRole(['Manager', 'Admin']), reportController.marginAnalysis);
+// GET /api/v1/reports/margin-analysis — Admin ONLY (profit data)
+router.get('/margin-analysis', requireRole(['Admin']), reportController.marginAnalysis);
 
 // GET /api/v1/reports/inventory-aging
-router.get('/inventory-aging', requireRole(['Manager', 'Admin']), reportController.inventoryAgingReport);
+router.get('/inventory-aging', requireRole(['Warehouse', 'Manager', 'Admin']), reportController.inventoryAgingReport);
 
 // GET /api/v1/reports/low-stock
 router.get('/low-stock', requireRole(['Warehouse', 'Manager', 'Admin']), reportController.lowStockReport);

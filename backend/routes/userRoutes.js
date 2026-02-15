@@ -6,6 +6,9 @@ const { authenticate, requireRole } = require('../middleware/auth');
 // All routes require authentication
 router.use(authenticate);
 
+// Change own password — available to ALL authenticated users (must be before /:id)
+router.post('/change-password', userController.changeOwnPassword);
+
 // GET /api/v1/users
 router.get('/', requireRole(['Admin', 'Manager']), userController.list);
 
@@ -20,5 +23,8 @@ router.put('/:id', requireRole(['Admin']), userController.update);
 
 // DELETE /api/v1/users/:id
 router.delete('/:id', requireRole(['Admin']), userController.deactivate);
+
+// POST /api/v1/users/:id/reset-password (Admin only)
+router.post('/:id/reset-password', requireRole(['Admin']), userController.resetPassword);
 
 module.exports = router;

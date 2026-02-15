@@ -7,10 +7,11 @@
 const express = require('express');
 const router = express.Router();
 const returnController = require('../controllers/returnController');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireRole } = require('../middleware/auth');
 
-// All routes require authentication
+// All routes require authentication + Admin or Manager only
 router.use(authenticate);
+router.use(requireRole(['Admin', 'Manager']));
 
 // Return management
 // GET /api/v1/returns/:returnId - Get single return

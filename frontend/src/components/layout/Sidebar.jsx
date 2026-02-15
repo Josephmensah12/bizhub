@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 
 const navigation = [
   {
@@ -45,7 +46,13 @@ const navigation = [
     name: 'Reports',
     path: '/reports',
     icon: '📈',
-    roles: ['Admin', 'Manager']
+    roles: ['Admin', 'Manager', 'Sales', 'Warehouse']
+  },
+  {
+    name: 'Users',
+    path: '/users',
+    icon: '🔑',
+    roles: ['Admin']
   },
   {
     name: 'Settings',
@@ -60,6 +67,8 @@ const navigation = [
 
 export default function Sidebar() {
   const location = useLocation()
+  const { user } = useAuth()
+  const userRole = user?.role
   const [expandedMenus, setExpandedMenus] = useState(['Sales', 'Settings']) // Default expanded
 
   const toggleSubmenu = (name) => {
@@ -82,7 +91,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navigation.map((item) => (
+        {navigation.filter(item => !userRole || item.roles.includes(userRole)).map((item) => (
           <div key={item.name}>
             {item.submenu ? (
               // Menu with submenu

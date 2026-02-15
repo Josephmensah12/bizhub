@@ -1,5 +1,6 @@
 import { createContext, useState, useContext, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import { clearPermissionsCache } from '../hooks/usePermissions'
 
 const AuthContext = createContext(null)
 
@@ -20,6 +21,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     delete axios.defaults.headers.common['Authorization']
+    clearPermissionsCache()
     setUser(null)
   }, [])
 

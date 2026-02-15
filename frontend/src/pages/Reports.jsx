@@ -1,18 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import { usePermissions } from '../hooks/usePermissions'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts'
 
-const TABS = [
-  { id: 'sales', label: 'Sales Overview', icon: '📊' },
-  { id: 'margins', label: 'Margins', icon: '💰' },
-  { id: 'products', label: 'Top Sellers', icon: '🏆' },
-  { id: 'customers', label: 'Customers', icon: '👥' },
-  { id: 'staff', label: 'Staff', icon: '👤' },
-  { id: 'inventory', label: 'Inventory', icon: '📦' },
+const ALL_TABS = [
+  { id: 'my-performance', label: 'My Performance', icon: '🎯', reportKey: 'my-performance' },
+  { id: 'sales', label: 'Sales Overview', icon: '📊', reportKey: 'sales' },
+  { id: 'margins', label: 'Margins', icon: '💰', reportKey: 'margins' },
+  { id: 'products', label: 'Top Sellers', icon: '🏆', reportKey: 'products' },
+  { id: 'customers', label: 'Customers', icon: '👥', reportKey: 'customers' },
+  { id: 'staff', label: 'Staff', icon: '👤', reportKey: 'staff' },
+  { id: 'inventory', label: 'Inventory', icon: '📦', reportKey: 'inventory' },
 ]
 
 const PERIODS = [
@@ -860,14 +862,114 @@ function EmptyState({ message }) {
   )
 }
 
+// ─── My Performance Tab ──────────────────────────────────────
+function MyPerformanceTab({ data, loading }) {
+  if (loading) return <LoadingSpinner />
+  if (!data) return <EmptyState message="No performance data available" />
+
+  const { summary, status_breakdown, recent_invoices } = data
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="My Invoices"
+          value={summary.total_invoices}
+          icon="🧾"
+          info="Total invoices you created in this period."
+        />
+        <MetricCard
+          title="My Revenue"
+          value={formatCurrency(summary.total_revenue)}
+          icon="💰"
+          info="Sum of invoice totals for your invoices."
+        />
+        <MetricCard
+          title="Collected"
+          value={formatCurrency(summary.total_collected)}
+          icon="✅"
+          info="Total payments collected on your invoices."
+        />
+        <MetricCard
+          title="Avg Ticket"
+          value={formatCurrency(summary.avg_ticket)}
+          icon="📊"
+          info="Average invoice value. Revenue / Invoices."
+        />
+      </div>
+
+      {/* Status Breakdown */}
+      {status_breakdown && status_breakdown.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Status</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {status_breakdown.map((s) => (
+              <div key={s.status} className="text-center p-3 rounded-lg bg-gray-50">
+                <div className="text-2xl font-bold text-gray-900">{s.count}</div>
+                <div className="text-sm text-gray-500">{s.status}</div>
+                <div className="text-sm font-medium text-gray-700">{formatCurrency(s.total)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Invoices */}
+      {recent_invoices && recent_invoices.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Invoices</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Invoice #</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Date</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Customer</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Total</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent_invoices.map((inv) => (
+                  <tr key={inv.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 px-3 font-medium">{inv.invoice_number}</td>
+                    <td className="py-2 px-3">{new Date(inv.invoice_date).toLocaleDateString()}</td>
+                    <td className="py-2 px-3">{inv.customer_name || 'Walk-in'}</td>
+                    <td className="text-right py-2 px-3 font-medium">{formatCurrency(inv.total_amount)}</td>
+                    <td className="py-2 px-3">
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                        inv.status === 'PAID' ? 'bg-green-100 text-green-800' :
+                        inv.status === 'PARTIALLY_PAID' ? 'bg-blue-100 text-blue-800' :
+                        inv.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {inv.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Reports Page ────────────────────────────────────────
 export default function Reports() {
-  const [activeTab, setActiveTab] = useState('sales')
+  const { permissions } = usePermissions()
+  const accessibleReports = permissions?.accessibleReports || []
+  const TABS = ALL_TABS.filter(tab => accessibleReports.includes(tab.reportKey))
+
+  const [activeTab, setActiveTab] = useState('')
   const [period, setPeriod] = useState('month')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
   // Data states
+  const [myPerfData, setMyPerfData] = useState(null)
   const [salesData, setSalesData] = useState(null)
   const [marginsData, setMarginsData] = useState(null)
   const [topSellersData, setTopSellersData] = useState(null)
@@ -877,6 +979,7 @@ export default function Reports() {
   const [lowStockData, setLowStockData] = useState(null)
 
   // Loading states
+  const [loadingMyPerf, setLoadingMyPerf] = useState(false)
   const [loadingSales, setLoadingSales] = useState(false)
   const [loadingMargins, setLoadingMargins] = useState(false)
   const [loadingTopSellers, setLoadingTopSellers] = useState(false)
@@ -909,9 +1012,20 @@ export default function Reports() {
     }
   }, [buildParams])
 
+  // Set initial active tab from first available
+  useEffect(() => {
+    if (TABS.length > 0 && !activeTab) {
+      setActiveTab(TABS[0].id)
+    }
+  }, [TABS.length])
+
   // Fetch data when tab or period changes
   useEffect(() => {
+    if (!activeTab) return
     switch (activeTab) {
+      case 'my-performance':
+        fetchReport('my-performance', setMyPerfData, setLoadingMyPerf)
+        break
       case 'sales':
         fetchReport('sales', setSalesData, setLoadingSales)
         break
@@ -1004,6 +1118,7 @@ export default function Reports() {
       )}
 
       {/* Tab Content */}
+      {activeTab === 'my-performance' && <MyPerformanceTab data={myPerfData} loading={loadingMyPerf} />}
       {activeTab === 'sales' && <SalesTab data={salesData} loading={loadingSales} />}
       {activeTab === 'margins' && <MarginsTab data={marginsData} loading={loadingMargins} />}
       {activeTab === 'products' && <TopSellersTab data={topSellersData} loading={loadingTopSellers} />}

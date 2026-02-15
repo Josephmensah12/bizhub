@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import CustomerPickerModal from '../components/CustomerPickerModal';
 import InventoryPickerModal from '../components/InventoryPickerModal';
+import { usePermissions } from '../hooks/usePermissions';
 
 /**
  * Format currency for display
@@ -90,6 +91,9 @@ function LineItemDiscountEditor({ item, currency, onUpdate, disabled }) {
 export default function InvoiceCreate() {
   const { id: editId } = useParams(); // Get invoice ID if editing
   const navigate = useNavigate();
+  const { permissions } = usePermissions();
+  const maxDiscountPercent = permissions?.maxDiscountPercent ?? null;
+  const canSeeCost = permissions?.canSeeCost ?? false;
   const [loading, setLoading] = useState(!!editId); // Start loading if editing
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -752,6 +756,11 @@ export default function InvoiceCreate() {
               {invoiceDiscountAmt > 0 && (
                 <div className="mt-2 text-sm text-orange-600 font-medium">
                   -{formatCurrency(invoiceDiscountAmt, currency)} off invoice
+                </div>
+              )}
+              {maxDiscountPercent !== null && (
+                <div className="mt-2 text-xs text-gray-500">
+                  Your max discount: {maxDiscountPercent}%
                 </div>
               )}
             </div>

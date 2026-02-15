@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { usePermissions } from '../hooks/usePermissions';
 
 /**
  * Format currency amount with symbol
@@ -180,6 +181,12 @@ function MultiSelectDropdown({ label, options, selected, onChange, onClear }) {
 }
 
 export default function Inventory() {
+  const { permissions } = usePermissions();
+  const canSeeCost = permissions?.canSeeCost ?? false;
+  const canAddInventory = permissions?.canAddInventory ?? false;
+  const canImport = permissions?.canImport ?? false;
+  const canDelete = permissions?.canDelete ?? false;
+
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -557,30 +564,38 @@ export default function Inventory() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
         <div className="flex gap-3">
-          <Link
-            to="/inventory/recycle-bin"
-            className="btn btn-secondary"
-          >
-            Recycle Bin
-          </Link>
-          <Link
-            to="/inventory/import-history"
-            className="btn btn-secondary"
-          >
-            Import History
-          </Link>
-          <Link
-            to="/inventory/import"
-            className="btn btn-secondary"
-          >
-            Import Assets
-          </Link>
-          <Link
-            to="/inventory/add"
-            className="btn btn-primary"
-          >
-            Add Asset
-          </Link>
+          {canDelete && (
+            <Link
+              to="/inventory/recycle-bin"
+              className="btn btn-secondary"
+            >
+              Recycle Bin
+            </Link>
+          )}
+          {canImport && (
+            <>
+              <Link
+                to="/inventory/import-history"
+                className="btn btn-secondary"
+              >
+                Import History
+              </Link>
+              <Link
+                to="/inventory/import"
+                className="btn btn-secondary"
+              >
+                Import Assets
+              </Link>
+            </>
+          )}
+          {canAddInventory && (
+            <Link
+              to="/inventory/add"
+              className="btn btn-primary"
+            >
+              Add Asset
+            </Link>
+          )}
         </div>
       </div>
 
@@ -642,8 +657,8 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* Valuation Summary Cards */}
-      {!valuationLoading && valuation && (
+      {/* Valuation Summary Cards — hidden for roles that cannot see cost */}
+      {canSeeCost && !valuationLoading && valuation && (
         <div className="mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <SummaryCard
@@ -750,7 +765,7 @@ export default function Inventory() {
       )}
 
       {/* Valuation Loading Skeleton */}
-      {valuationLoading && (
+      {canSeeCost && valuationLoading && (
         <div className="mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map(i => (
@@ -953,7 +968,7 @@ export default function Inventory() {
                         >
                           Edit
                         </Link>
-                        {!isUnavailable && (
+                        {canDelete && !isUnavailable && (
                           <button
                             onClick={() => handleDelete(asset.id)}
                             className="text-red-600 hover:text-red-800"

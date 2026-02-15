@@ -19,8 +19,7 @@ const invoiceRoutes = require('./routes/invoiceRoutes');
 const returnRoutes = require('./routes/returnRoutes');
 const companyProfileRoutes = require('./routes/companyProfileRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
-// TODO: Uncomment routes as controllers are implemented
-// const userRoutes = require('./routes/userRoutes');
+const userRoutes = require('./routes/userRoutes');
 // const productModelRoutes = require('./routes/productModelRoutes');
 // const bulkStockRoutes = require('./routes/bulkStockRoutes');
 // const preorderRoutes = require('./routes/preorderRoutes');
@@ -77,8 +76,7 @@ app.use(`${API_BASE}/invoices`, invoiceRoutes);
 app.use(`${API_BASE}/returns`, returnRoutes);
 app.use(`${API_BASE}/company-profile`, companyProfileRoutes);
 app.use(`${API_BASE}/payments`, paymentRoutes);
-// TODO: Uncomment as controllers are implemented
-// app.use(`${API_BASE}/users`, userRoutes);
+app.use(`${API_BASE}/users`, userRoutes);
 // app.use(`${API_BASE}/product-models`, productModelRoutes);
 // app.use(`${API_BASE}/bulk-stock`, bulkStockRoutes);
 // app.use(`${API_BASE}/preorders`, preorderRoutes);

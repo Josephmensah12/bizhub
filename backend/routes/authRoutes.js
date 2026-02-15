@@ -15,4 +15,7 @@ router.get('/me', authenticate, authController.getCurrentUser);
 // POST /api/v1/auth/refresh
 router.post('/refresh', authenticate, authController.refreshToken);
 
+// GET /api/v1/auth/permissions
+router.get('/permissions', authenticate, authController.getPermissions);
+
 module.exports = router;

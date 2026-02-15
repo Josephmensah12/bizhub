@@ -44,6 +44,12 @@ module.exports = (sequelize, DataTypes) => {
     last_login: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    max_discount_percent: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Max discount percent allowed. NULL = unlimited (Admin).'
     }
   }, {
     tableName: 'users',

@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const db = require('../models');
+const { buildPermissions } = require('../middleware/permissions');
 
 const User = db.User;
 
@@ -136,5 +137,24 @@ exports.refreshToken = asyncHandler(async (req, res, next) => {
       }
     },
     message: 'Token refreshed successfully'
+  });
+});
+
+/**
+ * GET /api/v1/auth/permissions
+ * Returns the current user's permissions object for frontend UI gating.
+ */
+exports.getPermissions = asyncHandler(async (req, res) => {
+  const user = await User.findByPk(req.user.id, {
+    attributes: ['id', 'role', 'max_discount_percent']
+  });
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  res.json({
+    success: true,
+    data: buildPermissions(user)
   });
 });

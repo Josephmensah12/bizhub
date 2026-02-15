@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { usePermissions } from '../hooks/usePermissions';
 
 export default function AddAsset() {
   const navigate = useNavigate();
+  const { permissions } = usePermissions();
+  const canSeeCost = permissions?.canSeeCost ?? false;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [taxonomy, setTaxonomy] = useState(null);
@@ -546,42 +549,44 @@ export default function AddAsset() {
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Pricing</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Cost */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-gray-800">Cost (Purchase Price)</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Amount
-                  </label>
-                  <input
-                    type="number"
-                    name="cost_amount"
-                    value={formData.cost_amount}
-                    onChange={handleChange}
-                    step="0.01"
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Currency
-                  </label>
-                  <select
-                    name="cost_currency"
-                    value={formData.cost_currency}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="USD">USD — US Dollar</option>
-                    <option value="GHS">GHS — Ghana Cedi</option>
-                    <option value="GBP">GBP — British Pound</option>
-                  </select>
+            {/* Cost — only visible to Admin/Manager */}
+            {canSeeCost && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-gray-800">Cost (Purchase Price)</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount
+                    </label>
+                    <input
+                      type="number"
+                      name="cost_amount"
+                      value={formData.cost_amount}
+                      onChange={handleChange}
+                      step="0.01"
+                      min="0"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Currency
+                    </label>
+                    <select
+                      name="cost_currency"
+                      value={formData.cost_currency}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="USD">USD — US Dollar</option>
+                      <option value="GHS">GHS — Ghana Cedi</option>
+                      <option value="GBP">GBP — British Pound</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Price */}
             <div className="space-y-2">

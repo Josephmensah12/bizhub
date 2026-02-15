@@ -6,6 +6,7 @@
 
 const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { sanitizeInvoiceForRole, canSeeCost, canEditInvoices, canVoidInvoices } = require('../middleware/permissions');
 const exchangeRateService = require('../services/exchangeRateService');
 const { checkAndReserve, computeAvailability } = require('../services/inventoryAvailabilityService');
 const invoicePdfService = require('../services/invoicePdfService');
@@ -131,6 +132,11 @@ exports.list = asyncHandler(async (req, res) => {
     where.customer_id = customerId;
   }
 
+  // Sales users can only see their own invoices
+  if (req.user?.role === 'Sales') {
+    where.created_by = req.user.id;
+  }
+
   const offset = (page - 1) * limit;
 
   // Get invoices
@@ -190,21 +196,29 @@ exports.list = asyncHandler(async (req, res) => {
     return data;
   });
 
+  // Sanitize cost data from each invoice based on role
+  const sanitizedInvoices = invoices.map(inv => sanitizeInvoiceForRole(inv, req.user?.role));
+
+  // Strip cost/profit metrics for non-privileged roles
+  const metricsData = {
+    totalRevenue,
+    totalCollected,
+    totalOutstanding,
+    invoiceCount: parseInt(metrics.invoiceCount) || 0,
+    netTotal,
+    netCount
+  };
+  if (canSeeCost(req.user?.role)) {
+    metricsData.totalCost = netCost;
+    metricsData.totalProfit = netProfit;
+    metricsData.marginPercent = parseFloat(netMarginPercent.toFixed(2));
+  }
+
   res.json({
     success: true,
     data: {
-      invoices,
-      metrics: {
-        totalRevenue,
-        totalCost: netCost,
-        totalProfit: netProfit,
-        totalCollected,
-        totalOutstanding,
-        marginPercent: parseFloat(netMarginPercent.toFixed(2)),
-        invoiceCount: parseInt(metrics.invoiceCount) || 0,
-        netTotal,
-        netCount
-      },
+      invoices: sanitizedInvoices,
+      metrics: metricsData,
       pagination: {
         total: count,
         page: parseInt(page),
@@ -271,7 +285,7 @@ exports.getById = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: { invoice: data }
+    data: { invoice: sanitizeInvoiceForRole(data, req.user?.role) }
   });
 });
 
@@ -342,11 +356,11 @@ exports.create = asyncHandler(async (req, res) => {
 exports.update = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  // Admin only
-  if (!req.user || req.user.role !== 'Admin') {
+  // Admin or Manager
+  if (!req.user || !canEditInvoices(req.user.role)) {
     return res.status(403).json({
       success: false,
-      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+      error: { code: 'FORBIDDEN', message: 'Only admins and managers can edit invoices' }
     });
   }
 
@@ -445,11 +459,17 @@ exports.update = asyncHandler(async (req, res) => {
 exports.addItem = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  // Admin only
-  if (!req.user || req.user.role !== 'Admin') {
+  // Admin, Manager, or Sales (own invoices only)
+  if (!req.user) {
     return res.status(403).json({
       success: false,
-      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+      error: { code: 'FORBIDDEN', message: 'Authentication required' }
+    });
+  }
+  if (!canEditInvoices(req.user.role) && req.user.role !== 'Sales') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You do not have permission to add items' }
     });
   }
 
@@ -475,6 +495,14 @@ exports.addItem = asyncHandler(async (req, res) => {
     return res.status(404).json({
       success: false,
       error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  // Sales users can only modify their own invoices
+  if (req.user.role === 'Sales' && invoice.created_by !== req.user.id) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You can only modify your own invoices' }
     });
   }
 
@@ -655,11 +683,17 @@ exports.addItem = asyncHandler(async (req, res) => {
 exports.updateItemPrice = asyncHandler(async (req, res) => {
   const { id, itemId } = req.params;
 
-  // Admin only
-  if (!req.user || req.user.role !== 'Admin') {
+  // Admin, Manager, or Sales (own invoices, for discount application during creation)
+  if (!req.user) {
     return res.status(403).json({
       success: false,
-      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+      error: { code: 'FORBIDDEN', message: 'Authentication required' }
+    });
+  }
+  if (!canEditInvoices(req.user.role) && req.user.role !== 'Sales') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You do not have permission to edit invoice items' }
     });
   }
 
@@ -676,6 +710,14 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
     return res.status(404).json({
       success: false,
       error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  // Sales users can only modify their own invoices
+  if (req.user.role === 'Sales' && invoice.created_by !== req.user.id) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You can only modify your own invoices' }
     });
   }
 
@@ -763,6 +805,28 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
 
   changes.discount_type = item.discount_type;
   changes.discount_value = item.discount_value;
+
+  // Enforce discount limit based on user's max_discount_percent
+  if (item.discount_type !== 'none' && item.discount_value > 0) {
+    const dbUser = await User.findByPk(req.user.id, { attributes: ['max_discount_percent'] });
+    const maxDiscount = dbUser?.max_discount_percent != null ? parseFloat(dbUser.max_discount_percent) : null;
+    if (maxDiscount !== null) {
+      let effectivePercent;
+      if (item.discount_type === 'percentage') {
+        effectivePercent = item.discount_value;
+      } else {
+        // fixed: calculate effective percentage
+        const preDiscount = (item.quantity || 1) * (item.unit_price_amount || 0);
+        effectivePercent = preDiscount > 0 ? (item.discount_value / preDiscount) * 100 : 0;
+      }
+      if (effectivePercent > maxDiscount) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'DISCOUNT_LIMIT_EXCEEDED', message: `Maximum discount for your role is ${maxDiscount}%. Contact a manager for higher discounts.` }
+        });
+      }
+    }
+  }
 
   // Handle quantity update
   const newQty = quantity !== undefined ? parseInt(quantity, 10) : null;
@@ -852,11 +916,17 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
 exports.updateInvoiceDiscount = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  // Admin only
-  if (!req.user || req.user.role !== 'Admin') {
+  // Admin, Manager, or Sales (own invoices)
+  if (!req.user) {
     return res.status(403).json({
       success: false,
-      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+      error: { code: 'FORBIDDEN', message: 'Authentication required' }
+    });
+  }
+  if (!canEditInvoices(req.user.role) && req.user.role !== 'Sales') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You do not have permission to edit invoice discounts' }
     });
   }
 
@@ -874,6 +944,14 @@ exports.updateInvoiceDiscount = asyncHandler(async (req, res) => {
     return res.status(404).json({
       success: false,
       error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  // Sales users can only modify their own invoices
+  if (req.user.role === 'Sales' && invoice.created_by !== req.user.id) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You can only modify your own invoices' }
     });
   }
 
@@ -914,6 +992,27 @@ exports.updateInvoiceDiscount = asyncHandler(async (req, res) => {
   // If discount type set to 'none', reset value
   if (invoice.discount_type === 'none') {
     invoice.discount_value = 0;
+  }
+
+  // Enforce discount limit
+  if (invoice.discount_type !== 'none' && invoice.discount_value > 0) {
+    const dbUser = await User.findByPk(req.user.id, { attributes: ['max_discount_percent'] });
+    const maxDiscount = dbUser?.max_discount_percent != null ? parseFloat(dbUser.max_discount_percent) : null;
+    if (maxDiscount !== null) {
+      let effectivePercent;
+      if (invoice.discount_type === 'percentage') {
+        effectivePercent = invoice.discount_value;
+      } else {
+        const subtotal = parseFloat(invoice.subtotal_amount) || 0;
+        effectivePercent = subtotal > 0 ? (invoice.discount_value / subtotal) * 100 : 0;
+      }
+      if (effectivePercent > maxDiscount) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'DISCOUNT_LIMIT_EXCEEDED', message: `Maximum discount for your role is ${maxDiscount}%. Contact a manager for higher discounts.` }
+        });
+      }
+    }
   }
 
   invoice.updated_by = req.user?.id;
@@ -957,11 +1056,17 @@ exports.updateInvoiceDiscount = asyncHandler(async (req, res) => {
 exports.removeItem = asyncHandler(async (req, res) => {
   const { id, itemId } = req.params;
 
-  // Admin only
-  if (!req.user || req.user.role !== 'Admin') {
+  // Admin, Manager, or Sales (own invoices only during creation)
+  if (!req.user) {
     return res.status(403).json({
       success: false,
-      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+      error: { code: 'FORBIDDEN', message: 'Authentication required' }
+    });
+  }
+  if (!canEditInvoices(req.user.role) && req.user.role !== 'Sales') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You do not have permission to remove invoice items' }
     });
   }
 
@@ -971,6 +1076,14 @@ exports.removeItem = asyncHandler(async (req, res) => {
     return res.status(404).json({
       success: false,
       error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  // Sales users can only modify their own invoices
+  if (req.user.role === 'Sales' && invoice.created_by !== req.user.id) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'You can only modify your own invoices' }
     });
   }
 
@@ -1049,11 +1162,11 @@ exports.voidItem = asyncHandler(async (req, res) => {
   const { reason, quantity: voidQty } = req.body;
   const userId = req.user?.id;
 
-  // Admin only
-  if (!req.user || req.user.role !== 'Admin') {
+  // Admin or Manager
+  if (!req.user || !canVoidInvoices(req.user.role)) {
     return res.status(403).json({
       success: false,
-      error: { code: 'FORBIDDEN', message: 'Only admins can void invoice items' }
+      error: { code: 'FORBIDDEN', message: 'Only admins and managers can void invoice items' }
     });
   }
 
@@ -1722,13 +1835,13 @@ exports.cancel = asyncHandler(async (req, res) => {
   const { reason } = req.body;
   const userId = req.user?.id;
 
-  // Admin-only check
-  if (!req.user || req.user.role !== 'Admin') {
+  // Admin or Manager
+  if (!req.user || !canEditInvoices(req.user.role)) {
     return res.status(403).json({
       success: false,
       error: {
         code: 'FORBIDDEN',
-        message: 'Only Admin users can cancel invoices'
+        message: 'Only admins and managers can cancel invoices'
       }
     });
   }

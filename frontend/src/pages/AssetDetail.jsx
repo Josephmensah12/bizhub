@@ -7,10 +7,13 @@ import {
   formatProfit,
   formatMarkup
 } from '../services/currencyConversion';
+import { usePermissions } from '../hooks/usePermissions';
 
 export default function AssetDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { permissions } = usePermissions();
+  const canSeeCost = permissions?.canSeeCost ?? false;
   const [asset, setAsset] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -276,27 +279,33 @@ export default function AssetDetail() {
       <div className="card mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Pricing</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DetailItem
-            label="Cost (Purchase Price)"
-            value={costDisplay}
-          />
+          {canSeeCost && (
+            <DetailItem
+              label="Cost (Purchase Price)"
+              value={costDisplay}
+            />
+          )}
           <DetailItem
             label="Selling Price"
             value={priceDisplay}
           />
-          <DetailItem
-            label="Profit"
-            value={profitDisplay}
-            highlight={profitDisplay !== '—' && !profitDisplay.startsWith('-')}
-            negative={profitDisplay !== '—' && profitDisplay.includes('-')}
-          />
-          <DetailItem
-            label="Markup"
-            value={markupDisplay}
-            subtext="profit as % of cost"
-          />
+          {canSeeCost && (
+            <>
+              <DetailItem
+                label="Profit"
+                value={profitDisplay}
+                highlight={profitDisplay !== '—' && !profitDisplay.startsWith('-')}
+                negative={profitDisplay !== '—' && profitDisplay.includes('-')}
+              />
+              <DetailItem
+                label="Markup"
+                value={markupDisplay}
+                subtext="profit as % of cost"
+              />
+            </>
+          )}
         </div>
-        {asset.cost_currency !== asset.price_currency && asset.cost_amount && asset.price_amount && (
+        {canSeeCost && asset.cost_currency !== asset.price_currency && asset.cost_amount && asset.price_amount && (
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-gray-700">
             <strong>Multi-Currency:</strong> Equivalents shown use daily exchange rate + 0.5 markup.
             Exchange rates update daily for accurate margin calculations.

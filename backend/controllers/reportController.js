@@ -758,4 +758,85 @@ exports.preorderSLAReport = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/v1/reports/my-performance
+ * Personal sales performance for the requesting user.
+ * Available to ALL roles.
+ */
+exports.myPerformance = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { dateFrom, dateTo } = req.query;
+
+  const now = new Date();
+  const startDate = dateFrom ? new Date(dateFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const endDate = dateTo ? new Date(dateTo) : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+  // Invoices created by this user in the date range
+  const where = {
+    created_by: userId,
+    invoice_date: { [Op.between]: [startDate, endDate] },
+    status: { [Op.ne]: 'CANCELLED' }
+  };
+
+  const metrics = await Invoice.findOne({
+    where,
+    attributes: [
+      [fn('COUNT', col('id')), 'invoiceCount'],
+      [fn('SUM', col('total_amount')), 'totalRevenue'],
+      [fn('SUM', col('amount_paid')), 'totalCollected'],
+      [fn('AVG', col('total_amount')), 'avgTicket']
+    ],
+    raw: true
+  });
+
+  const invoiceCount = parseInt(metrics.invoiceCount) || 0;
+  const totalRevenue = parseFloat(metrics.totalRevenue) || 0;
+  const totalCollected = parseFloat(metrics.totalCollected) || 0;
+  const avgTicket = parseFloat(metrics.avgTicket) || 0;
+
+  // Status breakdown
+  const statusBreakdown = await Invoice.findAll({
+    where: { created_by: userId, invoice_date: { [Op.between]: [startDate, endDate] } },
+    attributes: ['status', [fn('COUNT', col('id')), 'count'], [fn('SUM', col('total_amount')), 'amount']],
+    group: ['status'],
+    raw: true
+  });
+
+  // Recent invoices (last 10)
+  const recentInvoices = await Invoice.findAll({
+    where: { created_by: userId },
+    order: [['created_at', 'DESC']],
+    limit: 10,
+    include: [
+      { model: Customer, as: 'customer', attributes: ['id', 'first_name', 'last_name', 'company_name'] }
+    ],
+    attributes: ['id', 'invoice_number', 'invoice_date', 'total_amount', 'status', 'amount_paid', 'balance_due', 'currency']
+  });
+
+  res.json({
+    success: true,
+    data: {
+      period: { from: startDate.toISOString(), to: endDate.toISOString() },
+      invoiceCount,
+      totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+      totalCollected: parseFloat(totalCollected.toFixed(2)),
+      avgTicket: parseFloat(avgTicket.toFixed(2)),
+      statusBreakdown: statusBreakdown.map(s => ({
+        status: s.status,
+        count: parseInt(s.count),
+        amount: parseFloat(s.amount) || 0
+      })),
+      recentInvoices: recentInvoices.map(inv => {
+        const data = inv.toJSON();
+        if (data.customer) {
+          data.customer.displayName = data.customer.first_name
+            ? `${data.customer.first_name} ${data.customer.last_name || ''}`.trim()
+            : data.customer.company_name || 'Unknown';
+        }
+        return data;
+      })
+    }
+  });
+});
+
 module.exports = exports;
