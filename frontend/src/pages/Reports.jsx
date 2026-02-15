@@ -204,7 +204,7 @@ function MarginsTab({ data, loading }) {
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No margin data available" />
 
-  const { overall, by_category, loss_makers, trend } = data
+  const { overall, by_category, by_model, loss_makers, trend } = data
 
   return (
     <div className="space-y-6">
@@ -290,6 +290,47 @@ function MarginsTab({ data, loading }) {
         </div>
       </div>
 
+      {/* Top Models by Margin */}
+      {by_model && by_model.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Models by Margin</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">#</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Model</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Category</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Sold</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Revenue</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Cost</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Profit</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {by_model.map((m, i) => (
+                  <tr key={`${m.make}-${m.model}`} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 px-3 text-gray-400">{i + 1}</td>
+                    <td className="py-2 px-3 font-medium">{m.make} {m.model}</td>
+                    <td className="py-2 px-3 text-gray-500">{m.asset_type}</td>
+                    <td className="text-right py-2 px-3">{m.total_sold}</td>
+                    <td className="text-right py-2 px-3">{formatCurrency(m.total_revenue)}</td>
+                    <td className="text-right py-2 px-3 text-gray-500">{formatCurrency(m.total_cost)}</td>
+                    <td className={`text-right py-2 px-3 font-medium ${m.total_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(m.total_profit)}
+                    </td>
+                    <td className={`text-right py-2 px-3 font-medium ${m.margin_percent >= 20 ? 'text-green-600' : m.margin_percent >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {formatPercent(m.margin_percent)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Loss Makers */}
       {loss_makers.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-red-200 p-5">
@@ -326,34 +367,96 @@ function MarginsTab({ data, loading }) {
   )
 }
 
+// ─── Donut label renderer ─────────────────────────────────────
+function renderDonutLabel({ cx, cy, midAngle, innerRadius, outerRadius, name, value }) {
+  const RADIAN = Math.PI / 180
+  const radius = outerRadius + 24
+  const x = cx + radius * Math.cos(-midAngle * RADIAN)
+  const y = cy + radius * Math.sin(-midAngle * RADIAN)
+  return (
+    <text x={x} y={y} fill="#374151" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12}>
+      {name} ({value})
+    </text>
+  )
+}
+
 // ─── Top Sellers Tab ──────────────────────────────────────────
 function TopSellersTab({ data, loading }) {
+  const [categoryFilter, setCategoryFilter] = useState(null)
+
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No sales data available" />
 
   const { by_quantity, by_revenue, by_category } = data
 
+  // Build donut data: aggregate by asset_type for units sold
+  const donutData = by_category.map(c => ({
+    name: c.asset_type,
+    value: c.total_sold,
+    category: c.category,
+    asset_type: c.asset_type,
+  }))
+
+  // Filter tables when a donut slice is clicked
+  const filteredByQty = categoryFilter
+    ? by_quantity.filter(item => item.asset_type === categoryFilter)
+    : by_quantity
+  const filteredByRev = categoryFilter
+    ? by_revenue.filter(item => item.asset_type === categoryFilter)
+    : by_revenue
+
   return (
     <div className="space-y-6">
-      {/* Category Chart */}
+      {/* Donut Chart — Sales Volume by Category */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue by Category</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={by_category.slice(0, 10)}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="asset_type" />
-            <YAxis tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} />
-            <Tooltip formatter={(value) => [formatCurrency(value)]} />
-            <Legend />
-            <Bar dataKey="total_revenue" fill="#3b82f6" name="Revenue" />
-            <Bar dataKey="total_profit" fill="#10b981" name="Profit" />
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Sales Volume by Category</h3>
+          {categoryFilter && (
+            <button
+              onClick={() => setCategoryFilter(null)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+            >
+              Filtered: {categoryFilter} &times;
+            </button>
+          )}
+        </div>
+        {donutData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={320}>
+            <PieChart>
+              <Pie
+                data={donutData}
+                cx="50%" cy="50%"
+                innerRadius={60} outerRadius={100}
+                paddingAngle={3}
+                dataKey="value"
+                label={renderDonutLabel}
+                onClick={(entry) => setCategoryFilter(prev => prev === entry.asset_type ? null : entry.asset_type)}
+                cursor="pointer"
+              >
+                {donutData.map((entry, i) => (
+                  <Cell
+                    key={entry.name}
+                    fill={COLORS[i % COLORS.length]}
+                    opacity={categoryFilter && categoryFilter !== entry.asset_type ? 0.3 : 1}
+                    stroke={categoryFilter === entry.asset_type ? '#1d4ed8' : '#fff'}
+                    strokeWidth={categoryFilter === entry.asset_type ? 3 : 1}
+                  />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value, name) => [`${value} units`, name]} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-gray-500 text-center py-8">No category data</p>
+        )}
       </div>
 
       {/* Top by Quantity */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Sellers by Quantity</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Top Sellers by Quantity{categoryFilter ? ` — ${categoryFilter}` : ''}
+        </h3>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
@@ -368,8 +471,11 @@ function TopSellersTab({ data, loading }) {
               </tr>
             </thead>
             <tbody>
-              {by_quantity.map((item, i) => (
-                <tr key={item.asset_id} className="border-b border-gray-100 hover:bg-gray-50">
+              {filteredByQty.length === 0 && (
+                <tr><td colSpan={7} className="py-6 text-center text-gray-400">No items in this category</td></tr>
+              )}
+              {filteredByQty.map((item, i) => (
+                <tr key={`${item.make}-${item.model}`} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2 px-3 text-gray-400">{i + 1}</td>
                   <td className="py-2 px-3 font-medium">{item.make} {item.model}</td>
                   <td className="py-2 px-3 text-gray-500">{item.asset_type}</td>
@@ -388,7 +494,9 @@ function TopSellersTab({ data, loading }) {
 
       {/* Top by Revenue */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Sellers by Revenue</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Top Sellers by Revenue{categoryFilter ? ` — ${categoryFilter}` : ''}
+        </h3>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
@@ -402,8 +510,11 @@ function TopSellersTab({ data, loading }) {
               </tr>
             </thead>
             <tbody>
-              {by_revenue.map((item, i) => (
-                <tr key={item.asset_id} className="border-b border-gray-100 hover:bg-gray-50">
+              {filteredByRev.length === 0 && (
+                <tr><td colSpan={6} className="py-6 text-center text-gray-400">No items in this category</td></tr>
+              )}
+              {filteredByRev.map((item, i) => (
+                <tr key={`${item.make}-${item.model}`} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2 px-3 text-gray-400">{i + 1}</td>
                   <td className="py-2 px-3 font-medium">{item.make} {item.model}</td>
                   <td className="text-right py-2 px-3 font-bold">{formatCurrency(item.total_revenue)}</td>

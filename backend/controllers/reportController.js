@@ -680,6 +680,32 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     type: QueryTypes.SELECT
   });
 
+  // Margin by model
+  const marginByModel = await sequelize.query(`
+    SELECT
+      a.make, a.model, a.category, a.asset_type,
+      SUM(ii.quantity) as total_sold,
+      SUM(ii.line_total_amount) as total_revenue,
+      SUM(ii.line_cost_amount) as total_cost,
+      SUM(ii.line_profit_amount) as total_profit,
+      CASE WHEN SUM(ii.line_total_amount) > 0
+        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
+        ELSE 0 END as margin_percent
+    FROM invoice_items ii
+    JOIN invoices i ON ii.invoice_id = i.id
+    JOIN assets a ON ii.asset_id = a.id
+    WHERE i.invoice_date BETWEEN :startDate AND :endDate
+      AND i.status IN ('PAID', 'PARTIALLY_PAID')
+      AND i.is_deleted = false
+      AND ii.voided_at IS NULL
+    GROUP BY a.make, a.model, a.category, a.asset_type
+    ORDER BY margin_percent DESC
+    LIMIT 20
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
   const stats = overallMargin[0];
   res.json({
     success: true,
@@ -700,6 +726,14 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
         profit: parseFloat(c.profit),
         margin_percent: parseFloat(c.margin_percent),
         invoice_count: parseInt(c.invoice_count)
+      })),
+      by_model: marginByModel.map(m => ({
+        ...m,
+        total_sold: parseInt(m.total_sold),
+        total_revenue: parseFloat(m.total_revenue),
+        total_cost: parseFloat(m.total_cost),
+        total_profit: parseFloat(m.total_profit),
+        margin_percent: parseFloat(m.margin_percent)
       })),
       loss_makers: lossMakers.map(l => ({
         ...l,

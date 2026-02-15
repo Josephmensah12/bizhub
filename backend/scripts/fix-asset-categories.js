@@ -12,7 +12,7 @@ function info(...args) { console.log(`[INFO]`, ...args) }
 const RULES = [
   // Laptops — match on make OR model containing HP laptop brand names
   {
-    where: `LOWER(make) LIKE '%elitebook%' OR LOWER(make) LIKE '%probook%' OR LOWER(make) LIKE '%zbook%' OR LOWER(make) LIKE '%eb x360%' OR LOWER(model) LIKE '%elitebook%' OR LOWER(model) LIKE '%probook%' OR LOWER(model) LIKE '%zbook%' OR LOWER(model) LIKE '%eb x360%' OR LOWER(model) LIKE '%pavilion%' OR LOWER(model) LIKE '%envy%' OR LOWER(model) LIKE '%spectre%' OR LOWER(model) LIKE '%omen%' OR LOWER(model) LIKE '%victus%'`,
+    where: `LOWER(make) LIKE '%elitebook%' OR LOWER(make) LIKE '%probook%' OR LOWER(make) LIKE '%zbook%' OR LOWER(make) LIKE '%eb x360%' OR LOWER(model) LIKE '%elitebook%' OR LOWER(model) LIKE '%probook%' OR LOWER(model) LIKE '%zbook%' OR LOWER(model) LIKE '%eb x360%' OR LOWER(model) LIKE '%firefly%' OR LOWER(model) LIKE '%830 g7%' OR LOWER(model) LIKE '%1040 g8%' OR LOWER(model) LIKE '%630 g8%' OR LOWER(model) LIKE '%pavilion%' OR LOWER(model) LIKE '%envy%' OR LOWER(model) LIKE '%spectre%' OR LOWER(model) LIKE '%omen%' OR LOWER(model) LIKE '%victus%'`,
     category: 'Computer', asset_type: 'Laptop'
   },
   // Laptops — HP as make with generic model (catch-all for HP branded items that look like laptops)
@@ -47,7 +47,7 @@ const RULES = [
   },
   // Audio — JBL, Beats, AirPod, Soundbar, ION, Boombox
   {
-    where: `LOWER(make) LIKE '%jbl%' OR LOWER(model) LIKE '%jbl%' OR LOWER(make) LIKE '%ion%' OR LOWER(model) LIKE '%beats%' OR LOWER(model) LIKE '%airpod%' OR LOWER(model) LIKE '%soundbar%' OR LOWER(model) LIKE '%boombox%' OR LOWER(model) LIKE '%pathfinder%' OR LOWER(model) LIKE '%audio%'`,
+    where: `LOWER(make) LIKE '%jbl%' OR LOWER(model) LIKE '%jbl%' OR LOWER(make) LIKE '%ion%' OR LOWER(make) LIKE '%ion audio%' OR LOWER(model) LIKE '%beats%' OR LOWER(model) LIKE '%airpod%' OR LOWER(model) LIKE '%soundbar%' OR LOWER(model) LIKE '%boombox%' OR LOWER(model) LIKE '%pathfinder%' OR LOWER(model) LIKE '%audio%'`,
     category: 'Consumer Electronics', asset_type: 'Audio Equipment'
   },
   // Samsung soundbar (HW- prefix = soundbar)
