@@ -53,6 +53,7 @@ export default function StockTakeDetail() {
   const [scanLog, setScanLog] = useState([])
   const scannerRef = useRef(null)
   const html5QrcodeRef = useRef(null)
+  const lastScanRef = useRef({ code: null, time: 0 })
 
   // Fetch stock take
   const fetchStockTake = useCallback(async () => {
@@ -153,8 +154,22 @@ export default function StockTakeDetail() {
     }
   }
 
-  const handleExport = () => {
-    window.open(`/api/v1/stock-takes/${id}/export`, '_blank')
+  const handleExport = async () => {
+    try {
+      const res = await axios.get(`/api/v1/stock-takes/${id}/export`, {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `stock-take-${stockTake.reference}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      alert('Failed to export CSV')
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -225,6 +240,13 @@ export default function StockTakeDetail() {
   }
 
   const onScanSuccess = async (decodedText) => {
+    // Debounce: skip duplicate scan within 3 seconds
+    const now = Date.now()
+    if (decodedText === lastScanRef.current.code && now - lastScanRef.current.time < 3000) {
+      return
+    }
+    lastScanRef.current = { code: decodedText, time: now }
+
     // Vibrate if supported
     if (navigator.vibrate) navigator.vibrate(100)
 
