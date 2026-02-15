@@ -26,7 +26,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 // const preorderRoutes = require('./routes/preorderRoutes');
 // const warrantyRoutes = require('./routes/warrantyRoutes');
 // const repairRoutes = require('./routes/repairRoutes');
-// const reportRoutes = require('./routes/reportRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 
 const app = express();
 
@@ -83,7 +83,7 @@ app.use(`${API_BASE}/payments`, paymentRoutes);
 // app.use(`${API_BASE}/preorders`, preorderRoutes);
 // app.use(`${API_BASE}/warranties`, warrantyRoutes);
 // app.use(`${API_BASE}/repair-tickets`, repairRoutes);
-// app.use(`${API_BASE}/reports`, reportRoutes);
+app.use(`${API_BASE}/reports`, reportRoutes);
 
 // 404 handler
 app.use((req, res) => {
