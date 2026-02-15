@@ -86,6 +86,38 @@ module.exports = (sequelize, DataTypes) => {
         return val === null ? null : parseFloat(val);
       }
     },
+    // Discount fields
+    discount_type: {
+      type: DataTypes.ENUM('none', 'percentage', 'fixed'),
+      allowNull: false,
+      defaultValue: 'none'
+    },
+    discount_value: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0,
+      get() {
+        const val = this.getDataValue('discount_value');
+        return val === null ? 0 : parseFloat(val);
+      }
+    },
+    discount_amount: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0,
+      get() {
+        const val = this.getDataValue('discount_amount');
+        return val === null ? 0 : parseFloat(val);
+      }
+    },
+    pre_discount_total: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('pre_discount_total');
+        return val === null ? null : parseFloat(val);
+      }
+    },
     // Track returned quantities
     quantity_returned_total: {
       type: DataTypes.INTEGER,
@@ -135,11 +167,30 @@ module.exports = (sequelize, DataTypes) => {
     return this.getReturnableQuantity() >= quantityToReturn;
   };
 
-  // Calculate line totals
+  // Calculate line totals with discount support
   InvoiceItem.prototype.calculateTotals = function() {
-    this.line_total_amount = this.quantity * this.unit_price_amount;
-    this.line_cost_amount = this.quantity * this.unit_cost_amount;
-    this.line_profit_amount = this.line_total_amount - this.line_cost_amount;
+    const qty = this.quantity || 0;
+    const unitPrice = parseFloat(this.unit_price_amount) || 0;
+    const unitCost = parseFloat(this.unit_cost_amount) || 0;
+
+    const rawTotal = Math.round(qty * unitPrice * 100) / 100;
+    this.pre_discount_total = rawTotal;
+
+    // Apply line-item discount
+    const discountType = this.discount_type || 'none';
+    const discountValue = parseFloat(this.discount_value) || 0;
+    let discountAmt = 0;
+
+    if (discountType === 'percentage' && discountValue > 0) {
+      discountAmt = Math.round(rawTotal * (discountValue / 100) * 100) / 100;
+    } else if (discountType === 'fixed' && discountValue > 0) {
+      discountAmt = Math.min(discountValue, rawTotal);
+    }
+
+    this.discount_amount = Math.round(discountAmt * 100) / 100;
+    this.line_total_amount = Math.round((rawTotal - this.discount_amount) * 100) / 100;
+    this.line_cost_amount = Math.round(qty * unitCost * 100) / 100;
+    this.line_profit_amount = Math.round((this.line_total_amount - this.line_cost_amount) * 100) / 100;
   };
 
   // Before save hook to calculate totals

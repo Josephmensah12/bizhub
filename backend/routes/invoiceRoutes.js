@@ -46,6 +46,9 @@ router.delete('/:id/items/:itemId', invoiceController.removeItem);
 // POST /api/v1/invoices/:id/items/:itemId/void - Void item on paid invoice
 router.post('/:id/items/:itemId/void', invoiceController.voidItem);
 
+// PATCH /api/v1/invoices/:id/discount - Update invoice-level discount
+router.patch('/:id/discount', invoiceController.updateInvoiceDiscount);
+
 // POST /api/v1/invoices/:id/payments - Receive payment (legacy endpoint)
 router.post('/:id/payments', invoiceController.receivePayment);
 

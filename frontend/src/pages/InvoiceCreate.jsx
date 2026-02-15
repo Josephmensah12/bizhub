@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import CustomerPickerModal from '../components/CustomerPickerModal';
@@ -14,6 +14,77 @@ function formatCurrency(amount, currency = 'GHS') {
     currency: currency,
     minimumFractionDigits: 2
   }).format(amount);
+}
+
+/**
+ * Compute line-item discount amount
+ */
+function computeLineDiscount(preDiscountTotal, discountType, discountValue) {
+  if (!discountType || discountType === 'none' || !discountValue) return 0;
+  const dv = parseFloat(discountValue) || 0;
+  if (discountType === 'percentage') {
+    return Math.round(preDiscountTotal * (dv / 100) * 100) / 100;
+  }
+  if (discountType === 'fixed') {
+    return Math.round(Math.min(dv, preDiscountTotal) * 100) / 100;
+  }
+  return 0;
+}
+
+/**
+ * Inline Discount Editor for a line item
+ */
+function LineItemDiscountEditor({ item, currency, onUpdate, disabled }) {
+  const discountType = item.discount_type || 'none';
+  const discountValue = item.discount_value || 0;
+  const preDiscountTotal = (item.quantity || 1) * (item.unit_price_amount || 0);
+  const discountAmt = computeLineDiscount(preDiscountTotal, discountType, discountValue);
+  const lineTotal = Math.max(0, preDiscountTotal - discountAmt);
+
+  const handleTypeChange = (newType) => {
+    onUpdate(item.id, {
+      discount_type: newType,
+      discount_value: newType === 'none' ? 0 : discountValue
+    });
+  };
+
+  const handleValueChange = (val) => {
+    onUpdate(item.id, { discount_value: val });
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <select
+        value={discountType}
+        onChange={(e) => handleTypeChange(e.target.value)}
+        disabled={disabled}
+        className="px-1.5 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+        style={{ width: '62px' }}
+      >
+        <option value="none">None</option>
+        <option value="percentage">%</option>
+        <option value="fixed">{currency}</option>
+      </select>
+      {discountType !== 'none' && (
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          max={discountType === 'percentage' ? 100 : preDiscountTotal}
+          value={discountValue || ''}
+          onChange={(e) => handleValueChange(e.target.value)}
+          disabled={disabled}
+          placeholder="0"
+          className="w-16 px-1.5 py-1 border border-gray-300 rounded text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400"
+        />
+      )}
+      {discountAmt > 0 && (
+        <span className="text-xs text-orange-600 whitespace-nowrap">
+          -{formatCurrency(discountAmt, currency)}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default function InvoiceCreate() {
@@ -48,10 +119,24 @@ export default function InvoiceCreate() {
   const [items, setItems] = useState([]);
   const [showInventoryPicker, setShowInventoryPicker] = useState(false);
 
+  // Invoice-level discount state
+  const [invoiceDiscountType, setInvoiceDiscountType] = useState('none');
+  const [invoiceDiscountValue, setInvoiceDiscountValue] = useState('');
+
   // Calculate totals
-  const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price_amount), 0);
-  const totalCost = items.reduce((sum, item) => sum + (item.quantity * item.unit_cost_amount), 0);
-  const totalProfit = subtotal - totalCost;
+  const preDiscountSubtotal = items.reduce((sum, item) => sum + ((item.quantity || 1) * (item.unit_price_amount || 0)), 0);
+  const lineDiscountsTotal = items.reduce((sum, item) => {
+    const preDT = (item.quantity || 1) * (item.unit_price_amount || 0);
+    return sum + computeLineDiscount(preDT, item.discount_type, item.discount_value);
+  }, 0);
+  const subtotalAfterLineDiscounts = Math.round((preDiscountSubtotal - lineDiscountsTotal) * 100) / 100;
+
+  // Invoice-level discount
+  const invoiceDiscountAmt = computeLineDiscount(subtotalAfterLineDiscounts, invoiceDiscountType, invoiceDiscountValue);
+  const grandTotal = Math.max(0, Math.round((subtotalAfterLineDiscounts - invoiceDiscountAmt) * 100) / 100);
+  const totalSavings = Math.round((lineDiscountsTotal + invoiceDiscountAmt) * 100) / 100;
+
+  const totalCost = items.reduce((sum, item) => sum + ((item.quantity || 1) * (item.unit_cost_amount || 0)), 0);
 
   // Load existing invoice data when editing
   useEffect(() => {
@@ -80,6 +165,8 @@ export default function InvoiceCreate() {
       setNotes(invoiceData.notes || '');
       setCustomer(invoiceData.customer || null);
       setItems(invoiceData.items || []);
+      setInvoiceDiscountType(invoiceData.discount_type || 'none');
+      setInvoiceDiscountValue(invoiceData.discount_value || '');
       setError(null);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to load invoice');
@@ -215,6 +302,41 @@ export default function InvoiceCreate() {
     }
   };
 
+  // Debounced server update for line-item discount
+  const handleUpdateItemDiscount = useCallback(async (itemId, discountFields) => {
+    // Update local state immediately for responsive UI
+    setItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, ...discountFields } : item
+    ));
+
+    // If invoice not saved yet, only update locally
+    if (!invoice?.id) return;
+
+    try {
+      const response = await axios.patch(`/api/v1/invoices/${invoice.id}/items/${itemId}`, discountFields);
+      const updatedItem = response.data.data.item;
+      setItems(prev => prev.map(item =>
+        item.id === updatedItem.id ? updatedItem : item
+      ));
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Failed to update item discount');
+    }
+  }, [invoice?.id]);
+
+  // Save invoice-level discount to server
+  const handleSaveInvoiceDiscount = useCallback(async () => {
+    if (!invoice?.id) return;
+
+    try {
+      await axios.patch(`/api/v1/invoices/${invoice.id}/discount`, {
+        discount_type: invoiceDiscountType,
+        discount_value: parseFloat(invoiceDiscountValue) || 0
+      });
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Failed to update invoice discount');
+    }
+  }, [invoice?.id, invoiceDiscountType, invoiceDiscountValue]);
+
   const handleUpdateInvoice = async () => {
     if (!invoice?.id) return;
 
@@ -226,6 +348,13 @@ export default function InvoiceCreate() {
         currency,
         notes
       });
+
+      // Also save invoice-level discount
+      await axios.patch(`/api/v1/invoices/${invoice.id}/discount`, {
+        discount_type: invoiceDiscountType,
+        discount_value: parseFloat(invoiceDiscountValue) || 0
+      });
+
       setError(null);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to update invoice');
@@ -420,26 +549,51 @@ export default function InvoiceCreate() {
               </div>
             ) : (
               <div className="divide-y divide-gray-200">
-                {items.map((item) => (
-                  <div key={item.id} className="py-3 flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="font-medium">{item.description}</div>
-                      <div className="text-sm text-gray-500">
-                        Qty: {item.quantity} × {formatCurrency(item.unit_price_amount, currency)}
+                {items.map((item) => {
+                  const preDiscount = (item.quantity || 1) * (item.unit_price_amount || 0);
+                  const discAmt = computeLineDiscount(preDiscount, item.discount_type, item.discount_value);
+                  const lineTotal = Math.max(0, preDiscount - discAmt);
+                  const hasDiscount = discAmt > 0;
+
+                  return (
+                    <div key={item.id} className="py-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="font-medium">{item.description}</div>
+                          <div className="text-sm text-gray-500">
+                            Qty: {item.quantity} × {formatCurrency(item.unit_price_amount, currency)}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {hasDiscount ? (
+                            <>
+                              <div className="text-sm text-gray-400 line-through">{formatCurrency(preDiscount, currency)}</div>
+                              <div className="font-medium">{formatCurrency(lineTotal, currency)}</div>
+                            </>
+                          ) : (
+                            <div className="font-medium">{formatCurrency(preDiscount, currency)}</div>
+                          )}
+                          <button
+                            onClick={() => handleRemoveItem(item.id)}
+                            disabled={saving}
+                            className="text-sm text-red-600 hover:text-red-800"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                      {/* Discount row */}
+                      <div className="mt-1.5">
+                        <LineItemDiscountEditor
+                          item={item}
+                          currency={currency}
+                          onUpdate={handleUpdateItemDiscount}
+                          disabled={saving}
+                        />
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-medium">{formatCurrency(item.line_total_amount, currency)}</div>
-                      <button
-                        onClick={() => handleRemoveItem(item.id)}
-                        disabled={saving}
-                        className="text-sm text-red-600 hover:text-red-800"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -488,6 +642,45 @@ export default function InvoiceCreate() {
             </div>
           </div>
 
+          {/* Invoice-Level Discount */}
+          {items.length > 0 && (
+            <div className="card border-orange-200">
+              <h2 className="text-lg font-semibold mb-3">Invoice Discount</h2>
+              <div className="flex items-center gap-2">
+                <select
+                  value={invoiceDiscountType}
+                  onChange={(e) => {
+                    setInvoiceDiscountType(e.target.value);
+                    if (e.target.value === 'none') setInvoiceDiscountValue('');
+                  }}
+                  className="px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                >
+                  <option value="none">None</option>
+                  <option value="percentage">%</option>
+                  <option value="fixed">{currency}</option>
+                </select>
+                {invoiceDiscountType !== 'none' && (
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={invoiceDiscountType === 'percentage' ? 100 : subtotalAfterLineDiscounts}
+                    value={invoiceDiscountValue}
+                    onChange={(e) => setInvoiceDiscountValue(e.target.value)}
+                    onBlur={handleSaveInvoiceDiscount}
+                    placeholder="0"
+                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  />
+                )}
+              </div>
+              {invoiceDiscountAmt > 0 && (
+                <div className="mt-2 text-sm text-orange-600 font-medium">
+                  -{formatCurrency(invoiceDiscountAmt, currency)} off invoice
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Summary */}
           <div className="card">
             <h2 className="text-lg font-semibold mb-4">Summary</h2>
@@ -499,12 +692,38 @@ export default function InvoiceCreate() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Subtotal</span>
-                <span className="font-medium">{formatCurrency(subtotal, currency)}</span>
+                <span className="font-medium">{formatCurrency(preDiscountSubtotal, currency)}</span>
               </div>
+
+              {lineDiscountsTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-orange-600">Line discounts</span>
+                  <span className="text-orange-600">-{formatCurrency(lineDiscountsTotal, currency)}</span>
+                </div>
+              )}
+
+              {invoiceDiscountAmt > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-orange-600">
+                    Invoice discount
+                    {invoiceDiscountType === 'percentage' && ` (${invoiceDiscountValue}%)`}
+                  </span>
+                  <span className="text-orange-600">-{formatCurrency(invoiceDiscountAmt, currency)}</span>
+                </div>
+              )}
+
               <div className="border-t pt-3 flex justify-between">
                 <span className="font-semibold">Total</span>
-                <span className="font-bold text-lg">{formatCurrency(subtotal, currency)}</span>
+                <span className="font-bold text-lg">{formatCurrency(grandTotal, currency)}</span>
               </div>
+
+              {totalSavings > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-center">
+                  <span className="text-green-700 text-sm font-medium">
+                    You save {formatCurrency(totalSavings, currency)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

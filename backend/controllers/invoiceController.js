@@ -650,7 +650,7 @@ exports.addItem = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/v1/invoices/:id/items/:itemId
- * Update item selling price on invoice
+ * Update item selling price and/or discount on invoice
  */
 exports.updateItemPrice = asyncHandler(async (req, res) => {
   const { id, itemId } = req.params;
@@ -663,16 +663,11 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
     });
   }
 
-  const { unitPrice, unit_price } = req.body;
-
-  const newPrice = parseFloat(unitPrice ?? unit_price);
-
-  if (isNaN(newPrice) || newPrice < 0) {
-    return res.status(400).json({
-      success: false,
-      error: { code: 'INVALID_PRICE', message: 'Unit price must be a non-negative number' }
-    });
-  }
+  const {
+    unitPrice, unit_price,
+    discount_type, discountType,
+    discount_value, discountValue
+  } = req.body;
 
   const invoice = await Invoice.findByPk(id);
 
@@ -701,11 +696,63 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
     });
   }
 
-  // Track old price for audit
-  const oldPrice = item.unit_price_amount;
+  const changes = {};
 
-  // Update selling price (beforeSave hook recalculates line totals)
-  item.unit_price_amount = newPrice;
+  // Update price if provided
+  const priceVal = unitPrice ?? unit_price;
+  if (priceVal !== undefined) {
+    const newPrice = parseFloat(priceVal);
+    if (isNaN(newPrice) || newPrice < 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_PRICE', message: 'Unit price must be a non-negative number' }
+      });
+    }
+    changes.oldPrice = item.unit_price_amount;
+    changes.newPrice = newPrice;
+    item.unit_price_amount = newPrice;
+  }
+
+  // Update discount if provided
+  const _discountType = discount_type || discountType;
+  const _discountValue = discount_value ?? discountValue;
+
+  if (_discountType !== undefined) {
+    if (!['none', 'percentage', 'fixed'].includes(_discountType)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DISCOUNT_TYPE', message: 'Discount type must be none, percentage, or fixed' }
+      });
+    }
+    item.discount_type = _discountType;
+  }
+
+  if (_discountValue !== undefined) {
+    const dv = parseFloat(_discountValue);
+    if (isNaN(dv) || dv < 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DISCOUNT_VALUE', message: 'Discount value must be a non-negative number' }
+      });
+    }
+    if (item.discount_type === 'percentage' && dv > 100) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DISCOUNT_VALUE', message: 'Percentage discount cannot exceed 100%' }
+      });
+    }
+    item.discount_value = dv;
+  }
+
+  // If discount type set to 'none', reset value
+  if (item.discount_type === 'none') {
+    item.discount_value = 0;
+  }
+
+  changes.discount_type = item.discount_type;
+  changes.discount_value = item.discount_value;
+
+  // beforeSave hook recalculates totals including discount
   await item.save();
 
   // Recalculate invoice totals
@@ -722,14 +769,119 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
     actionType: 'INVOICE_UPDATED',
     entityType: 'INVOICE',
     entityId: invoice.id,
-    summary: `Item price updated on invoice ${invoice.invoice_number}: ${item.description} ${oldPrice} -> ${newPrice}`,
-    metadata: { invoiceNumber: invoice.invoice_number, itemId, description: item.description, oldPrice, newPrice }
+    summary: `Item updated on invoice ${invoice.invoice_number}: ${item.description}`,
+    metadata: { invoiceNumber: invoice.invoice_number, itemId, description: item.description, changes }
   });
 
   res.json({
     success: true,
     data: { item, invoice },
-    message: 'Item price updated'
+    message: 'Item updated'
+  });
+});
+
+/**
+ * PATCH /api/v1/invoices/:id/discount
+ * Update invoice-level discount
+ */
+exports.updateInvoiceDiscount = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  // Admin only
+  if (!req.user || req.user.role !== 'Admin') {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Only admins can edit invoices' }
+    });
+  }
+
+  const {
+    discount_type, discountType,
+    discount_value, discountValue
+  } = req.body;
+
+  const _discountType = discount_type || discountType;
+  const _discountValue = discount_value ?? discountValue;
+
+  const invoice = await Invoice.findByPk(id);
+
+  if (!invoice) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  if (['PAID', 'CANCELLED'].includes(invoice.status)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVOICE_LOCKED', message: 'Cannot update discount on paid or cancelled invoices' }
+    });
+  }
+
+  if (_discountType !== undefined) {
+    if (!['none', 'percentage', 'fixed'].includes(_discountType)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DISCOUNT_TYPE', message: 'Discount type must be none, percentage, or fixed' }
+      });
+    }
+    invoice.discount_type = _discountType;
+  }
+
+  if (_discountValue !== undefined) {
+    const dv = parseFloat(_discountValue);
+    if (isNaN(dv) || dv < 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DISCOUNT_VALUE', message: 'Discount value must be a non-negative number' }
+      });
+    }
+    if (invoice.discount_type === 'percentage' && dv > 100) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_DISCOUNT_VALUE', message: 'Percentage discount cannot exceed 100%' }
+      });
+    }
+    invoice.discount_value = dv;
+  }
+
+  // If discount type set to 'none', reset value
+  if (invoice.discount_type === 'none') {
+    invoice.discount_value = 0;
+  }
+
+  invoice.updated_by = req.user?.id;
+
+  // recalculateTotals will compute discount_amount, discount_percent, total_amount, etc.
+  await invoice.recalculateTotals();
+
+  // Log the edit
+  await ActivityLog.log({
+    actorUserId: req.user.id,
+    actionType: 'INVOICE_UPDATED',
+    entityType: 'INVOICE',
+    entityId: invoice.id,
+    summary: `Invoice discount updated on ${invoice.invoice_number}: ${invoice.discount_type} ${invoice.discount_value}`,
+    metadata: { invoiceNumber: invoice.invoice_number, discount_type: invoice.discount_type, discount_value: invoice.discount_value, discount_amount: invoice.discount_amount }
+  });
+
+  // Reload with associations
+  await invoice.reload({
+    include: [
+      { model: Customer, as: 'customer' },
+      {
+        model: InvoiceItem,
+        as: 'items',
+        include: [{ model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition'] }]
+      }
+    ]
+  });
+
+  res.json({
+    success: true,
+    data: { invoice },
+    message: 'Invoice discount updated'
   });
 });
 

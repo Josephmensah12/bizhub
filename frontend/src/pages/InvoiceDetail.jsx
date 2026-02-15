@@ -1115,6 +1115,8 @@ export default function InvoiceDetail() {
                   <tbody className="divide-y divide-gray-200">
                     {displayItems.map((item) => {
                       const isItemVoided = !!item.voided_at;
+                      const hasItemDiscount = item.discount_type && item.discount_type !== 'none' && parseFloat(item.discount_amount) > 0;
+                      const preDiscountTotal = item.pre_discount_total || item.line_total_amount;
 
                       return (
                         <tr key={item.id} className={`${invoice.status === 'CANCELLED' ? 'text-gray-400' : ''} ${isItemVoided ? 'opacity-60' : ''}`}>
@@ -1143,6 +1145,12 @@ export default function InvoiceDetail() {
                                     {item.asset.status}
                                   </span>
                                 )}
+                              </div>
+                            )}
+                            {hasItemDiscount && !isItemVoided && (
+                              <div className="text-xs text-orange-600 mt-1">
+                                {item.discount_type === 'percentage' ? `${item.discount_value}% off` : `${formatCurrency(item.discount_value, invoice.currency)} off`}
+                                {' '}&bull; saved {formatCurrency(item.discount_amount, invoice.currency)}
                               </div>
                             )}
                             {isItemVoided && item.void_reason && (
@@ -1207,7 +1215,14 @@ export default function InvoiceDetail() {
                             )}
                           </td>
                           <td className={`px-4 py-4 text-right font-medium ${isItemVoided ? 'line-through' : ''}`}>
-                            {formatCurrency(item.line_total_amount, invoice.currency)}
+                            {hasItemDiscount && !isItemVoided ? (
+                              <div>
+                                <div className="text-xs text-gray-400 line-through">{formatCurrency(preDiscountTotal, invoice.currency)}</div>
+                                <div>{formatCurrency(item.line_total_amount, invoice.currency)}</div>
+                              </div>
+                            ) : (
+                              formatCurrency(item.line_total_amount, invoice.currency)
+                            )}
                           </td>
                           <td className="px-4 py-4 text-center">
                             {isItemVoided ? (
@@ -1237,6 +1252,29 @@ export default function InvoiceDetail() {
                     })}
                   </tbody>
                   <tfoot className="bg-gray-50">
+                    {/* Subtotal row (only show if there's a discount) */}
+                    {(invoice.discount_amount > 0 || displayItems.some(i => i.discount_type && i.discount_type !== 'none' && parseFloat(i.discount_amount) > 0)) && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-2 text-right text-sm text-gray-500">Subtotal</td>
+                        <td className="px-4 py-2 text-right text-sm text-gray-500">
+                          {formatCurrency(invoice.subtotal_amount, invoice.currency)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
+                    {/* Invoice-level discount row */}
+                    {invoice.discount_amount > 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-2 text-right text-sm text-orange-600">
+                          Invoice Discount
+                          {invoice.discount_type === 'percentage' && ` (${invoice.discount_value}%)`}
+                        </td>
+                        <td className="px-4 py-2 text-right text-sm text-orange-600 font-medium">
+                          -{formatCurrency(invoice.discount_amount, invoice.currency)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    )}
                     <tr>
                       <td colSpan={4} className="px-4 py-3 text-right font-semibold">Total</td>
                       <td className="px-4 py-3 text-right font-bold text-lg">
@@ -1244,6 +1282,23 @@ export default function InvoiceDetail() {
                       </td>
                       <td></td>
                     </tr>
+                    {/* Savings indicator */}
+                    {(() => {
+                      const lineDiscounts = displayItems.reduce((sum, i) => sum + (parseFloat(i.discount_amount) || 0), 0);
+                      const totalSavings = lineDiscounts + (parseFloat(invoice.discount_amount) || 0);
+                      if (totalSavings > 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-2 text-right">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                Customer saved {formatCurrency(totalSavings, invoice.currency)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return null;
+                    })()}
                   </tfoot>
                 </table>
               </div>
@@ -1459,6 +1514,21 @@ export default function InvoiceDetail() {
             ) : (
               <>
                 <div className="space-y-3">
+                  {/* Show subtotal + discount breakdown if there's a discount */}
+                  {invoice.discount_amount > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Subtotal</span>
+                        <span>{formatCurrency(invoice.subtotal_amount, invoice.currency)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-orange-600">
+                          Discount{invoice.discount_type === 'percentage' ? ` (${invoice.discount_value}%)` : ''}
+                        </span>
+                        <span className="text-orange-600">-{formatCurrency(invoice.discount_amount, invoice.currency)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Invoice Total</span>
                     <span className="font-medium">

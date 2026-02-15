@@ -133,20 +133,37 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true
     },
+    // Invoice-level discount
+    discount_type: {
+      type: DataTypes.ENUM('none', 'percentage', 'fixed'),
+      allowNull: false,
+      defaultValue: 'none'
+    },
+    discount_value: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0,
+      get() {
+        const val = this.getDataValue('discount_value');
+        return val === null ? 0 : parseFloat(val);
+      }
+    },
     discount_percent: {
-      type: DataTypes.DECIMAL(5, 2),
+      type: DataTypes.DECIMAL(8, 4),
       allowNull: true,
+      defaultValue: 0,
       get() {
         const val = this.getDataValue('discount_percent');
-        return val === null ? null : parseFloat(val);
+        return val === null ? 0 : parseFloat(val);
       }
     },
     discount_amount: {
       type: DataTypes.DECIMAL(12, 2),
-      allowNull: true,
+      allowNull: false,
+      defaultValue: 0,
       get() {
         const val = this.getDataValue('discount_amount');
-        return val === null ? null : parseFloat(val);
+        return val === null ? 0 : parseFloat(val);
       }
     },
     notes: {
@@ -241,32 +258,58 @@ module.exports = (sequelize, DataTypes) => {
   };
 
   // Recalculate totals (including balance_due), excluding voided items
+  // Handles both line-item discounts (already in line_total_amount) and invoice-level discount
   Invoice.prototype.recalculateTotals = async function() {
+    const round2 = n => Math.round(n * 100) / 100;
     const InvoiceItem = sequelize.models.InvoiceItem;
     const items = await InvoiceItem.findAll({
       where: { invoice_id: this.id, voided_at: null }
     });
 
+    // subtotal = sum of line totals (already discounted per-item)
     let subtotal = 0;
     let totalCost = 0;
+    let lineDiscountsTotal = 0;
 
     items.forEach(item => {
       subtotal += parseFloat(item.line_total_amount) || 0;
       totalCost += parseFloat(item.line_cost_amount) || 0;
+      lineDiscountsTotal += parseFloat(item.discount_amount) || 0;
     });
 
-    const totalProfit = subtotal - totalCost;
-    const marginPercent = subtotal > 0 ? ((totalProfit / subtotal) * 100) : null;
+    subtotal = round2(subtotal);
+    totalCost = round2(totalCost);
+
+    // Apply invoice-level discount on top of the (already line-discounted) subtotal
+    const discountType = this.discount_type || 'none';
+    const discountValue = parseFloat(this.discount_value) || 0;
+    let invoiceDiscountAmt = 0;
+
+    if (discountType === 'percentage' && discountValue > 0) {
+      invoiceDiscountAmt = round2(subtotal * (discountValue / 100));
+      this.discount_percent = discountValue;
+    } else if (discountType === 'fixed' && discountValue > 0) {
+      invoiceDiscountAmt = round2(Math.min(discountValue, subtotal));
+      this.discount_percent = subtotal > 0 ? round2((invoiceDiscountAmt / subtotal) * 100) : 0;
+    } else {
+      this.discount_percent = 0;
+    }
+
+    this.discount_amount = round2(invoiceDiscountAmt);
+
+    const totalAmount = round2(subtotal - invoiceDiscountAmt);
+    const totalProfit = round2(totalAmount - totalCost);
+    const marginPercent = totalAmount > 0 ? round2((totalProfit / totalAmount) * 100) : null;
 
     this.subtotal_amount = subtotal;
-    this.total_amount = subtotal; // Can add tax/discounts later
+    this.total_amount = totalAmount;
     this.total_cost_amount = totalCost;
     this.total_profit_amount = totalProfit;
     this.margin_percent = marginPercent;
 
     // Update balance_due based on payments
     const amountPaid = parseFloat(this.amount_paid) || 0;
-    this.balance_due = subtotal - amountPaid;
+    this.balance_due = round2(totalAmount - amountPaid);
 
     await this.save();
     return this;
