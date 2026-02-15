@@ -241,7 +241,7 @@ function mapCustomer(sbCustomer) {
 
 function mapAsset(sbItem) {
   const sbCategory = sbItem.category?.name || 'MISCELLANEOUS'
-  const mapping = CATEGORY_MAPPING[sbCategory] || { category: 'Consumer Electronics', asset_type: 'Other' }
+  const mapping = CATEGORY_MAPPING[sbCategory] || { category: 'Computer', asset_type: 'Laptop' }
   
   // Parse specs from item details
   let specs = []

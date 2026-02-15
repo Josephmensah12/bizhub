@@ -165,8 +165,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
 
   const topByQuantity = await sequelize.query(`
-    SELECT 
-      a.id as asset_id,
+    SELECT
       a.make,
       a.model,
       a.category,
@@ -175,8 +174,8 @@ exports.topSellers = asyncHandler(async (req, res) => {
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_profit_amount) as total_profit,
       AVG(ii.unit_price_amount) as avg_price,
-      CASE WHEN SUM(ii.line_total_amount) > 0 
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100) 
+      CASE WHEN SUM(ii.line_total_amount) > 0
+        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
@@ -185,7 +184,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY a.id, a.make, a.model, a.category, a.asset_type
+    GROUP BY a.make, a.model, a.category, a.asset_type
     ORDER BY total_sold DESC
     LIMIT :limit
   `, {
@@ -195,8 +194,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
 
   // Top by revenue
   const topByRevenue = await sequelize.query(`
-    SELECT 
-      a.id as asset_id,
+    SELECT
       a.make,
       a.model,
       a.category,
@@ -204,8 +202,8 @@ exports.topSellers = asyncHandler(async (req, res) => {
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_profit_amount) as total_profit,
-      CASE WHEN SUM(ii.line_total_amount) > 0 
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100) 
+      CASE WHEN SUM(ii.line_total_amount) > 0
+        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
@@ -214,7 +212,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY a.id, a.make, a.model, a.category, a.asset_type
+    GROUP BY a.make, a.model, a.category, a.asset_type
     ORDER BY total_revenue DESC
     LIMIT :limit
   `, {
