@@ -287,8 +287,7 @@ exports.staffPerformance = asyncHandler(async (req, res) => {
   const staffStats = await sequelize.query(`
     SELECT 
       u.id as user_id,
-      u.first_name,
-      u.last_name,
+      u.full_name,
       u.role,
       COUNT(i.id) as invoice_count,
       COALESCE(SUM(i.total_amount), 0) as total_revenue,
@@ -304,7 +303,7 @@ exports.staffPerformance = asyncHandler(async (req, res) => {
       AND i.invoice_date BETWEEN :startDate AND :endDate
       AND i.status != 'CANCELLED'
       AND i.is_deleted = false
-    GROUP BY u.id, u.first_name, u.last_name, u.role
+    GROUP BY u.id, u.full_name, u.role
     HAVING COUNT(i.id) > 0
     ORDER BY total_revenue DESC
   `, {
@@ -318,7 +317,7 @@ exports.staffPerformance = asyncHandler(async (req, res) => {
       period: { startDate, endDate },
       staff: staffStats.map(s => ({
         user_id: s.user_id,
-        name: `${s.first_name} ${s.last_name}`,
+        name: s.full_name,
         role: s.role,
         invoice_count: parseInt(s.invoice_count),
         total_revenue: parseFloat(s.total_revenue),
@@ -443,14 +442,8 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
     FROM assets
     WHERE status = 'In Stock'
       AND deleted_at IS NULL
-    GROUP BY age_bucket
-    ORDER BY 
-      CASE age_bucket
-        WHEN '0-30 days' THEN 1
-        WHEN '31-60 days' THEN 2
-        WHEN '61-90 days' THEN 3
-        ELSE 4
-      END
+    GROUP BY 1
+    ORDER BY MIN(created_at) DESC
   `, { type: QueryTypes.SELECT });
 
   // Oldest unsold items
