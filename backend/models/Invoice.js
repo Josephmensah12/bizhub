@@ -16,8 +16,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     invoice_number: {
       type: DataTypes.STRING(30),
-      allowNull: false,
-      unique: true
+      allowNull: false
     },
     customer_id: {
       type: DataTypes.INTEGER,
@@ -190,7 +189,6 @@ module.exports = (sequelize, DataTypes) => {
     salesbinder_id: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      unique: true,
       comment: 'Original SalesBinder invoice ID for tracking imports'
     },
     salesbinder_invoice_number: {
@@ -247,7 +245,11 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true,
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    indexes: [
+      { unique: true, fields: ['invoice_number'] },
+      { unique: true, fields: ['salesbinder_id'] }
+    ]
   });
 
   Invoice.associate = (models) => {

@@ -970,9 +970,76 @@ function MyPerformanceTab({ data, loading }) {
 
 // ─── Reconciliation Tab ──────────────────────────────────────
 const METHOD_COLORS = { Cash: '#10b981', MoMo: '#f59e0b', Card: '#3b82f6', ACH: '#8b5cf6', Other: '#6b7280' }
+const METHOD_KEY_MAP = { cash: 'Cash', momo: 'MoMo', card: 'Card', ach: 'ACH', other: 'Other' }
 
 function ReconciliationTab({ data, loading }) {
   const [showPrior, setShowPrior] = useState(false)
+  // Bar filter state: { type: 'date'|'method', date?, method? }
+  const [barFilter, setBarFilter] = useState(null)
+  const [filteredPayments, setFilteredPayments] = useState([])
+  const [loadingFiltered, setLoadingFiltered] = useState(false)
+
+  // Fetch filtered payments when barFilter changes
+  useEffect(() => {
+    if (!barFilter || !data) {
+      setFilteredPayments([])
+      return
+    }
+    let cancelled = false
+    async function fetchFiltered() {
+      setLoadingFiltered(true)
+      try {
+        const params = {
+          includeVoided: 'false',
+          transactionType: 'PAYMENT',
+          limit: 100,
+          sortBy: 'payment_date',
+          sortOrder: 'DESC',
+        }
+        if (barFilter.date) {
+          params.dateFrom = barFilter.date
+          params.dateTo = barFilter.date
+        } else if (data.period) {
+          params.dateFrom = data.period.startDate
+          params.dateTo = data.period.endDate
+        }
+        if (barFilter.method) {
+          params.paymentMethod = barFilter.method
+        }
+        const res = await axios.get('/api/v1/payments', { params })
+        if (!cancelled && res.data.success) {
+          setFilteredPayments(res.data.data.transactions || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch filtered payments:', err)
+        if (!cancelled) setFilteredPayments([])
+      } finally {
+        if (!cancelled) setLoadingFiltered(false)
+      }
+    }
+    fetchFiltered()
+    return () => { cancelled = true }
+  }, [barFilter, data])
+
+  const handleBarClick = (chartData, method) => {
+    if (!chartData || !chartData.activePayload) return
+    const date = chartData.activePayload[0]?.payload?.date
+    if (!date) return
+    const methodName = method ? METHOD_KEY_MAP[method] || method : null
+    setBarFilter(prev => {
+      if (prev && prev.date === date && prev.method === methodName) return null
+      return { type: 'date', date, method: methodName }
+    })
+  }
+
+  const handleMethodClick = (method) => {
+    setBarFilter(prev => {
+      if (prev && prev.type === 'method' && prev.method === method) return null
+      return { type: 'method', date: null, method }
+    })
+  }
+
+  const clearFilter = () => setBarFilter(null)
 
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No reconciliation data available" />
@@ -980,6 +1047,15 @@ function ReconciliationTab({ data, loading }) {
   const { summary, by_method, daily_collections, prior_period_collections, current_period_collections, outstanding_invoices } = data
 
   const totalOutstandingSum = outstanding_invoices.reduce((sum, inv) => sum + inv.balance_due, 0)
+
+  // Build filter label
+  const filterLabel = barFilter
+    ? barFilter.date && barFilter.method
+      ? `${new Date(barFilter.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} - ${barFilter.method}`
+      : barFilter.date
+        ? new Date(barFilter.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+        : barFilter.method
+    : null
 
   return (
     <div className="space-y-6">
@@ -1019,9 +1095,12 @@ function ReconciliationTab({ data, loading }) {
       {/* Daily Collections Stacked Bar Chart */}
       {daily_collections.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Collections by Method</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Daily Collections by Method</h3>
+            <span className="text-xs text-gray-400">Click a bar to filter invoices below</span>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={daily_collections}>
+            <BarChart data={daily_collections} className="cursor-pointer">
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
               <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
@@ -1030,11 +1109,11 @@ function ReconciliationTab({ data, loading }) {
                 labelFormatter={(d) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
               />
               <Legend />
-              <Bar dataKey="cash" stackId="a" fill={METHOD_COLORS.Cash} name="Cash" />
-              <Bar dataKey="momo" stackId="a" fill={METHOD_COLORS.MoMo} name="MoMo" />
-              <Bar dataKey="card" stackId="a" fill={METHOD_COLORS.Card} name="Card" />
-              <Bar dataKey="ach" stackId="a" fill={METHOD_COLORS.ACH} name="ACH" />
-              <Bar dataKey="other" stackId="a" fill={METHOD_COLORS.Other} name="Other" />
+              <Bar dataKey="cash" stackId="a" fill={METHOD_COLORS.Cash} name="Cash" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'cash') }} />
+              <Bar dataKey="momo" stackId="a" fill={METHOD_COLORS.MoMo} name="MoMo" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'momo') }} />
+              <Bar dataKey="card" stackId="a" fill={METHOD_COLORS.Card} name="Card" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'card') }} />
+              <Bar dataKey="ach" stackId="a" fill={METHOD_COLORS.ACH} name="ACH" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'ach') }} />
+              <Bar dataKey="other" stackId="a" fill={METHOD_COLORS.Other} name="Other" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'other') }} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1043,29 +1122,117 @@ function ReconciliationTab({ data, loading }) {
       {/* Payment Method Breakdown */}
       {by_method.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Method Breakdown</h3>
-          <div className="space-y-3">
-            {by_method.map((m) => (
-              <div key={m.method} className="flex items-center gap-3">
-                <div className="w-20 text-sm font-medium text-gray-700 shrink-0">{m.method}</div>
-                <div className="flex-1 bg-gray-100 rounded-full h-6 relative overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${m.percent_of_total}%`,
-                      backgroundColor: METHOD_COLORS[m.method] || METHOD_COLORS.Other,
-                      minWidth: m.percent_of_total > 0 ? '2rem' : '0'
-                    }}
-                  />
-                </div>
-                <div className="w-32 text-right text-sm shrink-0">
-                  <span className="font-bold">{formatCurrency(m.amount)}</span>
-                  <span className="text-gray-500 ml-1">({m.count})</span>
-                </div>
-                <div className="w-14 text-right text-sm text-gray-500 shrink-0">{m.percent_of_total}%</div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Payment Method Breakdown</h3>
+            <span className="text-xs text-gray-400">Click a method to filter invoices below</span>
           </div>
+          <div className="space-y-3">
+            {by_method.map((m) => {
+              const isActive = barFilter?.type === 'method' && barFilter?.method === m.method
+              return (
+                <div
+                  key={m.method}
+                  className={`flex items-center gap-3 cursor-pointer rounded-lg px-2 py-1 transition-colors ${isActive ? 'bg-blue-50 ring-2 ring-blue-400' : 'hover:bg-gray-50'}`}
+                  onClick={() => handleMethodClick(m.method)}
+                >
+                  <div className="w-20 text-sm font-medium text-gray-700 shrink-0">{m.method}</div>
+                  <div className="flex-1 bg-gray-100 rounded-full h-6 relative overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${m.percent_of_total}%`,
+                        backgroundColor: METHOD_COLORS[m.method] || METHOD_COLORS.Other,
+                        minWidth: m.percent_of_total > 0 ? '2rem' : '0'
+                      }}
+                    />
+                  </div>
+                  <div className="w-32 text-right text-sm shrink-0">
+                    <span className="font-bold">{formatCurrency(m.amount)}</span>
+                    <span className="text-gray-500 ml-1">({m.count})</span>
+                  </div>
+                  <div className="w-14 text-right text-sm text-gray-500 shrink-0">{m.percent_of_total}%</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Filtered Invoices (shown when a bar is clicked) */}
+      {barFilter && (
+        <div className="bg-white rounded-lg shadow-sm border-2 border-blue-300 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Invoices
+              <span className="ml-2 px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                {filterLabel}
+              </span>
+              {!loadingFiltered && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  {filteredPayments.length} payment{filteredPayments.length !== 1 ? 's' : ''}
+                  {' '}totalling {formatCurrency(filteredPayments.reduce((s, tx) => s + (parseFloat(tx.amount) || 0), 0))}
+                </span>
+              )}
+            </h3>
+            <button
+              onClick={clearFilter}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 transition-colors"
+            >
+              Clear filter &times;
+            </button>
+          </div>
+          {loadingFiltered ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : filteredPayments.length === 0 ? (
+            <p className="text-center text-gray-500 py-6">No payments found for this filter.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-3 font-medium text-gray-500">Payment Date</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-500">Invoice #</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-500">Customer</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-500">Method</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-500">Amount</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-500">Reference</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-500">Received By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPayments.map((tx) => (
+                    <tr key={tx.id} className="border-b border-gray-100 hover:bg-blue-50">
+                      <td className="py-2 px-3">{new Date(tx.payment_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td className="py-2 px-3 font-medium">
+                        {tx.invoiceId ? (
+                          <a href={`/sales/invoices/${tx.invoiceId}`} className="text-blue-600 hover:text-blue-800 hover:underline">
+                            {tx.invoiceNumber}
+                          </a>
+                        ) : '—'}
+                      </td>
+                      <td className="py-2 px-3">{tx.customerName || 'Walk-in'}</td>
+                      <td className="py-2 px-3">
+                        <span
+                          className="px-2 py-0.5 text-xs rounded-full font-medium"
+                          style={{
+                            backgroundColor: (METHOD_COLORS[tx.payment_method] || METHOD_COLORS.Other) + '20',
+                            color: METHOD_COLORS[tx.payment_method] || METHOD_COLORS.Other
+                          }}
+                        >
+                          {tx.paymentMethodDisplay || tx.payment_method || '—'}
+                        </span>
+                      </td>
+                      <td className="text-right py-2 px-3 font-medium text-green-600">{formatCurrency(tx.amount)}</td>
+                      <td className="py-2 px-3 text-gray-500 max-w-[120px] truncate" title={tx.reference_number}>{tx.reference_number || '—'}</td>
+                      <td className="py-2 px-3 text-gray-500">{tx.receivedBy?.full_name || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
