@@ -55,8 +55,8 @@ function canViewSettings(role) {
 }
 
 const REPORT_ACCESS = {
-  Admin: ['sales', 'margins', 'products', 'customers', 'staff', 'inventory', 'my-performance'],
-  Manager: ['sales', 'products', 'customers', 'staff', 'inventory', 'my-performance'],
+  Admin: ['sales', 'margins', 'products', 'customers', 'staff', 'inventory', 'my-performance', 'reconciliation'],
+  Manager: ['sales', 'products', 'customers', 'staff', 'inventory', 'my-performance', 'reconciliation'],
   Sales: ['my-performance'],
   Technician: ['my-performance'],
   Warehouse: ['inventory', 'my-performance']

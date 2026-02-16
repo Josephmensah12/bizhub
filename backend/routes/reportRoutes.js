@@ -32,4 +32,7 @@ router.get('/low-stock', requireRole(['Warehouse', 'Manager', 'Admin']), reportC
 // GET /api/v1/reports/preorder-sla
 router.get('/preorder-sla', requireRole(['Manager', 'Admin']), reportController.preorderSLAReport);
 
+// GET /api/v1/reports/reconciliation
+router.get('/reconciliation', requireRole(['Admin', 'Manager']), reportController.reconciliation);
+
 module.exports = router;

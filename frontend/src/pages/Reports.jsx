@@ -15,6 +15,7 @@ const ALL_TABS = [
   { id: 'customers', label: 'Customers', icon: '👥', reportKey: 'customers' },
   { id: 'staff', label: 'Staff', icon: '👤', reportKey: 'staff' },
   { id: 'inventory', label: 'Inventory', icon: '📦', reportKey: 'inventory' },
+  { id: 'reconciliation', label: 'Reconciliation', icon: '🏦', reportKey: 'reconciliation' },
 ]
 
 const PERIODS = [
@@ -967,6 +968,251 @@ function MyPerformanceTab({ data, loading }) {
   )
 }
 
+// ─── Reconciliation Tab ──────────────────────────────────────
+const METHOD_COLORS = { Cash: '#10b981', MoMo: '#f59e0b', Card: '#3b82f6', ACH: '#8b5cf6', Other: '#6b7280' }
+
+function ReconciliationTab({ data, loading }) {
+  const [showPrior, setShowPrior] = useState(false)
+
+  if (loading) return <LoadingSpinner />
+  if (!data) return <EmptyState message="No reconciliation data available" />
+
+  const { summary, by_method, daily_collections, prior_period_collections, current_period_collections, outstanding_invoices } = data
+
+  const totalOutstandingSum = outstanding_invoices.reduce((sum, inv) => sum + inv.balance_due, 0)
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Total Invoiced"
+          value={formatCurrency(summary.total_invoiced)}
+          subtitle={`${summary.invoice_count} invoices`}
+          icon="🧾"
+          info="Sum of all invoice totals created during this period (excluding cancelled)."
+        />
+        <MetricCard
+          title="Total Collected"
+          value={formatCurrency(summary.total_collected)}
+          subtitle={`${summary.payment_count} payments`}
+          icon="💵"
+          info="Sum of all payments received during this period, regardless of when the invoice was created."
+        />
+        <MetricCard
+          title="Outstanding Balance"
+          value={formatCurrency(summary.total_outstanding)}
+          icon="⏳"
+          info="Total balance due across all unpaid/partially paid invoices as of right now."
+        />
+        <MetricCard
+          title="Collection Rate"
+          value={`${summary.collection_rate}%`}
+          subtitle={summary.collection_rate >= 80 ? 'Healthy' : summary.collection_rate >= 50 ? 'Needs attention' : 'Critical'}
+          icon="📊"
+          info="Percentage of invoiced amount that has been collected. Formula: (Collected / Invoiced) * 100."
+          trend={summary.collection_rate >= 80 ? 'On track' : null}
+          trendUp={summary.collection_rate >= 80}
+        />
+      </div>
+
+      {/* Daily Collections Stacked Bar Chart */}
+      {daily_collections.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Collections by Method</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={daily_collections}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
+              <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+              <Tooltip
+                formatter={(value, name) => [formatCurrency(value), name.charAt(0).toUpperCase() + name.slice(1)]}
+                labelFormatter={(d) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              />
+              <Legend />
+              <Bar dataKey="cash" stackId="a" fill={METHOD_COLORS.Cash} name="Cash" />
+              <Bar dataKey="momo" stackId="a" fill={METHOD_COLORS.MoMo} name="MoMo" />
+              <Bar dataKey="card" stackId="a" fill={METHOD_COLORS.Card} name="Card" />
+              <Bar dataKey="ach" stackId="a" fill={METHOD_COLORS.ACH} name="ACH" />
+              <Bar dataKey="other" stackId="a" fill={METHOD_COLORS.Other} name="Other" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Payment Method Breakdown */}
+      {by_method.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Method Breakdown</h3>
+          <div className="space-y-3">
+            {by_method.map((m) => (
+              <div key={m.method} className="flex items-center gap-3">
+                <div className="w-20 text-sm font-medium text-gray-700 shrink-0">{m.method}</div>
+                <div className="flex-1 bg-gray-100 rounded-full h-6 relative overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${m.percent_of_total}%`,
+                      backgroundColor: METHOD_COLORS[m.method] || METHOD_COLORS.Other,
+                      minWidth: m.percent_of_total > 0 ? '2rem' : '0'
+                    }}
+                  />
+                </div>
+                <div className="w-32 text-right text-sm shrink-0">
+                  <span className="font-bold">{formatCurrency(m.amount)}</span>
+                  <span className="text-gray-500 ml-1">({m.count})</span>
+                </div>
+                <div className="w-14 text-right text-sm text-gray-500 shrink-0">{m.percent_of_total}%</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reconciliation Checklist */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Reconciliation Checklist</h3>
+        <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm space-y-1">
+          {by_method.map((m) => (
+            <div key={m.method} className="flex justify-between">
+              <span className="text-green-600">&#10003; {m.method}:</span>
+              <span>{formatCurrency(m.amount)}  ({m.count} transactions)</span>
+            </div>
+          ))}
+          <div className="border-t border-gray-300 my-2" />
+          <div className="flex justify-between font-bold">
+            <span>Total:</span>
+            <span>{formatCurrency(summary.total_collected)}</span>
+          </div>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">Compare these totals against your MoMo statement, bank statement, POS terminal report, and cash count.</p>
+      </div>
+
+      {/* Prior Period Collections */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-5">
+          <h4 className="text-sm font-medium text-blue-700 mb-1">Prior Period Collections</h4>
+          <div className="text-2xl font-bold text-gray-900">{formatCurrency(prior_period_collections.amount)}</div>
+          <p className="text-sm text-gray-500 mt-1">
+            from {prior_period_collections.count} payment{prior_period_collections.count !== 1 ? 's' : ''} on invoices created before this period
+          </p>
+          {prior_period_collections.invoices.length > 0 && (
+            <button
+              onClick={() => setShowPrior(!showPrior)}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              {showPrior ? 'Hide details' : 'Show details'}
+            </button>
+          )}
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-green-200 p-5">
+          <h4 className="text-sm font-medium text-green-700 mb-1">Current Period Collections</h4>
+          <div className="text-2xl font-bold text-gray-900">{formatCurrency(current_period_collections.amount)}</div>
+          <p className="text-sm text-gray-500 mt-1">
+            from {current_period_collections.count} payment{current_period_collections.count !== 1 ? 's' : ''} on invoices created this period
+          </p>
+        </div>
+      </div>
+
+      {/* Prior Period Details Table */}
+      {showPrior && prior_period_collections.invoices.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-5">
+          <h3 className="text-lg font-semibold text-blue-700 mb-4">Prior Period Payment Details</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Invoice #</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Invoice Date</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Customer</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Amount</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Method</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Payment Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prior_period_collections.invoices.map((p, i) => (
+                  <tr key={i} className="border-b border-gray-100 hover:bg-blue-50">
+                    <td className="py-2 px-3 font-medium">{p.invoice_number}</td>
+                    <td className="py-2 px-3">{new Date(p.invoice_date).toLocaleDateString()}</td>
+                    <td className="py-2 px-3">{p.customer_name}</td>
+                    <td className="text-right py-2 px-3 font-medium">{formatCurrency(p.payment_amount)}</td>
+                    <td className="py-2 px-3">
+                      <span className="px-2 py-0.5 text-xs rounded-full font-medium" style={{ backgroundColor: (METHOD_COLORS[p.payment_method] || METHOD_COLORS.Other) + '20', color: METHOD_COLORS[p.payment_method] || METHOD_COLORS.Other }}>
+                        {p.payment_method}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3">{new Date(p.payment_date).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Outstanding Invoices */}
+      {outstanding_invoices.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Outstanding Invoices</h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Invoice #</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Date</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Customer</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Total</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Paid</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Balance</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Days</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outstanding_invoices.map((inv) => (
+                  <tr
+                    key={inv.id}
+                    className={`border-b border-gray-100 hover:bg-gray-50 ${
+                      inv.days_outstanding > 60 ? 'bg-red-50' : inv.days_outstanding > 30 ? 'bg-yellow-50' : ''
+                    }`}
+                  >
+                    <td className="py-2 px-3 font-medium">{inv.invoice_number}</td>
+                    <td className="py-2 px-3">{new Date(inv.invoice_date).toLocaleDateString()}</td>
+                    <td className="py-2 px-3">{inv.customer_name}</td>
+                    <td className="text-right py-2 px-3">{formatCurrency(inv.total_amount)}</td>
+                    <td className="text-right py-2 px-3 text-green-600">{formatCurrency(inv.amount_paid)}</td>
+                    <td className="text-right py-2 px-3 font-bold text-red-600">{formatCurrency(inv.balance_due)}</td>
+                    <td className={`text-right py-2 px-3 font-medium ${
+                      inv.days_outstanding > 60 ? 'text-red-600' : inv.days_outstanding > 30 ? 'text-yellow-600' : 'text-gray-900'
+                    }`}>
+                      {inv.days_outstanding}d
+                    </td>
+                    <td className="py-2 px-3">
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                        inv.status === 'PARTIALLY_PAID' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {inv.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-300 bg-gray-50">
+                  <td colSpan={5} className="py-2 px-3 font-bold text-right">Total Outstanding:</td>
+                  <td className="text-right py-2 px-3 font-bold text-red-600">{formatCurrency(totalOutstandingSum)}</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Error Boundary ───────────────────────────────────────────
 class ReportErrorBoundary extends React.Component {
   constructor(props) {
@@ -1020,6 +1266,7 @@ export default function Reports() {
   const [staffData, setStaffData] = useState(null)
   const [agingData, setAgingData] = useState(null)
   const [lowStockData, setLowStockData] = useState(null)
+  const [reconData, setReconData] = useState(null)
 
   // Loading states
   const [loadingMyPerf, setLoadingMyPerf] = useState(false)
@@ -1030,6 +1277,7 @@ export default function Reports() {
   const [loadingStaff, setLoadingStaff] = useState(false)
   const [loadingAging, setLoadingAging] = useState(false)
   const [loadingLowStock, setLoadingLowStock] = useState(false)
+  const [loadingRecon, setLoadingRecon] = useState(false)
 
   const [error, setError] = useState(null)
 
@@ -1087,6 +1335,9 @@ export default function Reports() {
       case 'inventory':
         fetchReport('inventory-aging', setAgingData, setLoadingAging)
         fetchReport('low-stock', setLowStockData, setLoadingLowStock)
+        break
+      case 'reconciliation':
+        fetchReport('reconciliation', setReconData, setLoadingRecon)
         break
     }
   }, [activeTab, period, customStart, customEnd, fetchReport])
@@ -1192,6 +1443,7 @@ export default function Reports() {
             loadingLowStock={loadingLowStock}
           />
         )}
+        {activeTab === 'reconciliation' && <ReconciliationTab data={reconData} loading={loadingRecon} />}
       </ReportErrorBoundary>
     </div>
   )

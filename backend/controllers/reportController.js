@@ -839,4 +839,230 @@ exports.myPerformance = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * GET /api/v1/reports/reconciliation
+ * Payment reconciliation — all money received during a period, grouped by method
+ */
+exports.reconciliation = asyncHandler(async (req, res) => {
+  const { startDate, endDate } = parseDateRange(req.query);
+
+  // 1. Summary: total invoiced in period
+  const invoicedResult = await sequelize.query(`
+    SELECT
+      COALESCE(SUM(total_amount), 0) AS total_invoiced,
+      COUNT(*) AS invoice_count
+    FROM invoices
+    WHERE invoice_date BETWEEN :startDate AND :endDate
+      AND status != 'CANCELLED'
+      AND is_deleted = false
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  // 2. Summary: total collected in period (payments received)
+  const collectedResult = await sequelize.query(`
+    SELECT
+      COALESCE(SUM(p.amount), 0) AS total_collected,
+      COUNT(*) AS payment_count
+    FROM invoice_payments p
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND p.voided_at IS NULL
+      AND p.transaction_type = 'PAYMENT'
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  // 3. Total outstanding (all unpaid/partial invoices as of now)
+  const outstandingResult = await sequelize.query(`
+    SELECT COALESCE(SUM(balance_due), 0) AS total_outstanding
+    FROM invoices
+    WHERE balance_due > 0
+      AND status NOT IN ('CANCELLED')
+      AND is_deleted = false
+  `, { type: QueryTypes.SELECT });
+
+  const totalInvoiced = parseFloat(invoicedResult[0].total_invoiced) || 0;
+  const totalCollected = parseFloat(collectedResult[0].total_collected) || 0;
+  const totalOutstanding = parseFloat(outstandingResult[0].total_outstanding) || 0;
+  const paymentCount = parseInt(collectedResult[0].payment_count) || 0;
+  const collectionRate = totalInvoiced > 0 ? (totalCollected / totalInvoiced) * 100 : 0;
+
+  // 4. By payment method
+  const byMethod = await sequelize.query(`
+    SELECT
+      p.payment_method AS method,
+      COALESCE(SUM(p.amount), 0) AS amount,
+      COUNT(*) AS count
+    FROM invoice_payments p
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND p.voided_at IS NULL
+      AND p.transaction_type = 'PAYMENT'
+    GROUP BY p.payment_method
+    ORDER BY amount DESC
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  const byMethodFormatted = byMethod.map(m => ({
+    method: m.method,
+    amount: parseFloat(m.amount) || 0,
+    count: parseInt(m.count) || 0,
+    percent_of_total: totalCollected > 0
+      ? parseFloat(((parseFloat(m.amount) / totalCollected) * 100).toFixed(1))
+      : 0
+  }));
+
+  // 5. Daily collections breakdown
+  const dailyCollections = await sequelize.query(`
+    SELECT
+      DATE(p.payment_date) AS date,
+      SUM(CASE WHEN p.payment_method = 'Cash' THEN p.amount ELSE 0 END) AS cash,
+      SUM(CASE WHEN p.payment_method = 'MoMo' THEN p.amount ELSE 0 END) AS momo,
+      SUM(CASE WHEN p.payment_method = 'Card' THEN p.amount ELSE 0 END) AS card,
+      SUM(CASE WHEN p.payment_method = 'ACH' THEN p.amount ELSE 0 END) AS ach,
+      SUM(CASE WHEN p.payment_method = 'Other' THEN p.amount ELSE 0 END) AS other,
+      SUM(p.amount) AS total
+    FROM invoice_payments p
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND p.voided_at IS NULL
+      AND p.transaction_type = 'PAYMENT'
+    GROUP BY DATE(p.payment_date)
+    ORDER BY date ASC
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  const dailyFormatted = dailyCollections.map(d => ({
+    date: d.date,
+    cash: parseFloat(d.cash) || 0,
+    momo: parseFloat(d.momo) || 0,
+    card: parseFloat(d.card) || 0,
+    ach: parseFloat(d.ach) || 0,
+    other: parseFloat(d.other) || 0,
+    total: parseFloat(d.total) || 0
+  }));
+
+  // 6. Prior period collections (payments in this period for invoices created before this period)
+  const priorPeriod = await sequelize.query(`
+    SELECT
+      i.invoice_number,
+      i.invoice_date,
+      COALESCE(c.first_name || ' ' || c.last_name, c.company_name, 'Walk-in') AS customer_name,
+      p.amount AS payment_amount,
+      p.payment_method,
+      p.payment_date
+    FROM invoice_payments p
+    JOIN invoices i ON p.invoice_id = i.id
+    LEFT JOIN customers c ON i.customer_id = c.id
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND i.invoice_date < :startDate
+      AND p.voided_at IS NULL
+      AND p.transaction_type = 'PAYMENT'
+    ORDER BY p.payment_date DESC
+    LIMIT 50
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  const priorPeriodTotals = await sequelize.query(`
+    SELECT
+      COALESCE(SUM(p.amount), 0) AS amount,
+      COUNT(*) AS count
+    FROM invoice_payments p
+    JOIN invoices i ON p.invoice_id = i.id
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND i.invoice_date < :startDate
+      AND p.voided_at IS NULL
+      AND p.transaction_type = 'PAYMENT'
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  // 7. Current period collections
+  const currentPeriodTotals = await sequelize.query(`
+    SELECT
+      COALESCE(SUM(p.amount), 0) AS amount,
+      COUNT(*) AS count
+    FROM invoice_payments p
+    JOIN invoices i ON p.invoice_id = i.id
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND i.invoice_date BETWEEN :startDate AND :endDate
+      AND p.voided_at IS NULL
+      AND p.transaction_type = 'PAYMENT'
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  // 8. Outstanding invoices
+  const outstandingInvoices = await sequelize.query(`
+    SELECT
+      i.id,
+      i.invoice_number,
+      i.invoice_date,
+      COALESCE(c.first_name || ' ' || c.last_name, c.company_name, 'Walk-in') AS customer_name,
+      i.total_amount,
+      i.amount_paid,
+      i.balance_due,
+      EXTRACT(DAY FROM NOW() - i.invoice_date)::int AS days_outstanding,
+      i.status
+    FROM invoices i
+    LEFT JOIN customers c ON i.customer_id = c.id
+    WHERE i.balance_due > 0
+      AND i.status NOT IN ('CANCELLED')
+      AND i.is_deleted = false
+    ORDER BY i.invoice_date ASC
+  `, { type: QueryTypes.SELECT });
+
+  res.json({
+    success: true,
+    data: {
+      period: { startDate, endDate },
+      summary: {
+        total_invoiced: parseFloat(totalInvoiced.toFixed(2)),
+        total_collected: parseFloat(totalCollected.toFixed(2)),
+        total_outstanding: parseFloat(totalOutstanding.toFixed(2)),
+        collection_rate: parseFloat(collectionRate.toFixed(1)),
+        payment_count: paymentCount,
+        invoice_count: parseInt(invoicedResult[0].invoice_count) || 0
+      },
+      by_method: byMethodFormatted,
+      daily_collections: dailyFormatted,
+      prior_period_collections: {
+        amount: parseFloat(priorPeriodTotals[0].amount) || 0,
+        count: parseInt(priorPeriodTotals[0].count) || 0,
+        invoices: priorPeriod.map(p => ({
+          invoice_number: p.invoice_number,
+          invoice_date: p.invoice_date,
+          customer_name: p.customer_name,
+          payment_amount: parseFloat(p.payment_amount) || 0,
+          payment_method: p.payment_method,
+          payment_date: p.payment_date
+        }))
+      },
+      current_period_collections: {
+        amount: parseFloat(currentPeriodTotals[0].amount) || 0,
+        count: parseInt(currentPeriodTotals[0].count) || 0
+      },
+      outstanding_invoices: outstandingInvoices.map(inv => ({
+        id: inv.id,
+        invoice_number: inv.invoice_number,
+        invoice_date: inv.invoice_date,
+        customer_name: inv.customer_name,
+        total_amount: parseFloat(inv.total_amount) || 0,
+        amount_paid: parseFloat(inv.amount_paid) || 0,
+        balance_due: parseFloat(inv.balance_due) || 0,
+        days_outstanding: inv.days_outstanding || 0,
+        status: inv.status
+      }))
+    }
+  });
+});
+
 module.exports = exports;
