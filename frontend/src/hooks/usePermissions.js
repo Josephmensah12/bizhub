@@ -7,7 +7,7 @@ let cacheUserId = null
 
 export function usePermissions() {
   const { user } = useAuth()
-  const [permissions, setPermissions] = useState(cachedPermissions?.userId === user?.id ? cachedPermissions : null)
+  const [permissions, setPermissions] = useState(cacheUserId === user?.id ? cachedPermissions : null)
   const [loading, setLoading] = useState(!permissions)
 
   const fetchPermissions = useCallback(async () => {

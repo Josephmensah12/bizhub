@@ -65,6 +65,28 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Diagnostic endpoint — check database tables and columns
+app.get(`${API_BASE}/debug/schema`, async (req, res) => {
+  try {
+    const [tables] = await require('./models').sequelize.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
+    );
+    const [userCols] = await require('./models').sequelize.query(
+      "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users' ORDER BY ordinal_position"
+    );
+    const [invoiceCols] = await require('./models').sequelize.query(
+      "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'invoices' ORDER BY ordinal_position"
+    );
+    res.json({
+      tables: tables.map(t => t.table_name),
+      userColumns: userCols.map(c => c.column_name),
+      invoiceColumns: invoiceCols.map(c => c.column_name)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // API Routes
 app.use(`${API_BASE}/auth`, authRoutes);
 app.use(`${API_BASE}/assets`, assetRoutes);

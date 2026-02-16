@@ -32,7 +32,8 @@ async function startServer() {
       await db.sequelize.sync({ alter: true });
       console.log('✅ Database schema synced');
     } catch (err) {
-      console.error('⚠️ Schema sync warning:', err.message);
+      console.error('⚠️ Schema sync FAILED:', err.message);
+      console.error('Full error:', err);
     }
   }
 

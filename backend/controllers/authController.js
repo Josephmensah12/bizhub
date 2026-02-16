@@ -152,9 +152,7 @@ exports.refreshToken = asyncHandler(async (req, res, next) => {
  * Returns the current user's permissions object for frontend UI gating.
  */
 exports.getPermissions = asyncHandler(async (req, res) => {
-  const user = await User.findByPk(req.user.id, {
-    attributes: ['id', 'role', 'max_discount_percent']
-  });
+  const user = await User.findByPk(req.user.id);
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
