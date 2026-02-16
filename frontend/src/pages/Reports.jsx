@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import axios from 'axios'
 import { usePermissions } from '../hooks/usePermissions'
 import {
@@ -867,7 +867,17 @@ function MyPerformanceTab({ data, loading }) {
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No performance data available" />
 
-  const { summary, status_breakdown, recent_invoices } = data
+  const summary = {
+    total_invoices: data.invoiceCount || data.summary?.total_invoices || 0,
+    total_revenue: data.totalRevenue || data.summary?.total_revenue || 0,
+    total_collected: data.totalCollected || data.summary?.total_collected || 0,
+    avg_ticket: data.avgTicket || data.summary?.avg_ticket || 0,
+  }
+  const status_breakdown = data.statusBreakdown || data.status_breakdown || []
+  const recent_invoices = (data.recentInvoices || data.recent_invoices || []).map(inv => ({
+    ...inv,
+    customer_name: inv.customer?.displayName || inv.customer_name || 'Walk-in'
+  }))
 
   return (
     <div className="space-y-6">
@@ -955,6 +965,37 @@ function MyPerformanceTab({ data, loading }) {
       )}
     </div>
   )
+}
+
+// ─── Error Boundary ───────────────────────────────────────────
+class ReportErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error, info) {
+    console.error('Report tab crash:', error, info)
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <p className="text-red-700 font-medium">Something went wrong loading this report.</p>
+          <p className="text-red-500 text-sm mt-1">{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="mt-3 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 // ─── Main Reports Page ────────────────────────────────────────
@@ -1136,20 +1177,22 @@ export default function Reports() {
       )}
 
       {/* Tab Content */}
-      {activeTab === 'my-performance' && <MyPerformanceTab data={myPerfData} loading={loadingMyPerf} />}
-      {activeTab === 'sales' && <SalesTab data={salesData} loading={loadingSales} />}
-      {activeTab === 'margins' && <MarginsTab data={marginsData} loading={loadingMargins} />}
-      {activeTab === 'products' && <TopSellersTab data={topSellersData} loading={loadingTopSellers} />}
-      {activeTab === 'customers' && <CustomersTab data={customersData} loading={loadingCustomers} />}
-      {activeTab === 'staff' && <StaffTab data={staffData} loading={loadingStaff} />}
-      {activeTab === 'inventory' && (
-        <InventoryTab
-          agingData={agingData}
-          lowStockData={lowStockData}
-          loadingAging={loadingAging}
-          loadingLowStock={loadingLowStock}
-        />
-      )}
+      <ReportErrorBoundary key={activeTab}>
+        {activeTab === 'my-performance' && <MyPerformanceTab data={myPerfData} loading={loadingMyPerf} />}
+        {activeTab === 'sales' && <SalesTab data={salesData} loading={loadingSales} />}
+        {activeTab === 'margins' && <MarginsTab data={marginsData} loading={loadingMargins} />}
+        {activeTab === 'products' && <TopSellersTab data={topSellersData} loading={loadingTopSellers} />}
+        {activeTab === 'customers' && <CustomersTab data={customersData} loading={loadingCustomers} />}
+        {activeTab === 'staff' && <StaffTab data={staffData} loading={loadingStaff} />}
+        {activeTab === 'inventory' && (
+          <InventoryTab
+            agingData={agingData}
+            lowStockData={lowStockData}
+            loadingAging={loadingAging}
+            loadingLowStock={loadingLowStock}
+          />
+        )}
+      </ReportErrorBoundary>
     </div>
   )
 }
