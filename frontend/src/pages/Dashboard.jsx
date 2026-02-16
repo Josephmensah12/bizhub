@@ -299,8 +299,7 @@ export default function Dashboard() {
           <div className="space-y-4">
             <AgingBar label="< 30 days" count={agingData['30_days'] || 0} maxCount={agingMax} color="bg-green-500" />
             <AgingBar label="30-60 days" count={agingData['60_days'] || 0} maxCount={agingMax} color="bg-yellow-500" />
-            <AgingBar label="60-90 days" count={agingData['90_plus_days'] || 0} maxCount={agingMax} color="bg-orange-500" alert />
-            <AgingBar label="90+ days" count={agingData['90_plus_days'] ? Math.max(Math.floor(agingData['90_plus_days'] * 0.3), 0) : 0} maxCount={agingMax} color="bg-red-500" alert />
+            <AgingBar label="90+ days" count={agingData['90_plus_days'] || 0} maxCount={agingMax} color="bg-red-500" alert />
           </div>
         </div>
       </div>

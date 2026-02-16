@@ -16,7 +16,8 @@ module.exports = (sequelize, DataTypes) => {
     },
     reference: {
       type: DataTypes.STRING(20),
-      allowNull: false
+      allowNull: false,
+      unique: true
     },
     name: {
       type: DataTypes.STRING(100),
@@ -78,10 +79,7 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true,
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at',
-    indexes: [
-      { unique: true, fields: ['reference'] }
-    ]
+    updatedAt: 'updated_at'
   });
 
   StockTake.associate = (models) => {

@@ -10,6 +10,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     asset_tag: {
       type: DataTypes.STRING(20),
+      unique: true,
       allowNull: false,
       comment: 'Human-friendly unique ID like INV-000001'
     },
@@ -25,6 +26,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     serial_number: {
       type: DataTypes.STRING(100),
+      unique: true,
       allowNull: true,
       comment: 'Optional when quantity > 1 (multiple units cannot share one serial)'
     },
@@ -196,6 +198,7 @@ module.exports = (sequelize, DataTypes) => {
     salesbinder_id: {
       type: DataTypes.STRING(50),
       allowNull: true,
+      unique: true,
       comment: 'Original SalesBinder item ID for tracking imports'
     },
     // Storefront
@@ -242,12 +245,7 @@ module.exports = (sequelize, DataTypes) => {
     createdAt: 'created_at',
     updatedAt: 'updated_at',
     paranoid: true, // Enable soft delete
-    deletedAt: 'deleted_at',
-    indexes: [
-      { unique: true, fields: ['asset_tag'] },
-      { unique: true, fields: ['serial_number'] },
-      { unique: true, fields: ['salesbinder_id'] }
-    ]
+    deletedAt: 'deleted_at'
   });
 
   // Validate taxonomy combination before save (async — checks custom values too)

@@ -124,7 +124,7 @@ export default function Login() {
           </div>
 
           <p className="text-center mt-6 text-xs text-gray-400">
-            Payless4Tech &middot; All rights reserved
+            Payless4Tech &copy; 2026 &middot; All rights reserved
           </p>
         </div>
       </div>
