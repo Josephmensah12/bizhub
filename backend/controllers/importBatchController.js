@@ -8,8 +8,8 @@ const { ImportBatch, Asset, User, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // Async handler wrapper
-const asyncHandler = fn => (req, res, next) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
+const asyncHandler = handler => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
 };
 
 /**

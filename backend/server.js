@@ -27,6 +27,15 @@ async function startServer() {
     process.exit(1);
   }
 
+  if (dbConnected) {
+    try {
+      await db.sequelize.sync({ alter: true });
+      console.log('✅ Database schema synced');
+    } catch (err) {
+      console.error('⚠️ Schema sync warning:', err.message);
+    }
+  }
+
   // Start listening
   const server = app.listen(PORT, () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

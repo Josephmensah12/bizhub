@@ -7,8 +7,8 @@
 const { StockTake, StockTakeItem, Asset, User, InventoryItemEvent, ActivityLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
-const asyncHandler = fn => (req, res, next) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
+const asyncHandler = handler => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
 };
 
 // ---------------------------------------------------------------------------

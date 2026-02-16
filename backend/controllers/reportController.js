@@ -14,8 +14,8 @@
 const { Invoice, InvoiceItem, InvoicePayment, Asset, Customer, User, sequelize } = require('../models');
 const { Op, fn, col, literal, QueryTypes } = require('sequelize');
 
-const asyncHandler = fn => (req, res, next) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
+const asyncHandler = handler => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
 };
 
 /**

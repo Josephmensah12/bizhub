@@ -8,8 +8,8 @@ const { User, ActivityLog } = require('../models');
 const { Op } = require('sequelize');
 const { defaultMaxDiscount } = require('../middleware/permissions');
 
-const asyncHandler = fn => (req, res, next) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
+const asyncHandler = handler => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
 };
 
 const VALID_ROLES = ['Admin', 'Manager', 'Sales', 'Technician', 'Warehouse'];

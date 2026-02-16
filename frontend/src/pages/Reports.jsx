@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import axios from 'axios'
 import { usePermissions } from '../hooks/usePermissions'
 import {
@@ -959,9 +959,11 @@ function MyPerformanceTab({ data, loading }) {
 
 // ─── Main Reports Page ────────────────────────────────────────
 export default function Reports() {
-  const { permissions } = usePermissions()
-  const accessibleReports = permissions?.accessibleReports || []
-  const TABS = ALL_TABS.filter(tab => accessibleReports.includes(tab.reportKey))
+  const { permissions, loading: permissionsLoading } = usePermissions()
+  const TABS = useMemo(() => {
+    const accessibleReports = permissions?.accessibleReports || []
+    return ALL_TABS.filter(tab => accessibleReports.includes(tab.reportKey))
+  }, [permissions])
 
   const [activeTab, setActiveTab] = useState('')
   const [period, setPeriod] = useState('month')
@@ -1017,7 +1019,7 @@ export default function Reports() {
     if (TABS.length > 0 && !activeTab) {
       setActiveTab(TABS[0].id)
     }
-  }, [TABS.length])
+  }, [TABS, activeTab])
 
   // Fetch data when tab or period changes
   useEffect(() => {
@@ -1047,6 +1049,22 @@ export default function Reports() {
         break
     }
   }, [activeTab, period, customStart, customEnd, fetchReport])
+
+  if (permissionsLoading) {
+    return <LoadingSpinner />
+  }
+
+  if (TABS.length === 0) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">Reports</h1>
+        <div className="text-center py-12 text-gray-500">
+          <p className="text-lg">No reports available for your role.</p>
+          <p className="text-sm mt-2">Contact an administrator if you believe this is an error.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
