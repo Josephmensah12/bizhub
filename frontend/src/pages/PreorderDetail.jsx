@@ -47,6 +47,22 @@ export default function PreorderDetail() {
   // Convert
   const [converting, setConverting] = useState(false);
 
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const res = await axios.get(`/api/v1/preorders/${id}/notifications`);
+      setNotifications(res.data.data.notifications || []);
+    } catch (_) {
+      // silent fail
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
   const fetchPreorder = async () => {
     setLoading(true);
     try {
@@ -60,7 +76,7 @@ export default function PreorderDetail() {
     }
   };
 
-  useEffect(() => { fetchPreorder(); }, [id]);
+  useEffect(() => { fetchPreorder(); fetchNotifications(); }, [id]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -88,6 +104,7 @@ export default function PreorderDetail() {
       setNewStatus('');
       setStatusMessage('');
       fetchPreorder();
+      setTimeout(fetchNotifications, 1500);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to update status');
     } finally {
@@ -405,6 +422,38 @@ export default function PreorderDetail() {
           </div>
         </div>
       </div>
+
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Notifications</h3>
+          <div className="space-y-2">
+            {notifications.map((n) => (
+              <div key={n.id} className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                <span className="text-lg mt-0.5">
+                  {n.channel === 'email' ? '\u{1F4E7}' : n.channel === 'sms' ? '\u{1F4F1}' : '\u{1F4AC}'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900 truncate">{n.subject || 'Notification'}</span>
+                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium ${
+                      n.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {n.status === 'sent' ? 'Sent' : 'Failed'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    To: {n.recipient} &middot; {new Date(n.created_at).toLocaleString()}
+                  </div>
+                  {n.status === 'failed' && n.error_message && (
+                    <div className="text-xs text-red-500 mt-0.5">{n.error_message}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Status Update Modal */}
       {showStatusModal && (

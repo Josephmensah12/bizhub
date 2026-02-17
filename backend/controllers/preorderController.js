@@ -9,7 +9,8 @@ const asyncHandler = handler => (req, res, next) => {
 };
 
 const { Op } = require('sequelize');
-const { Preorder, Customer, Invoice, InvoiceItem, InvoicePayment, User, sequelize } = require('../models');
+const { Preorder, Customer, Invoice, InvoiceItem, InvoicePayment, User, NotificationLog, sequelize } = require('../models');
+const { sendPreorderStatusEmail } = require('../services/emailService');
 
 // ─── List ────────────────────────────────────────────────────
 exports.list = asyncHandler(async (req, res) => {
@@ -186,6 +187,8 @@ exports.update = asyncHandler(async (req, res) => {
     }
   }
 
+  const statusChanged = req.body.status && req.body.status !== preorder.previous('status');
+
   // Auto-set dates on status change
   if (req.body.status) {
     applyStatusDates(preorder, req.body.status);
@@ -193,6 +196,13 @@ exports.update = asyncHandler(async (req, res) => {
 
   preorder.updated_by = req.user?.id;
   await preorder.save();
+
+  // Send email notification on status change (non-blocking)
+  if (statusChanged) {
+    sendPreorderStatusEmail(preorder).catch(err => {
+      console.error('Email notification error:', err.message);
+    });
+  }
 
   const full = await Preorder.findByPk(preorder.id, {
     include: [
@@ -235,6 +245,11 @@ exports.updateStatus = asyncHandler(async (req, res) => {
 
   preorder.updated_by = req.user?.id;
   await preorder.save();
+
+  // Send email notification (non-blocking — don't fail the request if email fails)
+  sendPreorderStatusEmail(preorder).catch(err => {
+    console.error('Email notification error:', err.message);
+  });
 
   res.json({ success: true, data: preorder });
 });
@@ -429,6 +444,15 @@ exports.summary = asyncHandler(async (req, res) => {
       arriving_this_week: arrivingThisWeek
     }
   });
+});
+
+// ─── Notifications ──────────────────────────────────────────
+exports.getNotifications = asyncHandler(async (req, res) => {
+  const logs = await NotificationLog.findAll({
+    where: { preorder_id: req.params.id },
+    order: [['created_at', 'DESC']]
+  });
+  res.json({ success: true, data: { notifications: logs } });
 });
 
 // ─── Helpers ─────────────────────────────────────────────────

@@ -10,6 +10,7 @@ router.use(authenticate);
 router.get('/summary', preorderController.summary);
 router.get('/', preorderController.list);
 router.get('/:id', preorderController.getById);
+router.get('/:id/notifications', preorderController.getNotifications);
 router.post('/', requireRole(['Admin', 'Manager', 'Sales']), preorderController.create);
 router.put('/:id', requireRole(['Admin', 'Manager', 'Sales']), preorderController.update);
 router.put('/:id/status', requireRole(['Admin', 'Manager', 'Sales']), preorderController.updateStatus);
