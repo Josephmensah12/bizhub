@@ -24,6 +24,15 @@ router.use(storefrontCors());
 // --- Paystack webhook (NO API key, NO rate limit — Paystack calls this directly) ---
 router.post('/webhooks/paystack', storefront.handlePaystackWebhook);
 
+// --- Preorder tracking (public, rate-limited, NO API key) ---
+const trackLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again in a minute.' } }
+});
+router.get('/track', trackLimiter, storefront.trackPreorder);
+
 // --- All other routes require API key ---
 router.use(storefrontAuth);
 

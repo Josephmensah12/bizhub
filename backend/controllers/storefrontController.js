@@ -11,7 +11,7 @@ const asyncHandler = handler => (req, res, next) => {
 const crypto = require('crypto');
 const axios = require('axios');
 const { Op, QueryTypes } = require('sequelize');
-const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, ActivityLog, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, Preorder, ActivityLog, sequelize } = require('../models');
 const { computeAvailability, computeBulkAvailability } = require('../services/inventoryAvailabilityService');
 
 // ---------------------------------------------------------------------------
@@ -838,6 +838,80 @@ exports.createOrFindCustomer = asyncHandler(async (req, res) => {
       email: customer.email,
       phone: customer.phone_raw,
       created_at: customer.created_at
+    }
+  });
+});
+
+// ─── Preorder Tracking Portal ────────────────────────────────
+// Public endpoint — no auth, rate-limited
+const STATUS_ORDER = ['Deposit Paid', 'Purchased', 'Shipped', 'Arrived', 'Completed'];
+
+exports.trackPreorder = asyncHandler(async (req, res) => {
+  const { code, phone } = req.query;
+
+  if (!code || !phone) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'MISSING_PARAMS', message: 'Both code and phone are required' }
+    });
+  }
+
+  const phoneSuffix = phone.replace(/\D/g, '').slice(-6);
+  if (phoneSuffix.length < 6) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_PHONE', message: 'Phone must contain at least 6 digits' }
+    });
+  }
+
+  const preorder = await Preorder.findOne({
+    where: { tracking_code: code.trim().toUpperCase() }
+  });
+
+  // Generic error — don't reveal whether code exists vs phone mismatch
+  if (!preorder) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'No preorder found. Check your tracking code and phone number.' }
+    });
+  }
+
+  const storedDigits = preorder.customer_phone.replace(/\D/g, '').slice(-6);
+  if (storedDigits !== phoneSuffix) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'No preorder found. Check your tracking code and phone number.' }
+    });
+  }
+
+  // Build progress steps
+  const currentIndex = STATUS_ORDER.indexOf(preorder.status);
+  const dateMap = {
+    'Deposit Paid': preorder.created_at,
+    'Purchased': preorder.purchase_date,
+    'Shipped': preorder.shipped_date,
+    'Arrived': preorder.actual_arrival_date,
+    'Completed': preorder.status === 'Completed' ? preorder.updated_at : null
+  };
+
+  const steps = STATUS_ORDER.map((label, i) => ({
+    label: label === 'Completed' ? 'Ready for Pickup' : label,
+    completed: i <= currentIndex,
+    date: dateMap[label] ? new Date(dateMap[label]).toISOString().split('T')[0] : null
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      tracking_code: preorder.tracking_code,
+      item_description: preorder.item_description,
+      quantity: preorder.quantity,
+      status: preorder.status,
+      status_message: preorder.status_message,
+      estimated_arrival_date: preorder.estimated_arrival_date,
+      deposit_amount: preorder.deposit_amount,
+      balance_due: preorder.balance_due,
+      steps
     }
   });
 });

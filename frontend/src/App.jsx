@@ -20,6 +20,7 @@ import Invoices from './pages/Invoices'
 import InvoiceCreate from './pages/InvoiceCreate'
 import InvoiceDetail from './pages/InvoiceDetail'
 import Preorders from './pages/Preorders'
+import PreorderDetail from './pages/PreorderDetail'
 import Repairs from './pages/Repairs'
 import Customers from './pages/Customers'
 import CustomerDetail from './pages/CustomerDetail'
@@ -95,6 +96,7 @@ function App() {
         <Route path="sales/invoices/:id/edit" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><InvoiceCreate /></RoleRoute>} />
         <Route path="sales/payments" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><Payments /></RoleRoute>} />
         <Route path="preorders" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><Preorders /></RoleRoute>} />
+        <Route path="preorders/:id" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><PreorderDetail /></RoleRoute>} />
         <Route path="stock-takes" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><StockTakes /></RoleRoute>} />
         <Route path="stock-takes/:id" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><StockTakeDetail /></RoleRoute>} />
         <Route path="repairs" element={<RoleRoute roles={['Admin', 'Manager', 'Technician']}><Repairs /></RoleRoute>} />
