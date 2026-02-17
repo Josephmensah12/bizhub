@@ -234,15 +234,26 @@ export default function InvoiceCreate() {
 
       for (const asset of assets) {
         try {
-          const response = await axios.post(`/api/v1/invoices/${invoiceId}/items`, {
+          const payload = {
             asset_id: asset.id,
-            unit_price: asset.price_amount || 0,
+            unit_price: asset._unitPrice || asset.price_amount || 0,
             quantity: asset._selectedQty || 1
-          });
+          };
+          // Serialized unit — pass the unit ID
+          if (asset._unitId) {
+            payload.asset_unit_id = asset._unitId;
+            payload.quantity = 1;
+          }
+
+          const response = await axios.post(`/api/v1/invoices/${invoiceId}/items`, payload);
 
           const returnedItem = response.data.data.item;
           setItems(prev => {
-            const existingIndex = prev.findIndex(i => i.asset_id === returnedItem.asset_id);
+            // For serialized units, each is a unique line item (don't merge by asset_id)
+            if (returnedItem.asset_unit_id) {
+              return [...prev, returnedItem];
+            }
+            const existingIndex = prev.findIndex(i => i.asset_id === returnedItem.asset_id && !i.asset_unit_id);
             if (existingIndex >= 0) {
               const updated = [...prev];
               updated[existingIndex] = returnedItem;
@@ -611,9 +622,19 @@ export default function InvoiceCreate() {
                     <div key={item.id} className="py-3">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className="font-medium">{item.description}</div>
+                          <div className="font-medium">
+                            {item.description}
+                            {item.asset_unit_id && item.assetUnit?.serial_number && (
+                              <span className="ml-2 text-xs font-mono text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                                S/N: {item.assetUnit.serial_number}
+                              </span>
+                            )}
+                          </div>
                           <div className="text-sm text-gray-500 flex items-center gap-1">
-                            {item.quantity > 1 ? (
+                            {item.asset_unit_id ? (
+                              // Serialized unit — always qty 1, no stepper
+                              <>Qty: 1 × {formatCurrency(item.unit_price_amount, currency)}</>
+                            ) : item.quantity > 1 ? (
                               <>
                                 <span>Qty:</span>
                                 <button

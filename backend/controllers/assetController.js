@@ -1,4 +1,4 @@
-const { Asset, User, InventoryItemEvent, ConditionStatus, sequelize } = require('../models');
+const { Asset, AssetUnit, User, InventoryItemEvent, ConditionStatus, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { generateAssetTag } = require('../utils/assetTagGenerator');
 const { getReservedQuantity } = require('../services/inventoryAvailabilityService');
@@ -94,16 +94,30 @@ exports.list = asyncHandler(async (req, res) => {
         ],
         [
           sequelize.literal(`(
-            "Asset"."quantity" - (
-              SELECT COALESCE(SUM(ii.quantity), 0)
-              FROM invoice_items ii
-              JOIN invoices i ON ii.invoice_id = i.id
-              WHERE ii.asset_id = "Asset"."id"
-                AND i.status NOT IN ('CANCELLED', 'PAID')
-                AND ii.voided_at IS NULL
-            )
+            CASE WHEN "Asset"."is_serialized" = true THEN
+              (SELECT COUNT(*) FROM asset_units au WHERE au.asset_id = "Asset"."id" AND au.status = 'Available')
+            ELSE
+              "Asset"."quantity" - (
+                SELECT COALESCE(SUM(ii.quantity), 0)
+                FROM invoice_items ii
+                JOIN invoices i ON ii.invoice_id = i.id
+                WHERE ii.asset_id = "Asset"."id"
+                  AND i.status NOT IN ('CANCELLED', 'PAID')
+                  AND ii.voided_at IS NULL
+              )
+            END
           )`),
           'available_quantity'
+        ],
+        [
+          sequelize.literal(`(
+            CASE WHEN "Asset"."is_serialized" = true THEN
+              (SELECT COUNT(*) FROM asset_units au WHERE au.asset_id = "Asset"."id")
+            ELSE
+              "Asset"."quantity"
+            END
+          )`),
+          'total_quantity'
         ]
       ]
     }
@@ -130,13 +144,13 @@ exports.list = asyncHandler(async (req, res) => {
 exports.getById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const asset = await Asset.findByPk(id, {
-    include: [
-      { model: User, as: 'creator', attributes: ['id', 'full_name', 'email'] },
-      { model: User, as: 'updater', attributes: ['id', 'full_name', 'email'] },
-      { model: ConditionStatus, as: 'conditionStatus', attributes: ['id', 'name', 'color', 'valuation_rule'] }
-    ]
-  });
+  const includeArr = [
+    { model: User, as: 'creator', attributes: ['id', 'full_name', 'email'] },
+    { model: User, as: 'updater', attributes: ['id', 'full_name', 'email'] },
+    { model: ConditionStatus, as: 'conditionStatus', attributes: ['id', 'name', 'color', 'valuation_rule'] }
+  ];
+
+  const asset = await Asset.findByPk(id, { include: includeArr });
 
   if (!asset) {
     return res.status(404).json({
@@ -148,9 +162,44 @@ exports.getById = asyncHandler(async (req, res) => {
     });
   }
 
+  const data = { asset: sanitizeAssetForRole(asset, req.user?.role) };
+
+  // For serialized assets, include units and summary
+  if (asset.is_serialized) {
+    const units = await AssetUnit.findAll({
+      where: { asset_id: id },
+      include: [{ model: ConditionStatus, as: 'conditionStatus', attributes: ['id', 'name', 'color'] }],
+      order: [['created_at', 'DESC']]
+    });
+
+    // Compute unit summary counts
+    const unitSummary = { total: 0, available: 0, reserved: 0, sold: 0, in_repair: 0, scrapped: 0 };
+    for (const u of units) {
+      unitSummary.total++;
+      switch (u.status) {
+        case 'Available': unitSummary.available++; break;
+        case 'Reserved': unitSummary.reserved++; break;
+        case 'Sold': unitSummary.sold++; break;
+        case 'In Repair': unitSummary.in_repair++; break;
+        case 'Scrapped': unitSummary.scrapped++; break;
+      }
+    }
+
+    // Add effective price/cost to each unit
+    const productPrice = parseFloat(asset.price_amount) || 0;
+    const productCost = parseFloat(asset.cost_amount) || 0;
+    data.units = units.map(u => {
+      const uData = u.toJSON();
+      uData.effective_price = uData.price_amount !== null ? uData.price_amount : productPrice;
+      uData.effective_cost = uData.cost_amount !== null ? uData.cost_amount : productCost;
+      return uData;
+    });
+    data.unit_summary = unitSummary;
+  }
+
   res.json({
     success: true,
-    data: { asset: sanitizeAssetForRole(asset, req.user?.role) }
+    data
   });
 });
 
@@ -180,6 +229,11 @@ exports.create = asyncHandler(async (req, res) => {
     created_by: req.user?.id,
     updated_by: req.user?.id
   };
+
+  // If serialized, quantity is computed from units — ignore any quantity provided
+  if (assetData.is_serialized) {
+    assetData.quantity = 0;
+  }
 
   const asset = await Asset.create(assetData);
 
@@ -832,5 +886,209 @@ exports.getHistory = asyncHandler(async (req, res) => {
         totalPages: Math.ceil(count / limit)
       }
     }
+  });
+});
+
+/**
+ * POST /api/v1/assets/import-units
+ * Bulk import serialized units from CSV/XLSX
+ */
+exports.importUnits = asyncHandler(async (req, res) => {
+  const multer = require('multer');
+  const XLSX = require('xlsx');
+  const csvParser = require('csv-parser');
+  const fs = require('fs');
+  const { Readable } = require('stream');
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NO_FILE', message: 'Please upload a CSV or XLSX file' }
+    });
+  }
+
+  // Parse file into rows
+  let rows = [];
+  const filePath = req.file.path;
+  const ext = req.file.originalname.split('.').pop().toLowerCase();
+
+  try {
+    if (ext === 'xlsx' || ext === 'xls') {
+      const workbook = XLSX.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    } else {
+      // CSV
+      rows = await new Promise((resolve, reject) => {
+        const results = [];
+        fs.createReadStream(filePath)
+          .pipe(csvParser())
+          .on('data', (data) => results.push(data))
+          .on('end', () => resolve(results))
+          .on('error', reject);
+      });
+    }
+  } finally {
+    // Cleanup uploaded file
+    try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+  }
+
+  if (rows.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'EMPTY_FILE', message: 'File contains no data rows' }
+    });
+  }
+
+  // Get all condition statuses for name lookup
+  const conditionStatuses = await ConditionStatus.findAll({ raw: true });
+  const conditionMap = {};
+  let defaultConditionId = null;
+  for (const cs of conditionStatuses) {
+    conditionMap[cs.name.toLowerCase()] = cs.id;
+    if (cs.is_default) defaultConditionId = cs.id;
+  }
+
+  // Get existing serial numbers
+  const allSerials = rows.map(r => (r.serial_number || '').trim()).filter(Boolean);
+  const existingSerials = await AssetUnit.findAll({
+    where: { serial_number: { [Op.in]: allSerials } },
+    attributes: ['serial_number'],
+    raw: true
+  });
+  const existingSerialSet = new Set(existingSerials.map(e => e.serial_number));
+
+  // Group rows by product_name (or make + model combo)
+  const grouped = {};
+  for (const row of rows) {
+    const productName = (row.product_name || `${row.make || ''} ${row.model || ''}`.trim()).trim();
+    if (!productName) continue;
+    if (!grouped[productName]) grouped[productName] = [];
+    grouped[productName].push(row);
+  }
+
+  let productsCreated = 0;
+  let productsExisting = 0;
+  let unitsCreated = 0;
+  let unitsSkipped = 0;
+  const errors = [];
+  const seenSerials = new Set();
+
+  for (const [productName, productRows] of Object.entries(grouped)) {
+    // Try to find existing product by make+model (case-insensitive)
+    const firstRow = productRows[0];
+    const make = (firstRow.make || productName.split(' ')[0] || '').trim();
+    const model = (firstRow.model || productName.replace(make, '').trim() || productName).trim();
+
+    let asset = await Asset.findOne({
+      where: {
+        [Op.and]: [
+          sequelize.where(sequelize.fn('LOWER', sequelize.col('make')), make.toLowerCase()),
+          sequelize.where(sequelize.fn('LOWER', sequelize.col('model')), model.toLowerCase())
+        ]
+      }
+    });
+
+    if (asset) {
+      productsExisting++;
+      // Ensure it's marked as serialized
+      if (!asset.is_serialized) {
+        asset.is_serialized = true;
+        await asset.save();
+      }
+    } else {
+      // Create new product
+      const assetTag = await generateAssetTag();
+      asset = await Asset.create({
+        asset_tag: assetTag,
+        make,
+        model,
+        category: (firstRow.category || 'Computer').trim(),
+        asset_type: (firstRow.asset_type || 'Laptop').trim(),
+        is_serialized: true,
+        quantity: 0,
+        price_amount: firstRow.price ? parseFloat(firstRow.price) : null,
+        cost_amount: firstRow.cost ? parseFloat(firstRow.cost) : null,
+        condition_status_id: defaultConditionId,
+        created_by: req.user?.id,
+        updated_by: req.user?.id
+      });
+      productsCreated++;
+    }
+
+    // Create units
+    const unitsToCreate = [];
+    for (const row of productRows) {
+      const sn = (row.serial_number || '').trim();
+      if (!sn) {
+        errors.push({ row, reason: 'Missing serial number' });
+        continue;
+      }
+      if (existingSerialSet.has(sn) || seenSerials.has(sn)) {
+        unitsSkipped++;
+        continue;
+      }
+      seenSerials.add(sn);
+
+      // Lookup condition by name
+      const condName = (row.condition || '').trim().toLowerCase();
+      const condId = condName ? (conditionMap[condName] || defaultConditionId) : (asset.condition_status_id || defaultConditionId);
+
+      // Parse memory — could be "16GB" or "16384" (MB)
+      let memory = null;
+      if (row.memory) {
+        const memStr = String(row.memory).trim().toUpperCase();
+        if (memStr.endsWith('GB')) {
+          memory = parseInt(memStr) * 1024;
+        } else if (memStr.endsWith('MB')) {
+          memory = parseInt(memStr);
+        } else {
+          const num = parseInt(memStr);
+          // If small number, assume GB
+          memory = num <= 128 ? num * 1024 : num;
+        }
+      }
+
+      // Parse storage — could be "256GB" or "256"
+      let storage = null;
+      if (row.storage) {
+        const storStr = String(row.storage).trim().toUpperCase();
+        if (storStr.endsWith('TB')) {
+          storage = parseInt(storStr) * 1024;
+        } else {
+          storage = parseInt(storStr);
+        }
+      }
+
+      unitsToCreate.push({
+        asset_id: asset.id,
+        serial_number: sn,
+        cpu: (row.cpu || '').trim() || null,
+        cpu_model: (row.cpu_model || '').trim() || null,
+        memory,
+        storage,
+        cost_amount: row.cost ? parseFloat(row.cost) : null,
+        price_amount: row.price ? parseFloat(row.price) : null,
+        condition_status_id: condId,
+        notes: (row.notes || '').trim() || null
+      });
+    }
+
+    if (unitsToCreate.length > 0) {
+      await AssetUnit.bulkCreate(unitsToCreate);
+      unitsCreated += unitsToCreate.length;
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      products_created: productsCreated,
+      products_existing: productsExisting,
+      units_created: unitsCreated,
+      units_skipped: unitsSkipped,
+      errors
+    },
+    message: `Import complete: ${unitsCreated} units created across ${productsCreated + productsExisting} products`
   });
 });

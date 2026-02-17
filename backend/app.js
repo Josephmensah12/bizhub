@@ -29,6 +29,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const storefrontRoutes = require('./routes/storefrontRoutes');
 const stockTakeRoutes = require('./routes/stockTakeRoutes');
 const conditionStatusRoutes = require('./routes/conditionStatusRoutes');
+const assetUnitRoutes = require('./routes/assetUnitRoutes');
 
 const app = express();
 
@@ -110,6 +111,7 @@ app.use(`${API_BASE}/reports`, reportRoutes);
 app.use(`${API_BASE}/storefront`, storefrontRoutes);
 app.use(`${API_BASE}/stock-takes`, stockTakeRoutes);
 app.use(`${API_BASE}/condition-statuses`, conditionStatusRoutes);
+app.use(`${API_BASE}/assets/:assetId/units`, assetUnitRoutes);
 
 // 404 handler
 app.use((req, res) => {

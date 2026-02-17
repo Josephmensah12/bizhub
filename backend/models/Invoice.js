@@ -421,6 +421,7 @@ module.exports = (sequelize, DataTypes) => {
   Invoice.prototype.handlePaidTransition = async function(transaction, userId = null) {
     const InvoiceItem = sequelize.models.InvoiceItem;
     const Asset = sequelize.models.Asset;
+    const AssetUnit = sequelize.models.AssetUnit;
     const InventoryItemEvent = sequelize.models.InventoryItemEvent;
 
     const items = await InvoiceItem.findAll({
@@ -431,10 +432,24 @@ module.exports = (sequelize, DataTypes) => {
 
     for (const item of items) {
       if (item.asset) {
+        // Handle serialized unit
+        if (item.asset_unit_id && AssetUnit) {
+          const unit = await AssetUnit.findByPk(item.asset_unit_id, { transaction });
+          if (unit) {
+            unit.status = 'Sold';
+            unit.sold_date = new Date().toISOString().split('T')[0];
+            unit.invoice_item_id = item.id;
+            await unit.save({ transaction });
+          }
+        }
+
         const unreturned = item.quantity - (item.quantity_returned_total || 0);
         if (unreturned > 0) {
-          item.asset.quantity -= unreturned;
-          await item.asset.save({ transaction });
+          // Only decrement quantity for non-serialized products
+          if (!item.asset.is_serialized) {
+            item.asset.quantity -= unreturned;
+            await item.asset.save({ transaction });
+          }
           await item.asset.updateComputedStatus(transaction);
           await InventoryItemEvent.logSold(item.asset, this, userId, transaction);
         }
@@ -449,6 +464,7 @@ module.exports = (sequelize, DataTypes) => {
   Invoice.prototype.handleUnpaidTransition = async function(transaction) {
     const InvoiceItem = sequelize.models.InvoiceItem;
     const Asset = sequelize.models.Asset;
+    const AssetUnit = sequelize.models.AssetUnit;
 
     const items = await InvoiceItem.findAll({
       where: { invoice_id: this.id, voided_at: null },
@@ -458,10 +474,24 @@ module.exports = (sequelize, DataTypes) => {
 
     for (const item of items) {
       if (item.asset) {
+        // Handle serialized unit — revert to Reserved (still on invoice)
+        if (item.asset_unit_id && AssetUnit) {
+          const unit = await AssetUnit.findByPk(item.asset_unit_id, { transaction });
+          if (unit) {
+            unit.status = 'Reserved';
+            unit.sold_date = null;
+            unit.invoice_item_id = null;
+            await unit.save({ transaction });
+          }
+        }
+
         const unreturned = item.quantity - (item.quantity_returned_total || 0);
         if (unreturned > 0) {
-          item.asset.quantity += unreturned;
-          await item.asset.save({ transaction });
+          // Only restore quantity for non-serialized products
+          if (!item.asset.is_serialized) {
+            item.asset.quantity += unreturned;
+            await item.asset.save({ transaction });
+          }
           await item.asset.updateComputedStatus(transaction);
         }
       }

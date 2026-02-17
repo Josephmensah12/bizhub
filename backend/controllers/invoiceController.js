@@ -4,7 +4,7 @@
  * CRUD operations for invoices with payments and inventory locking
  */
 
-const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, AssetUnit, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { sanitizeInvoiceForRole, canSeeCost, canEditInvoices, canVoidInvoices } = require('../middleware/permissions');
 const exchangeRateService = require('../services/exchangeRateService');
@@ -253,8 +253,9 @@ exports.getById = asyncHandler(async (req, res) => {
           {
             model: Asset,
             as: 'asset',
-            attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition']
+            attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'status', 'condition', 'is_serialized']
           },
+          { model: AssetUnit, as: 'assetUnit', attributes: ['id', 'serial_number', 'cpu', 'memory', 'storage', 'status'] },
           { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
         ]
       },
@@ -476,11 +477,13 @@ exports.addItem = asyncHandler(async (req, res) => {
   const {
     assetId, asset_id,
     unitPrice, unit_price,
-    quantity = 1
+    quantity = 1,
+    asset_unit_id, assetUnitId
   } = req.body;
 
   const _assetId = assetId || asset_id;
   const _unitPrice = unitPrice || unit_price;
+  const _assetUnitId = asset_unit_id || assetUnitId;
 
   if (!_assetId) {
     return res.status(400).json({
@@ -539,17 +542,101 @@ exports.addItem = asyncHandler(async (req, res) => {
       });
     }
 
+    // --- Serialized product handling ---
+    if (asset.is_serialized) {
+      if (!_assetUnitId) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          error: { code: 'UNIT_REQUIRED', message: 'asset_unit_id is required for serialized products' }
+        });
+      }
+
+      const unit = await AssetUnit.findOne({
+        where: { id: _assetUnitId, asset_id: _assetId },
+        transaction
+      });
+
+      if (!unit) {
+        await transaction.rollback();
+        return res.status(404).json({
+          success: false,
+          error: { code: 'UNIT_NOT_FOUND', message: 'Unit not found for this product' }
+        });
+      }
+
+      if (unit.status !== 'Available') {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          error: { code: 'UNIT_UNAVAILABLE', message: `Unit is "${unit.status}", not Available` }
+        });
+      }
+
+      // Use unit-level price if available, otherwise product price
+      const unitEffectivePrice = unit.price_amount !== null ? parseFloat(unit.price_amount) : (parseFloat(asset.price_amount) || 0);
+      const sellingPrice = _unitPrice !== undefined ? parseFloat(_unitPrice) : unitEffectivePrice;
+
+      // Calculate cost
+      let unitCost = unit.cost_amount !== null ? parseFloat(unit.cost_amount) : (parseFloat(asset.cost_amount) || 0);
+      const originalCostCurrency = asset.cost_currency || 'USD';
+      const originalCostAmount = unitCost;
+
+      if (originalCostCurrency !== invoice.currency && unitCost > 0) {
+        const convertedCost = await exchangeRateService.convertAmount(unitCost, originalCostCurrency, invoice.currency);
+        unitCost = convertedCost;
+      }
+
+      const description = `${asset.make} ${asset.model} (S/N: ${unit.serial_number}) [${asset.asset_tag}]`;
+
+      // Create invoice item for this unit
+      const item = await InvoiceItem.create({
+        invoice_id: id,
+        asset_id: _assetId,
+        asset_unit_id: unit.id,
+        description,
+        quantity: 1,
+        unit_price_amount: sellingPrice,
+        unit_cost_amount: unitCost,
+        original_cost_currency: originalCostCurrency,
+        original_cost_amount: originalCostAmount
+      }, { transaction });
+
+      // Mark unit as Reserved
+      unit.status = 'Reserved';
+      await unit.save({ transaction });
+
+      await asset.updateComputedStatus(transaction);
+      await InventoryItemEvent.logAddedToInvoice(asset, invoice, req.user?.id, transaction);
+      await transaction.commit();
+      await invoice.recalculateTotals();
+
+      await item.reload({ include: [{ model: Asset, as: 'asset' }, { model: AssetUnit, as: 'assetUnit' }] });
+
+      await ActivityLog.log({
+        actorUserId: req.user.id,
+        actionType: 'INVOICE_ITEM_ADDED',
+        entityType: 'INVOICE',
+        entityId: invoice.id,
+        summary: `Serialized unit added to invoice ${invoice.invoice_number}: ${unit.serial_number}`,
+        metadata: { invoiceNumber: invoice.invoice_number, assetTag: asset.asset_tag, assetId: _assetId, unitId: unit.id, serialNumber: unit.serial_number }
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: { item, invoice },
+        message: 'Serialized unit added to invoice'
+      });
+    }
+
+    // --- Non-serialized product handling (existing logic) ---
+
     // Check if asset is already on this invoice
     const existingItem = await InvoiceItem.findOne({
       where: { invoice_id: id, asset_id: _assetId },
       transaction
     });
 
-    // `available` already reflects current state:
-    //   - For new items: available = on_hand - all_reserved
-    //   - For existing items on this invoice: their qty IS counted in reserved,
-    //     and we're adding MORE on top, so we check the additional qty against available.
-    // In both cases, the check is: requested additional qty <= available.
     if (quantity > available) {
       await transaction.rollback();
       return res.status(400).json({
@@ -1118,6 +1205,15 @@ exports.removeItem = asyncHandler(async (req, res) => {
     const removedAssetTag = item.asset?.asset_tag;
     const removedQuantity = item.quantity;
     const assetRef = item.asset;
+
+    // Revert serialized unit status to Available
+    if (item.asset_unit_id) {
+      const unit = await AssetUnit.findByPk(item.asset_unit_id, { transaction });
+      if (unit && unit.status === 'Reserved') {
+        unit.status = 'Available';
+        await unit.save({ transaction });
+      }
+    }
 
     // Delete the item — this releases the reservation automatically
     await item.destroy({ transaction });
@@ -1912,6 +2008,17 @@ exports.cancel = asyncHandler(async (req, res) => {
       if (item.asset && !item.voided_at) {
         const previousStatus = item.asset.status;
 
+        // Revert serialized unit status to Available
+        if (item.asset_unit_id) {
+          const unit = await AssetUnit.findByPk(item.asset_unit_id, { transaction: dbTransaction });
+          if (unit && ['Reserved', 'Sold'].includes(unit.status)) {
+            unit.status = 'Available';
+            unit.sold_date = null;
+            unit.invoice_item_id = null;
+            await unit.save({ transaction: dbTransaction });
+          }
+        }
+
         // Update computed status (will go back to 'In Stock' if no other active items)
         await item.asset.updateComputedStatus(dbTransaction);
 
@@ -2100,12 +2207,16 @@ exports.getAvailableAssets = asyncHandler(async (req, res) => {
 
   const [assets] = await sequelize.query(
     `SELECT a.id, a.asset_tag, a.make, a.model, a.serial_number,
-            a.condition, a.status, a.quantity,
+            a.condition, a.status, a.quantity, a.is_serialized,
             a.cost_amount, a.cost_currency,
             a.price_amount, a.price_currency,
             a.category, a.asset_type,
             COALESCE(reserved.total, 0) AS reserved_quantity,
-            (a.quantity - COALESCE(reserved.total, 0)) AS available_quantity
+            CASE WHEN a.is_serialized = true THEN
+              (SELECT COUNT(*) FROM asset_units au WHERE au.asset_id = a.id AND au.status = 'Available')
+            ELSE
+              (a.quantity - COALESCE(reserved.total, 0))
+            END AS available_quantity
      FROM assets a
      LEFT JOIN (
        SELECT ii.asset_id, SUM(ii.quantity) AS total
@@ -2116,7 +2227,13 @@ exports.getAvailableAssets = asyncHandler(async (req, res) => {
        GROUP BY ii.asset_id
      ) reserved ON a.id = reserved.asset_id
      WHERE a.deleted_at IS NULL
-       AND (a.quantity - COALESCE(reserved.total, 0)) > 0
+       AND (
+         (a.is_serialized = true AND (SELECT COUNT(*) FROM asset_units au WHERE au.asset_id = a.id AND au.status = 'Available') > 0)
+         OR
+         (a.is_serialized = false AND (a.quantity - COALESCE(reserved.total, 0)) > 0)
+         OR
+         (a.is_serialized IS NULL AND (a.quantity - COALESCE(reserved.total, 0)) > 0)
+       )
        ${searchClause}
        ${categoryClause}
      ORDER BY a.created_at DESC

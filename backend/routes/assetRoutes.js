@@ -113,6 +113,18 @@ router.post('/import/preview', requireRole(['Warehouse', 'Manager', 'Admin']), a
 router.post('/import/validate', requireRole(['Warehouse', 'Manager', 'Admin']), assetImportWizardController.validateImport);
 router.post('/import/commit', requireRole(['Warehouse', 'Manager', 'Admin']), assetImportWizardController.commitImport);
 
+// Import serialized units
+const multer = require('multer');
+const unitUpload = multer({
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    cb(null, allowed.includes(file.mimetype));
+  }
+});
+router.post('/import-units', requireRole(['Admin', 'Manager']), unitUpload.single('file'), assetController.importUnits);
+
 // POST /api/v1/assets
 router.post('/', requireRole(['Warehouse', 'Manager', 'Admin']), assetValidation, assetController.create);
 

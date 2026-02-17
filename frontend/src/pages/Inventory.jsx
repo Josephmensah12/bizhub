@@ -928,13 +928,18 @@ export default function Inventory() {
                       {asset.serial_number || '—'}
                     </td>
                     <td className="px-4 py-4 text-center text-sm text-gray-900">
-                      <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded ${
-                        isUnavailable ? 'bg-red-100 text-red-800 font-medium' :
-                        isPartial ? 'bg-cyan-100 text-cyan-800 font-medium' :
-                        asset.quantity > 1 ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-600'
-                      }`}>
-                        {remaining}/{asset.quantity || 1}
-                      </span>
+                      <div className="flex flex-col items-center gap-0.5">
+                        {asset.is_serialized && (
+                          <span className="text-[10px] font-medium text-purple-600 bg-purple-50 px-1.5 rounded">SN</span>
+                        )}
+                        <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded ${
+                          isUnavailable ? 'bg-red-100 text-red-800 font-medium' :
+                          isPartial ? 'bg-cyan-100 text-cyan-800 font-medium' :
+                          (asset.total_quantity || asset.quantity) > 1 ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-600'
+                        }`}>
+                          {remaining}/{asset.total_quantity || asset.quantity || 1}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       {(() => {

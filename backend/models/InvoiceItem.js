@@ -19,6 +19,15 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    asset_unit_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'asset_units',
+        key: 'id'
+      },
+      comment: 'For serialized products, references the specific unit being sold'
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -148,6 +157,7 @@ module.exports = (sequelize, DataTypes) => {
   InvoiceItem.associate = (models) => {
     InvoiceItem.belongsTo(models.Invoice, { as: 'invoice', foreignKey: 'invoice_id' });
     InvoiceItem.belongsTo(models.Asset, { as: 'asset', foreignKey: 'asset_id' });
+    InvoiceItem.belongsTo(models.AssetUnit, { as: 'assetUnit', foreignKey: 'asset_unit_id' });
     InvoiceItem.belongsTo(models.User, { as: 'voidedBy', foreignKey: 'voided_by_user_id' });
     InvoiceItem.hasMany(models.InvoiceReturnItem, { as: 'returnItems', foreignKey: 'invoice_item_id' });
   };

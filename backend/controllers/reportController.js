@@ -11,7 +11,7 @@
  * - Revenue forecasting
  */
 
-const { Invoice, InvoiceItem, InvoicePayment, Asset, Customer, User, ConditionStatus, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Asset, AssetUnit, Customer, User, ConditionStatus, sequelize } = require('../models');
 const { Op, fn, col, literal, QueryTypes } = require('sequelize');
 
 const asyncHandler = handler => (req, res, next) => {
@@ -1075,7 +1075,7 @@ exports.inventoryValuation = asyncHandler(async (req, res) => {
     order: [['sort_order', 'ASC']]
   });
 
-  // Get all non-sold/scrapped assets with their condition status
+  // Get all non-sold assets with their condition status
   const assets = await Asset.findAll({
     where: {
       status: { [Op.notIn]: ['Sold'] },
@@ -1086,8 +1086,30 @@ exports.inventoryValuation = asyncHandler(async (req, res) => {
       as: 'conditionStatus',
       required: false
     }],
-    attributes: ['id', 'price_amount', 'cost_amount', 'quantity', 'condition_status_id']
+    attributes: ['id', 'price_amount', 'cost_amount', 'quantity', 'condition_status_id', 'is_serialized']
   });
+
+  // For serialized assets, get their units (non-sold/scrapped)
+  const serializedAssetIds = assets.filter(a => a.is_serialized).map(a => a.id);
+  let unitsByAssetId = {};
+  if (serializedAssetIds.length > 0) {
+    const units = await AssetUnit.findAll({
+      where: {
+        asset_id: { [Op.in]: serializedAssetIds },
+        status: { [Op.notIn]: ['Sold', 'Scrapped'] }
+      },
+      include: [{
+        model: ConditionStatus,
+        as: 'conditionStatus',
+        required: false
+      }],
+      attributes: ['id', 'asset_id', 'price_amount', 'cost_amount', 'condition_status_id']
+    });
+    for (const u of units) {
+      if (!unitsByAssetId[u.asset_id]) unitsByAssetId[u.asset_id] = [];
+      unitsByAssetId[u.asset_id].push(u);
+    }
+  }
 
   // Find the default condition (for assets without condition_status_id)
   const defaultCondition = conditions.find(c => c.is_default);
@@ -1113,58 +1135,81 @@ exports.inventoryValuation = asyncHandler(async (req, res) => {
     valuation: 0
   };
 
-  for (const asset of assets) {
-    const qty = asset.quantity || 1;
-    const sellingPrice = parseFloat(asset.price_amount) || 0;
-    const costPrice = parseFloat(asset.cost_amount) || 0;
-
-    totalAtSellingPrice += sellingPrice * qty;
-
-    // Determine which condition rule applies
-    let rule = 'selling_price'; // default
+  // Helper to calculate valuation for a single item
+  function calcValuation(sellingPrice, costPrice, condStatus, defaultCond) {
+    let rule = 'selling_price';
     let ruleValue = null;
     let bucketKey = 'none';
 
-    if (asset.condition_status_id && asset.conditionStatus) {
-      rule = asset.conditionStatus.valuation_rule;
-      ruleValue = asset.conditionStatus.valuation_value;
-      bucketKey = asset.condition_status_id;
-    } else if (defaultCondition) {
-      rule = defaultCondition.valuation_rule;
-      ruleValue = defaultCondition.valuation_value;
+    if (condStatus) {
+      rule = condStatus.valuation_rule || condStatus.dataValues?.valuation_rule || 'selling_price';
+      ruleValue = condStatus.valuation_value || condStatus.dataValues?.valuation_value || null;
+      bucketKey = condStatus.id || condStatus.dataValues?.id;
+    } else if (defaultCond) {
+      rule = defaultCond.valuation_rule;
+      ruleValue = defaultCond.valuation_value;
     }
 
-    // Calculate valuation per unit
-    let unitValuation = 0;
+    let unitVal = 0;
     switch (rule) {
-      case 'selling_price':
-        unitValuation = sellingPrice;
-        break;
-      case 'cost_price':
-        unitValuation = costPrice;
-        break;
-      case 'percentage_of_cost':
-        unitValuation = costPrice * ((ruleValue || 0) / 100);
-        break;
-      case 'fixed_amount':
-        unitValuation = ruleValue || 0;
-        break;
-      case 'zero':
-        unitValuation = 0;
-        break;
-      default:
-        unitValuation = sellingPrice;
+      case 'selling_price': unitVal = sellingPrice; break;
+      case 'cost_price': unitVal = costPrice; break;
+      case 'percentage_of_cost': unitVal = costPrice * ((ruleValue || 0) / 100); break;
+      case 'fixed_amount': unitVal = ruleValue || 0; break;
+      case 'zero': unitVal = 0; break;
+      default: unitVal = sellingPrice;
     }
+    return { unitVal, bucketKey };
+  }
 
-    const assetValuation = Math.round(unitValuation * qty * 100) / 100;
-    totalValuation += assetValuation;
+  for (const asset of assets) {
+    const productPrice = parseFloat(asset.price_amount) || 0;
+    const productCost = parseFloat(asset.cost_amount) || 0;
 
-    if (byCondition[bucketKey]) {
-      byCondition[bucketKey].count += qty;
-      byCondition[bucketKey].valuation += assetValuation;
+    if (asset.is_serialized) {
+      // Iterate over individual units
+      const units = unitsByAssetId[asset.id] || [];
+      for (const unit of units) {
+        const unitPrice = unit.price_amount !== null ? parseFloat(unit.price_amount) : productPrice;
+        const unitCost = unit.cost_amount !== null ? parseFloat(unit.cost_amount) : productCost;
+
+        totalAtSellingPrice += unitPrice;
+
+        // Unit may have its own condition, or fall back to product's, or default
+        const unitCond = unit.conditionStatus || (unit.condition_status_id ? null : asset.conditionStatus);
+        const { unitVal, bucketKey } = calcValuation(unitPrice, unitCost, unitCond || asset.conditionStatus, defaultCondition);
+        const val = Math.round(unitVal * 100) / 100;
+        totalValuation += val;
+
+        // Use the unit's condition_status_id for bucketing if available
+        const bk = unit.condition_status_id ? (byCondition[unit.condition_status_id] ? unit.condition_status_id : 'none')
+          : (asset.condition_status_id ? (byCondition[asset.condition_status_id] ? asset.condition_status_id : 'none') : 'none');
+
+        if (byCondition[bk]) {
+          byCondition[bk].count += 1;
+          byCondition[bk].valuation += val;
+        } else {
+          byCondition['none'].count += 1;
+          byCondition['none'].valuation += val;
+        }
+      }
     } else {
-      byCondition['none'].count += qty;
-      byCondition['none'].valuation += assetValuation;
+      // Non-serialized: use product-level data
+      const qty = asset.quantity || 1;
+      totalAtSellingPrice += productPrice * qty;
+
+      const { unitVal, bucketKey } = calcValuation(productPrice, productCost, asset.conditionStatus, defaultCondition);
+      const assetValuation = Math.round(unitVal * qty * 100) / 100;
+      totalValuation += assetValuation;
+
+      const bk = asset.condition_status_id && byCondition[asset.condition_status_id] ? asset.condition_status_id : 'none';
+      if (byCondition[bk]) {
+        byCondition[bk].count += qty;
+        byCondition[bk].valuation += assetValuation;
+      } else {
+        byCondition['none'].count += qty;
+        byCondition['none'].valuation += assetValuation;
+      }
     }
   }
 

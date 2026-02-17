@@ -21,6 +21,7 @@ export default function AddAsset() {
     model: '',
     status: 'In Stock',
     condition: 'Renewed',
+    is_serialized: false,
     quantity: 1,
     product_category: '',
     subcategory: '',
@@ -142,7 +143,8 @@ export default function AddAsset() {
         storage_gb: formData.storage_gb ? parseInt(formData.storage_gb) : null,
         screen_size_inches: formData.screen_size_inches ? parseFloat(formData.screen_size_inches) : null,
         battery_health_percent: formData.battery_health_percent ? parseInt(formData.battery_health_percent) : null,
-        quantity: parseInt(formData.quantity) || 1,
+        is_serialized: formData.is_serialized,
+        quantity: formData.is_serialized ? 0 : (parseInt(formData.quantity) || 1),
         cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null,
         price_amount: formData.price_amount ? parseFloat(formData.price_amount) : null,
         major_characteristics: formData.major_characteristics
@@ -286,38 +288,65 @@ export default function AddAsset() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Quantity <span className="text-red-500">*</span>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <span className="text-sm font-medium text-gray-700">Serialized Product</span>
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    name="is_serialized"
+                    checked={formData.is_serialized}
+                    onChange={(e) => setFormData(prev => ({ ...prev, is_serialized: e.target.checked, quantity: e.target.checked ? 0 : 1, serial_number: '' }))}
+                    className="sr-only"
+                  />
+                  <div className={`w-10 h-5 rounded-full transition-colors ${formData.is_serialized ? 'bg-purple-600' : 'bg-gray-300'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${formData.is_serialized ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'}`} />
+                  </div>
+                </div>
               </label>
-              <input
-                type="number"
-                name="quantity"
-                value={formData.quantity}
-                onChange={handleChange}
-                min="1"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">Number of units (min: 1)</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.is_serialized
+                  ? 'Quantity is computed from individual units. Add units after creating the product.'
+                  : 'Manual quantity — no individual unit tracking'}
+              </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Serial Number {isSerialRequired && <span className="text-red-500">*</span>}
-              </label>
-              <input
-                type="text"
-                name="serial_number"
-                value={formData.serial_number}
-                onChange={handleChange}
-                required={isSerialRequired}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., SN123456789"
-              />
-              {!isSerialRequired && (
-                <p className="text-xs text-gray-500 mt-1">Optional when quantity {'>'} 1</p>
-              )}
-            </div>
+            {!formData.is_serialized && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleChange}
+                    min="1"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Number of units (min: 1)</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serial Number {isSerialRequired && <span className="text-red-500">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    name="serial_number"
+                    value={formData.serial_number}
+                    onChange={handleChange}
+                    required={isSerialRequired}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., SN123456789"
+                  />
+                  {!isSerialRequired && (
+                    <p className="text-xs text-gray-500 mt-1">Optional when quantity {'>'} 1</p>
+                  )}
+                </div>
+              </>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

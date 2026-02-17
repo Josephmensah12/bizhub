@@ -148,10 +148,18 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: [],
       comment: 'Array of tags like Touchscreen, 2-in-1, Backlit keyboard, etc.'
     },
+    // Serialized flag — if true, quantity is computed from units
+    is_serialized: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'If true, quantity is computed from units. If false, manual quantity.'
+    },
     // Pricing fields
     cost_amount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
+      comment: 'Default cost — units can override',
       validate: {
         min: 0
       }
@@ -171,6 +179,7 @@ module.exports = (sequelize, DataTypes) => {
     price_amount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
+      comment: 'Default selling price — units can override',
       validate: {
         min: 0
       }
@@ -271,6 +280,7 @@ module.exports = (sequelize, DataTypes) => {
     Asset.belongsTo(models.ImportBatch, { as: 'importBatch', foreignKey: 'import_batch_id' });
     Asset.belongsTo(models.ConditionStatus, { as: 'conditionStatus', foreignKey: 'condition_status_id' });
     Asset.hasMany(models.InvoiceItem, { as: 'invoiceItems', foreignKey: 'asset_id' });
+    Asset.hasMany(models.AssetUnit, { foreignKey: 'asset_id', as: 'units' });
   };
 
   /**
