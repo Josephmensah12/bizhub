@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     asset_id: {
       type: DataTypes.INTEGER,
-      allowNull: false
+      allowNull: true
     },
     asset_unit_id: {
       type: DataTypes.INTEGER,
