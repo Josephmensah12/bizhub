@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
@@ -74,10 +75,29 @@ export default function UnitImport() {
         setError('Failed to parse CSV file: ' + e.message);
       }
     } else {
-      // For XLSX, we can't parse client-side without a library, show file info and go to preview
-      setPreviewRows([]);
-      setPreviewGroups([]);
-      setStep('preview');
+      try {
+        const data = await selectedFile.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+        if (rows.length === 0) {
+          setError('File contains no data rows');
+          return;
+        }
+        // Normalize header keys to lowercase
+        const normalized = rows.map(row => {
+          const obj = {};
+          for (const [key, val] of Object.entries(row)) {
+            obj[key.trim().toLowerCase().replace(/\s+/g, '_')] = String(val).trim();
+          }
+          return obj;
+        });
+        setPreviewRows(normalized);
+        setPreviewGroups(groupByProduct(normalized));
+        setStep('preview');
+      } catch (e) {
+        setError('Failed to parse Excel file: ' + e.message);
+      }
     }
   }, []);
 
@@ -280,8 +300,8 @@ export default function UnitImport() {
             </>
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-              <p className="text-gray-500">Excel file detected. Preview is not available for .xlsx files.</p>
-              <p className="text-sm text-gray-400 mt-1">Click "Confirm Import" to process the file on the server.</p>
+              <p className="text-gray-500">No data rows found in this file.</p>
+              <p className="text-sm text-gray-400 mt-1">Click "Confirm Import" to attempt server-side processing.</p>
             </div>
           )}
 
