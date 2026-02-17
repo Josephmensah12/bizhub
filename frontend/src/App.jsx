@@ -14,6 +14,7 @@ import EditAsset from './pages/EditAsset'
 import InventoryImportWizard from './pages/InventoryImportWizard'
 import ImportHistory from './pages/ImportHistory'
 import RecycleBin from './pages/RecycleBin'
+import UnitImport from './pages/UnitImport'
 import Sales from './pages/Sales'
 import Invoices from './pages/Invoices'
 import InvoiceCreate from './pages/InvoiceCreate'
@@ -82,6 +83,7 @@ function App() {
         <Route path="inventory/add" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><AddAsset /></RoleRoute>} />
         <Route path="inventory/import" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><InventoryImportWizard /></RoleRoute>} />
         <Route path="inventory/import-history" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><ImportHistory /></RoleRoute>} />
+        <Route path="inventory/import-units" element={<RoleRoute roles={['Admin', 'Manager']}><UnitImport /></RoleRoute>} />
         <Route path="inventory/recycle-bin" element={<RoleRoute roles={['Admin']}><RecycleBin /></RoleRoute>} />
         <Route path="inventory/:id" element={<AssetDetail />} />
         <Route path="inventory/:id/edit" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse', 'Technician']}><EditAsset /></RoleRoute>} />

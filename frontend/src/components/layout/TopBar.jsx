@@ -8,6 +8,7 @@ const routeTitles = {
   '/inventory/add': 'Add Asset',
   '/inventory/import': 'Import Inventory',
   '/inventory/import-history': 'Import History',
+  '/inventory/import-units': 'Import Units',
   '/inventory/recycle-bin': 'Recycle Bin',
   '/sales': 'Sales',
   '/sales/invoices': 'Invoices',

@@ -586,6 +586,12 @@ export default function Inventory() {
               >
                 Import Assets
               </Link>
+              <Link
+                to="/inventory/import-units"
+                className="btn btn-secondary"
+              >
+                Import Units
+              </Link>
             </>
           )}
           {canAddInventory && (

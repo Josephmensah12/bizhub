@@ -1366,10 +1366,23 @@ exports.voidItem = asyncHandler(async (req, res) => {
       }, { transaction: dbTransaction });
     }
 
+    // Revert serialized unit to Available on void
+    if (item.asset_unit_id) {
+      const unit = await AssetUnit.findByPk(item.asset_unit_id, { transaction: dbTransaction });
+      if (unit) {
+        unit.status = 'Available';
+        unit.sold_date = null;
+        unit.invoice_item_id = null;
+        await unit.save({ transaction: dbTransaction });
+      }
+    }
+
     // Restore on_hand for voided quantity since payment had decremented it
     if (item.asset) {
-      item.asset.quantity += quantityToVoid;
-      await item.asset.save({ transaction: dbTransaction });
+      if (!item.asset.is_serialized) {
+        item.asset.quantity += quantityToVoid;
+        await item.asset.save({ transaction: dbTransaction });
+      }
       await item.asset.updateComputedStatus(dbTransaction);
     }
 

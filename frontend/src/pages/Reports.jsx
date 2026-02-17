@@ -26,7 +26,60 @@ const PERIODS = [
   { id: 'custom', label: 'Custom' },
 ]
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+const COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#f97316']
+
+const CHART_THEME = {
+  grid: { stroke: '#f0f0f0', strokeDasharray: '' },
+  axis: { stroke: '#9ca3af', fontSize: 12, tickLine: false },
+  tooltip: {
+    contentStyle: { backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '10px 14px', fontSize: '13px' },
+    cursor: { fill: 'rgba(124,58,237,0.04)' },
+  },
+  colors: { primary: '#7c3aed', secondary: '#3b82f6', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' },
+}
+
+// SVG tab icons
+function TabIcon({ id, className = 'w-4 h-4' }) {
+  const icons = {
+    'my-performance': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+    'sales': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+    'margins': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+    'products': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 7 1 12 1s5 3 7.5 3a2.5 2.5 0 0 1 0 5H18"/><path d="M8 9h8l-1 12H9L8 9z"/></svg>,
+    'customers': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+    'staff': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+    'inventory': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+    'reconciliation': <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+  }
+  return icons[id] || null
+}
+
+// Metric icon component with colored background
+const METRIC_ICONS = {
+  '💰': { color: '#7c3aed', path: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
+  '📈': { color: '#10b981', path: 'M23 6l-9.5 9.5-5-5L1 18' },
+  '🧾': { color: '#3b82f6', path: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8' },
+  '📅': { color: '#f59e0b', path: 'M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z M16 2v4 M8 2v4 M3 10h18' },
+  '📊': { color: '#7c3aed', path: 'M18 20V10 M12 20V4 M6 20v-6' },
+  '🏷️': { color: '#ef4444', path: 'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z M7 7h.01' },
+  '👥': { color: '#3b82f6', path: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87' },
+  '🎯': { color: '#ef4444', path: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z' },
+  '🆕': { color: '#10b981', path: 'M12 5v14 M5 12h14' },
+  '🔄': { color: '#f59e0b', path: 'M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15' },
+  '✅': { color: '#10b981', path: 'M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3' },
+  '💵': { color: '#10b981', path: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
+  '⏳': { color: '#f59e0b', path: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6v6l4 2' },
+}
+function MetricIcon({ emoji }) {
+  const cfg = METRIC_ICONS[emoji]
+  if (!cfg) return <span className="text-2xl">{emoji}</span>
+  return (
+    <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: cfg.color + '14' }}>
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke={cfg.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d={cfg.path} />
+      </svg>
+    </div>
+  )
+}
 
 function formatCurrency(amount) {
   if (amount == null) return 'GHS 0'
@@ -66,13 +119,13 @@ function InfoTooltip({ text }) {
 // ─── Metric Card ──────────────────────────────────────────────
 function MetricCard({ title, value, subtitle, icon, trend, trendUp, info }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-gray-500 flex items-center gap-1.5">
           {title}
           {info && <InfoTooltip text={info} />}
         </span>
-        <span className="text-2xl">{icon}</span>
+        <MetricIcon emoji={icon} />
       </div>
       <div className="text-2xl font-bold text-gray-900">{value}</div>
       <div className="flex items-center mt-1">
@@ -133,16 +186,26 @@ function SalesTab({ data, loading }) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Trend</h3>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={daily_trend}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-            <YAxis tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} />
-            <Tooltip
+            <defs>
+              <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={CHART_THEME.colors.primary} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={CHART_THEME.colors.primary} stopOpacity={0.02} />
+              </linearGradient>
+              <linearGradient id="gradProfit" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={CHART_THEME.colors.success} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={CHART_THEME.colors.success} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
+            <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <YAxis tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
               formatter={(value) => [formatCurrency(value)]}
               labelFormatter={(d) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
             />
             <Legend />
-            <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} name="Revenue" />
-            <Area type="monotone" dataKey="profit" stroke="#10b981" fill="#10b981" fillOpacity={0.15} name="Profit" />
+            <Area type="monotone" dataKey="revenue" stroke={CHART_THEME.colors.primary} fill="url(#gradRevenue)" strokeWidth={2.5} name="Revenue" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
+            <Area type="monotone" dataKey="profit" stroke={CHART_THEME.colors.success} fill="url(#gradProfit)" strokeWidth={2.5} name="Profit" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -245,15 +308,15 @@ function MarginsTab({ data, loading }) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Margin Trend</h3>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={trend}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-            <YAxis tickFormatter={(v) => `${v.toFixed(0)}%`} />
-            <Tooltip
+            <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
+            <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <YAxis tickFormatter={(v) => `${v.toFixed(0)}%`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
               formatter={(value, name) => [name === 'avg_margin' ? formatPercent(value) : formatCurrency(value), name === 'avg_margin' ? 'Avg Margin' : 'Profit']}
               labelFormatter={(d) => new Date(d).toLocaleDateString()}
             />
             <Legend />
-            <Line type="monotone" dataKey="avg_margin" stroke="#3b82f6" strokeWidth={2} name="Avg Margin %" dot={false} />
+            <Line type="monotone" dataKey="avg_margin" stroke={CHART_THEME.colors.primary} strokeWidth={2.5} name="Avg Margin %" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -429,12 +492,13 @@ function TopSellersTab({ data, loading }) {
               <Pie
                 data={donutData}
                 cx="50%" cy="50%"
-                innerRadius={60} outerRadius={100}
+                innerRadius={70} outerRadius={110}
                 paddingAngle={3}
                 dataKey="value"
                 label={renderDonutLabel}
                 onClick={(entry) => setCategoryFilter(prev => prev === entry.asset_type ? null : entry.asset_type)}
                 cursor="pointer"
+                cornerRadius={4}
               >
                 {donutData.map((entry, i) => (
                   <Cell
@@ -442,12 +506,19 @@ function TopSellersTab({ data, loading }) {
                     fill={COLORS[i % COLORS.length]}
                     opacity={categoryFilter && categoryFilter !== entry.asset_type ? 0.3 : 1}
                     stroke={categoryFilter === entry.asset_type ? '#1d4ed8' : '#fff'}
-                    strokeWidth={categoryFilter === entry.asset_type ? 3 : 1}
+                    strokeWidth={categoryFilter === entry.asset_type ? 3 : 2}
                   />
                 ))}
               </Pie>
-              <Tooltip formatter={(value, name) => [`${value} units`, name]} />
+              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} formatter={(value, name) => [`${value} units`, name]} />
               <Legend />
+              {/* Center label */}
+              <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" className="text-2xl font-bold" fill="#111827" fontSize={28} fontWeight="bold">
+                {donutData.reduce((s, d) => s + d.value, 0)}
+              </text>
+              <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" fill="#6b7280" fontSize={12}>
+                units sold
+              </text>
             </PieChart>
           </ResponsiveContainer>
         ) : (
@@ -585,14 +656,21 @@ function CustomersTab({ data, loading }) {
                   { name: 'New', value: period_customers.new_customers },
                   { name: 'Returning', value: period_customers.returning_customers },
                 ]}
-                cx="50%" cy="50%" outerRadius={80}
+                cx="50%" cy="50%" innerRadius={55} outerRadius={85}
+                paddingAngle={3} cornerRadius={4}
                 dataKey="value" label={({ name, value }) => `${name}: ${value}`}
               >
-                <Cell fill="#3b82f6" />
-                <Cell fill="#10b981" />
+                <Cell fill={CHART_THEME.colors.secondary} />
+                <Cell fill={CHART_THEME.colors.success} />
               </Pie>
-              <Tooltip />
+              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} />
               <Legend />
+              <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" fill="#111827" fontSize={24} fontWeight="bold">
+                {period_customers.new_customers + period_customers.returning_customers}
+              </text>
+              <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" fill="#6b7280" fontSize={11}>
+                customers
+              </text>
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -650,14 +728,14 @@ function StaffTab({ data, loading }) {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue by Staff</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={staff}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value) => [formatCurrency(value)]} />
+            <BarChart data={staff} barCategoryGap="20%">
+              <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
+              <XAxis dataKey="name" stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <YAxis tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor} formatter={(value) => [formatCurrency(value)]} />
               <Legend />
-              <Bar dataKey="total_revenue" fill="#3b82f6" name="Revenue" />
-              <Bar dataKey="total_profit" fill="#10b981" name="Profit" />
+              <Bar dataKey="total_revenue" fill={CHART_THEME.colors.primary} name="Revenue" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="total_profit" fill={CHART_THEME.colors.success} name="Profit" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -764,13 +842,13 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory Aging</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={agingData.aging_buckets}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="age_bucket" />
-                <YAxis />
-                <Tooltip formatter={(value, name) => [name.includes('value') ? formatCurrency(value) : value]} />
+              <BarChart data={agingData.aging_buckets} barCategoryGap="20%">
+                <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
+                <XAxis dataKey="age_bucket" stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+                <YAxis stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+                <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor} formatter={(value, name) => [name.includes('value') ? formatCurrency(value) : value]} />
                 <Legend />
-                <Bar dataKey="total_units" fill="#3b82f6" name="Units" />
+                <Bar dataKey="total_units" fill={CHART_THEME.colors.primary} name="Units" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -894,7 +972,7 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
 function LoadingSpinner() {
   return (
     <div className="flex items-center justify-center h-64">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
     </div>
   )
 }
@@ -1147,20 +1225,20 @@ function ReconciliationTab({ data, loading }) {
             <span className="text-xs text-gray-400">Click a bar to filter invoices below</span>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={daily_collections} className="cursor-pointer">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-              <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip
+            <BarChart data={daily_collections} className="cursor-pointer" barCategoryGap="15%">
+              <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
                 formatter={(value, name) => [formatCurrency(value), name.charAt(0).toUpperCase() + name.slice(1)]}
                 labelFormatter={(d) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
               />
               <Legend />
-              <Bar dataKey="cash" stackId="a" fill={METHOD_COLORS.Cash} name="Cash" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'cash') }} />
+              <Bar dataKey="cash" stackId="a" fill={METHOD_COLORS.Cash} name="Cash" cursor="pointer" radius={[0, 0, 0, 0]} onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'cash') }} />
               <Bar dataKey="momo" stackId="a" fill={METHOD_COLORS.MoMo} name="MoMo" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'momo') }} />
               <Bar dataKey="card" stackId="a" fill={METHOD_COLORS.Card} name="Card" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'card') }} />
               <Bar dataKey="ach" stackId="a" fill={METHOD_COLORS.ACH} name="ACH" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'ach') }} />
-              <Bar dataKey="other" stackId="a" fill={METHOD_COLORS.Other} name="Other" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'other') }} />
+              <Bar dataKey="other" stackId="a" fill={METHOD_COLORS.Other} name="Other" cursor="pointer" radius={[4, 4, 0, 0]} onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'other') }} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1589,7 +1667,7 @@ export default function Reports() {
               onClick={() => setPeriod(p.id)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 period === p.id
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-violet-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -1625,13 +1703,13 @@ export default function Reports() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               activeTab === tab.id
-                ? 'bg-blue-600 text-white shadow-sm'
+                ? 'bg-violet-600 text-white shadow-sm shadow-violet-200'
                 : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
             }`}
           >
-            <span>{tab.icon}</span>
+            <TabIcon id={tab.id} className="w-4 h-4" />
             {tab.label}
           </button>
         ))}
