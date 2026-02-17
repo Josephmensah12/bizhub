@@ -32,8 +32,23 @@ async function startServer() {
       await db.sequelize.sync({ alter: true });
       console.log('✅ Database schema synced');
     } catch (err) {
-      console.error('⚠️ Schema sync FAILED:', err.message);
-      console.error('Full error:', err);
+      console.error('⚠️ Schema sync warning:', err.message);
+    }
+
+    // Seed default condition statuses if table is empty
+    try {
+      const conditionCount = await db.ConditionStatus.count();
+      if (conditionCount === 0) {
+        await db.ConditionStatus.bulkCreate([
+          { name: 'Good', valuation_rule: 'selling_price', valuation_value: null, color: '#10b981', sort_order: 0, is_default: true },
+          { name: 'Fair', valuation_rule: 'selling_price', valuation_value: null, color: '#f59e0b', sort_order: 1, is_default: false },
+          { name: 'Needs Repair', valuation_rule: 'cost_price', valuation_value: null, color: '#f97316', sort_order: 2, is_default: false },
+          { name: 'Parts Only', valuation_rule: 'zero', valuation_value: null, color: '#ef4444', sort_order: 3, is_default: false },
+        ]);
+        console.log('✅ Seeded default condition statuses');
+      }
+    } catch (err) {
+      console.error('⚠️ Condition status seed error:', err.message);
     }
   }
 

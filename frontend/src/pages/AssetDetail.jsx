@@ -202,11 +202,18 @@ export default function AssetDetail() {
         }`}>
           {asset.status}
         </span>
-        {asset.condition && (
+        {asset.conditionStatus ? (
+          <span
+            className="ml-2 inline-block px-3 py-1 text-sm font-semibold rounded-full"
+            style={{ backgroundColor: asset.conditionStatus.color + '20', color: asset.conditionStatus.color }}
+          >
+            {asset.conditionStatus.name}
+          </span>
+        ) : asset.condition ? (
           <span className="ml-2 inline-block px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800">
             {asset.condition}
           </span>
-        )}
+        ) : null}
         {/* Show linked invoice for Reserved or Sold status */}
         {(asset.status === 'Processing' || asset.status === 'Reserved' || asset.status === 'Sold') && (() => {
           const linkedEvent = history.find(e =>

@@ -207,6 +207,15 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: false
     },
+    // Condition status (configurable condition with valuation rules)
+    condition_status_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'condition_statuses',
+        key: 'id'
+      }
+    },
     // Audit fields
     created_by: {
       type: DataTypes.INTEGER,
@@ -263,6 +272,7 @@ module.exports = (sequelize, DataTypes) => {
     Asset.belongsTo(models.User, { as: 'updater', foreignKey: 'updated_by' });
     Asset.belongsTo(models.User, { as: 'deleter', foreignKey: 'deleted_by' });
     Asset.belongsTo(models.ImportBatch, { as: 'importBatch', foreignKey: 'import_batch_id' });
+    Asset.belongsTo(models.ConditionStatus, { as: 'conditionStatus', foreignKey: 'condition_status_id' });
     Asset.hasMany(models.InvoiceItem, { as: 'invoiceItems', foreignKey: 'asset_id' });
   };
 

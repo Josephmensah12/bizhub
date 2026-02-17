@@ -12,6 +12,7 @@ export default function EditAsset() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [taxonomy, setTaxonomy] = useState(null);
+  const [conditionStatuses, setConditionStatuses] = useState([]);
   const [otherCategory, setOtherCategory] = useState('');
   const [otherAssetType, setOtherAssetType] = useState('');
   const [formData, setFormData] = useState({
@@ -38,7 +39,8 @@ export default function EditAsset() {
     cost_amount: '',
     cost_currency: 'USD',
     price_amount: '',
-    price_currency: 'GHS'
+    price_currency: 'GHS',
+    condition_status_id: ''
   });
 
   // Serial number is required only when quantity = 1
@@ -48,16 +50,18 @@ export default function EditAsset() {
   const assetTypesForCategory = taxonomy?.taxonomy?.[formData.category] || [];
 
   useEffect(() => {
-    // Fetch taxonomy and asset in parallel
+    // Fetch taxonomy, condition statuses, and asset in parallel
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [taxonomyRes, assetRes] = await Promise.all([
+        const [taxonomyRes, assetRes, condRes] = await Promise.all([
           axios.get('/api/v1/assets/taxonomy'),
-          axios.get(`/api/v1/assets/${id}`)
+          axios.get(`/api/v1/assets/${id}`),
+          axios.get('/api/v1/condition-statuses')
         ]);
 
         setTaxonomy(taxonomyRes.data.data);
+        setConditionStatuses(condRes.data.data.conditionStatuses || []);
         const asset = assetRes.data.data.asset;
 
         // Populate form with existing data
@@ -85,7 +89,8 @@ export default function EditAsset() {
           cost_amount: asset.cost_amount || '',
           cost_currency: asset.cost_currency || 'USD',
           price_amount: asset.price_amount || '',
-          price_currency: asset.price_currency || 'GHS'
+          price_currency: asset.price_currency || 'GHS',
+          condition_status_id: asset.condition_status_id || ''
         });
 
         setError(null);
@@ -181,7 +186,8 @@ export default function EditAsset() {
         cost_amount: formData.cost_amount ? parseFloat(formData.cost_amount) : null,
         cost_currency: formData.cost_currency || 'USD',
         price_amount: formData.price_amount ? parseFloat(formData.price_amount) : null,
-        price_currency: formData.price_currency || 'GHS'
+        price_currency: formData.price_currency || 'GHS',
+        condition_status_id: formData.condition_status_id ? parseInt(formData.condition_status_id) : null
       };
 
       await axios.put(`/api/v1/assets/${id}`, payload);
@@ -414,6 +420,24 @@ export default function EditAsset() {
                 <option value="Renewed">Renewed</option>
                 <option value="Used">Used</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Condition Status
+              </label>
+              <select
+                name="condition_status_id"
+                value={formData.condition_status_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select Condition Status</option>
+                {conditionStatuses.map(cs => (
+                  <option key={cs.id} value={cs.id}>{cs.name}{cs.is_default ? ' (Default)' : ''}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Used for inventory valuation</p>
             </div>
 
             <div>

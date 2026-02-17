@@ -1,4 +1,4 @@
-const { Asset, User, InventoryItemEvent, sequelize } = require('../models');
+const { Asset, User, InventoryItemEvent, ConditionStatus, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { generateAssetTag } = require('../utils/assetTagGenerator');
 const { getReservedQuantity } = require('../services/inventoryAvailabilityService');
@@ -76,7 +76,8 @@ exports.list = asyncHandler(async (req, res) => {
     order: [[sortBy, sortOrder]],
     include: [
       { model: User, as: 'creator', attributes: ['id', 'full_name'] },
-      { model: User, as: 'updater', attributes: ['id', 'full_name'] }
+      { model: User, as: 'updater', attributes: ['id', 'full_name'] },
+      { model: ConditionStatus, as: 'conditionStatus', attributes: ['id', 'name', 'color', 'valuation_rule'] }
     ],
     attributes: {
       include: [
@@ -132,7 +133,8 @@ exports.getById = asyncHandler(async (req, res) => {
   const asset = await Asset.findByPk(id, {
     include: [
       { model: User, as: 'creator', attributes: ['id', 'full_name', 'email'] },
-      { model: User, as: 'updater', attributes: ['id', 'full_name', 'email'] }
+      { model: User, as: 'updater', attributes: ['id', 'full_name', 'email'] },
+      { model: ConditionStatus, as: 'conditionStatus', attributes: ['id', 'name', 'color', 'valuation_rule'] }
     ]
   });
 

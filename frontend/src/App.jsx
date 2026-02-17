@@ -27,6 +27,7 @@ import CustomerImport from './pages/CustomerImport'
 import Reports from './pages/Reports'
 import CurrencySettings from './pages/CurrencySettings'
 import CompanyProfile from './pages/CompanyProfile'
+import ConditionSettings from './pages/ConditionSettings'
 import Payments from './pages/Payments'
 import UserManagement from './pages/UserManagement'
 import StockTakes from './pages/StockTakes'
@@ -104,6 +105,7 @@ function App() {
         <Route path="users" element={<RoleRoute roles={['Admin']}><UserManagement /></RoleRoute>} />
         <Route path="settings/currency" element={<RoleRoute roles={['Admin', 'Manager']}><CurrencySettings /></RoleRoute>} />
         <Route path="settings/company-profile" element={<RoleRoute roles={['Admin', 'Manager']}><CompanyProfile /></RoleRoute>} />
+        <Route path="settings/condition-statuses" element={<RoleRoute roles={['Admin']}><ConditionSettings /></RoleRoute>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

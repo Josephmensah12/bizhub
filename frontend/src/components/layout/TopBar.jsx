@@ -23,6 +23,7 @@ const routeTitles = {
   '/users': 'User Management',
   '/settings/currency': 'Currency Settings',
   '/settings/company-profile': 'Company Profile',
+  '/settings/condition-statuses': 'Condition Statuses',
 }
 
 function getBreadcrumbs(pathname) {

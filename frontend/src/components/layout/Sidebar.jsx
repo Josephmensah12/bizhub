@@ -166,6 +166,7 @@ const navGroups = [
         submenu: [
           { name: 'Company Profile', path: '/settings/company-profile' },
           { name: 'Currency', path: '/settings/currency' },
+          { name: 'Conditions', path: '/settings/condition-statuses' },
         ]
       },
     ]
@@ -203,29 +204,25 @@ export default function Sidebar() {
         className={`flex flex-col bg-navy-900 transition-all duration-200 ease-in-out ${collapsed ? 'w-[48px]' : 'w-64'}`}
         style={{ minHeight: '100vh' }}
       >
-        {/* Logo */}
-        <div className={`flex items-center ${collapsed ? 'justify-center py-5' : 'px-5 py-5'} border-b border-white/10`}>
+        {/* Logo + collapse toggle */}
+        <div className={`flex items-center ${collapsed ? 'justify-center py-4' : 'justify-between px-5 py-4'} border-b border-white/10`}>
           {collapsed ? (
-            <span className="text-white font-bold text-lg">B</span>
+            <button onClick={() => setCollapsed(false)} className="text-white font-bold text-lg hover:text-primary-400 transition-colors" title="Expand">B</button>
           ) : (
-            <div>
-              <h1 className="text-xl font-bold text-white tracking-wide">BIZHUB</h1>
-              <p className="text-xs text-gray-400 mt-0.5">Payless4Tech</p>
-            </div>
+            <>
+              <div>
+                <h1 className="text-xl font-bold text-white tracking-wide">BIZHUB</h1>
+                <p className="text-xs text-gray-400 mt-0.5">Payless4Tech</p>
+              </div>
+              <button onClick={() => setCollapsed(true)} className="text-gray-400 hover:text-white transition-colors" title="Collapse">
+                {Icons.Collapse}
+              </button>
+            </>
           )}
         </div>
 
-        {/* Collapse toggle */}
-        <button
-          onClick={() => setCollapsed(c => !c)}
-          className={`flex items-center ${collapsed ? 'justify-center' : 'px-4'} py-2 text-gray-400 hover:text-white transition-colors`}
-          title={collapsed ? 'Expand' : 'Collapse'}
-        >
-          <span className={`${collapsed ? '' : 'ml-1'}`}>{Icons.Collapse}</span>
-        </button>
-
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-2 space-y-1">
+        <nav className="flex-1 py-1">
           {navGroups.map((group) => {
             const visibleItems = group.items.filter(item => !userRole || item.roles.includes(userRole))
             if (visibleItems.length === 0) return null
@@ -233,11 +230,11 @@ export default function Sidebar() {
               <div key={group.label}>
                 {/* Group label */}
                 {!collapsed && (
-                  <div className="px-5 pt-4 pb-1">
+                  <div className="px-5 pt-3 pb-0.5">
                     <span className="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">{group.label}</span>
                   </div>
                 )}
-                {collapsed && <div className="h-3" />}
+                {collapsed && <div className="h-2" />}
 
                 {visibleItems.map((item) => {
                   if (item.submenu) {
@@ -248,7 +245,7 @@ export default function Sidebar() {
                         <button
                           onClick={() => !collapsed && toggleSubmenu(item.name)}
                           title={collapsed ? item.name : undefined}
-                          className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'justify-between px-4'} py-2.5 mx-auto transition-colors rounded-lg ${collapsed ? 'mx-1' : 'mx-2'} ${
+                          className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'justify-between px-4'} py-2 mx-auto transition-colors rounded-lg ${collapsed ? 'mx-1' : 'mx-2'} ${
                             subActive
                               ? 'bg-primary-600/20 text-white'
                               : 'text-gray-400 hover:bg-navy-700 hover:text-white'
@@ -265,7 +262,7 @@ export default function Sidebar() {
                           )}
                         </button>
                         {!collapsed && expandedMenus.includes(item.name) && (
-                          <div className="mt-0.5 ml-5 space-y-0.5">
+                          <div className="ml-5">
                             {item.submenu.map(sub => (
                               <NavLink
                                 key={sub.path}
@@ -297,7 +294,7 @@ export default function Sidebar() {
                       end={item.path === '/'}
                       title={collapsed ? item.name : undefined}
                       className={() =>
-                        `flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-colors ${collapsed ? 'mx-1' : 'mx-2'} relative ${
+                        `flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg transition-colors ${collapsed ? 'mx-1' : 'mx-2'} relative ${
                           active
                             ? 'bg-primary-600/20 text-white'
                             : 'text-gray-400 hover:bg-navy-700 hover:text-white'

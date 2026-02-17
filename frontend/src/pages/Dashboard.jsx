@@ -126,21 +126,29 @@ function RevenueBar({ label, value, maxValue }) {
 export default function Dashboard() {
   const { user } = useAuth()
   const [metrics, setMetrics] = useState(null)
+  const [valuation, setValuation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    async function fetchMetrics() {
+    async function fetchData() {
       try {
-        const response = await axios.get('/api/v1/dashboard/metrics')
-        setMetrics(response.data.data)
+        const [metricsRes, valRes] = await Promise.allSettled([
+          axios.get('/api/v1/dashboard/metrics'),
+          axios.get('/api/v1/reports/inventory-valuation')
+        ])
+        if (metricsRes.status === 'fulfilled') setMetrics(metricsRes.value.data.data)
+        if (valRes.status === 'fulfilled') setValuation(valRes.value.data.data)
+        if (metricsRes.status === 'rejected') {
+          setError(metricsRes.reason?.response?.data?.error?.message || 'Failed to load metrics')
+        }
       } catch (err) {
-        setError(err.response?.data?.error?.message || 'Failed to load metrics')
+        setError('Failed to load dashboard data')
       } finally {
         setLoading(false)
       }
     }
-    fetchMetrics()
+    fetchData()
   }, [])
 
   const hour = new Date().getHours()
@@ -187,7 +195,7 @@ export default function Dashboard() {
         <MetricCard
           title="Total Inventory"
           value={metrics?.inventory_on_hand?.total_units || 0}
-          subtitle={`${metrics?.inventory_on_hand?.ready_for_sale || 0} ready for sale`}
+          subtitle={valuation ? `Valued: ${formatCurrency(valuation.total_valuation)}${valuation.adjustment !== 0 ? ` (${valuation.adjustment > 0 ? '+' : ''}${formatCurrency(valuation.adjustment)} adj.)` : ''}` : `${metrics?.inventory_on_hand?.ready_for_sale || 0} ready for sale`}
           icon={MetricIcons.inventory}
         />
         <MetricCard

@@ -10,6 +10,7 @@ export default function AddAsset() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [taxonomy, setTaxonomy] = useState(null);
+  const [conditionStatuses, setConditionStatuses] = useState([]);
   const [otherCategory, setOtherCategory] = useState('');
   const [otherAssetType, setOtherAssetType] = useState('');
   const [formData, setFormData] = useState({
@@ -36,31 +37,39 @@ export default function AddAsset() {
     cost_amount: '',
     cost_currency: 'USD',
     price_amount: '',
-    price_currency: 'GHS'
+    price_currency: 'GHS',
+    condition_status_id: ''
   });
 
-  // Fetch taxonomy on mount
+  // Fetch taxonomy and condition statuses on mount
   useEffect(() => {
-    const fetchTaxonomy = async () => {
+    const fetchInitial = async () => {
       try {
-        const response = await axios.get('/api/v1/assets/taxonomy');
-        setTaxonomy(response.data.data);
+        const [taxonomyRes, condRes] = await Promise.all([
+          axios.get('/api/v1/assets/taxonomy'),
+          axios.get('/api/v1/condition-statuses')
+        ]);
+        setTaxonomy(taxonomyRes.data.data);
+        const statuses = condRes.data.data.conditionStatuses || [];
+        setConditionStatuses(statuses);
         // Set default category and asset_type
-        const categories = response.data.data.categories;
+        const categories = taxonomyRes.data.data.categories;
         if (categories.length > 0) {
           const defaultCategory = categories[0];
-          const assetTypes = response.data.data.taxonomy[defaultCategory] || [];
+          const assetTypes = taxonomyRes.data.data.taxonomy[defaultCategory] || [];
+          const defaultCondition = statuses.find(s => s.is_default);
           setFormData(prev => ({
             ...prev,
             category: defaultCategory,
-            asset_type: assetTypes[0] || ''
+            asset_type: assetTypes[0] || '',
+            condition_status_id: defaultCondition ? defaultCondition.id : ''
           }));
         }
       } catch (err) {
-        console.error('Failed to fetch taxonomy:', err);
+        console.error('Failed to fetch initial data:', err);
       }
     };
-    fetchTaxonomy();
+    fetchInitial();
   }, []);
 
   // Get asset types for selected category
@@ -138,7 +147,8 @@ export default function AddAsset() {
         price_amount: formData.price_amount ? parseFloat(formData.price_amount) : null,
         major_characteristics: formData.major_characteristics
           ? formData.major_characteristics.split(',').map(c => c.trim()).filter(c => c)
-          : []
+          : [],
+        condition_status_id: formData.condition_status_id ? parseInt(formData.condition_status_id) : null
       };
 
       const response = await axios.post('/api/v1/assets', payload);
@@ -355,6 +365,24 @@ export default function AddAsset() {
                 <option value="Renewed">Renewed</option>
                 <option value="Used">Used</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Condition Status
+              </label>
+              <select
+                name="condition_status_id"
+                value={formData.condition_status_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select Condition Status</option>
+                {conditionStatuses.map(cs => (
+                  <option key={cs.id} value={cs.id}>{cs.name}{cs.is_default ? ' (Default)' : ''}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Used for inventory valuation</p>
             </div>
 
             <div>

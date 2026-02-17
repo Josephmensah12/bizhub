@@ -11,7 +11,7 @@
  * - Revenue forecasting
  */
 
-const { Invoice, InvoiceItem, InvoicePayment, Asset, Customer, User, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Asset, Customer, User, ConditionStatus, sequelize } = require('../models');
 const { Op, fn, col, literal, QueryTypes } = require('sequelize');
 
 const asyncHandler = handler => (req, res, next) => {
@@ -1061,6 +1061,133 @@ exports.reconciliation = asyncHandler(async (req, res) => {
         days_outstanding: inv.days_outstanding || 0,
         status: inv.status
       }))
+    }
+  });
+});
+
+/**
+ * GET /api/v1/reports/inventory-valuation
+ * Inventory valuation based on condition status rules
+ */
+exports.inventoryValuation = asyncHandler(async (req, res) => {
+  // Get all condition statuses
+  const conditions = await ConditionStatus.findAll({
+    order: [['sort_order', 'ASC']]
+  });
+
+  // Get all non-sold/scrapped assets with their condition status
+  const assets = await Asset.findAll({
+    where: {
+      status: { [Op.notIn]: ['Sold'] },
+      deleted_at: null
+    },
+    include: [{
+      model: ConditionStatus,
+      as: 'conditionStatus',
+      required: false
+    }],
+    attributes: ['id', 'price_amount', 'cost_amount', 'quantity', 'condition_status_id']
+  });
+
+  // Find the default condition (for assets without condition_status_id)
+  const defaultCondition = conditions.find(c => c.is_default);
+
+  let totalValuation = 0;
+  let totalAtSellingPrice = 0;
+  const byCondition = {};
+
+  // Initialize buckets for each condition
+  for (const cond of conditions) {
+    byCondition[cond.id] = {
+      condition: cond.name,
+      color: cond.color,
+      count: 0,
+      valuation: 0
+    };
+  }
+  // Bucket for assets with no condition assigned
+  byCondition['none'] = {
+    condition: defaultCondition ? defaultCondition.name : 'Unassigned',
+    color: defaultCondition ? defaultCondition.color : '#6b7280',
+    count: 0,
+    valuation: 0
+  };
+
+  for (const asset of assets) {
+    const qty = asset.quantity || 1;
+    const sellingPrice = parseFloat(asset.price_amount) || 0;
+    const costPrice = parseFloat(asset.cost_amount) || 0;
+
+    totalAtSellingPrice += sellingPrice * qty;
+
+    // Determine which condition rule applies
+    let rule = 'selling_price'; // default
+    let ruleValue = null;
+    let bucketKey = 'none';
+
+    if (asset.condition_status_id && asset.conditionStatus) {
+      rule = asset.conditionStatus.valuation_rule;
+      ruleValue = asset.conditionStatus.valuation_value;
+      bucketKey = asset.condition_status_id;
+    } else if (defaultCondition) {
+      rule = defaultCondition.valuation_rule;
+      ruleValue = defaultCondition.valuation_value;
+    }
+
+    // Calculate valuation per unit
+    let unitValuation = 0;
+    switch (rule) {
+      case 'selling_price':
+        unitValuation = sellingPrice;
+        break;
+      case 'cost_price':
+        unitValuation = costPrice;
+        break;
+      case 'percentage_of_cost':
+        unitValuation = costPrice * ((ruleValue || 0) / 100);
+        break;
+      case 'fixed_amount':
+        unitValuation = ruleValue || 0;
+        break;
+      case 'zero':
+        unitValuation = 0;
+        break;
+      default:
+        unitValuation = sellingPrice;
+    }
+
+    const assetValuation = Math.round(unitValuation * qty * 100) / 100;
+    totalValuation += assetValuation;
+
+    if (byCondition[bucketKey]) {
+      byCondition[bucketKey].count += qty;
+      byCondition[bucketKey].valuation += assetValuation;
+    } else {
+      byCondition['none'].count += qty;
+      byCondition['none'].valuation += assetValuation;
+    }
+  }
+
+  // Convert byCondition to array, merge 'none' into default if applicable
+  const byConditionArray = Object.entries(byCondition)
+    .filter(([, v]) => v.count > 0)
+    .map(([, v]) => ({
+      condition: v.condition,
+      color: v.color,
+      count: v.count,
+      valuation: Math.round(v.valuation * 100) / 100
+    }));
+
+  totalValuation = Math.round(totalValuation * 100) / 100;
+  totalAtSellingPrice = Math.round(totalAtSellingPrice * 100) / 100;
+
+  res.json({
+    success: true,
+    data: {
+      total_valuation: totalValuation,
+      total_at_selling_price: totalAtSellingPrice,
+      adjustment: Math.round((totalValuation - totalAtSellingPrice) * 100) / 100,
+      by_condition: byConditionArray
     }
   });
 });

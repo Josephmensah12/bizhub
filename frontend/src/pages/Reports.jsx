@@ -704,13 +704,60 @@ function StaffTab({ data, loading }) {
 }
 
 // ─── Inventory Tab ────────────────────────────────────────────
-function InventoryTab({ agingData, lowStockData, loadingAging, loadingLowStock }) {
+function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAging, loadingLowStock, loadingCondVal }) {
   const loading = loadingAging || loadingLowStock
 
   if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-6">
+      {/* Condition Valuation Breakdown */}
+      {conditionValuation && !loadingCondVal && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory Valuation by Condition</h3>
+          <div className="grid grid-cols-3 gap-4 mb-5">
+            <div className="p-3 rounded-lg border border-gray-200">
+              <div className="text-sm text-gray-500">Total Valuation</div>
+              <div className="text-xl font-bold text-gray-900">{formatCurrency(conditionValuation.total_valuation)}</div>
+            </div>
+            <div className="p-3 rounded-lg border border-gray-200">
+              <div className="text-sm text-gray-500">At Selling Price</div>
+              <div className="text-xl font-bold text-gray-900">{formatCurrency(conditionValuation.total_at_selling_price)}</div>
+            </div>
+            <div className={`p-3 rounded-lg border ${conditionValuation.adjustment < 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+              <div className="text-sm text-gray-500">Adjustment</div>
+              <div className={`text-xl font-bold ${conditionValuation.adjustment < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {conditionValuation.adjustment > 0 ? '+' : ''}{formatCurrency(conditionValuation.adjustment)}
+              </div>
+            </div>
+          </div>
+          {conditionValuation.by_condition?.length > 0 && (
+            <div className="space-y-2">
+              {conditionValuation.by_condition.map((item) => {
+                const maxVal = Math.max(...conditionValuation.by_condition.map(c => c.count), 1)
+                const pct = Math.max((item.count / maxVal) * 100, 4)
+                return (
+                  <div key={item.condition} className="flex items-center gap-3">
+                    <div className="w-28 text-sm text-gray-600 shrink-0 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                      {item.condition}
+                    </div>
+                    <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%`, backgroundColor: item.color }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 w-10 text-right">{item.count}</span>
+                    <span className="text-sm text-gray-500 w-28 text-right">{formatCurrency(item.valuation)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Aging Buckets */}
       {agingData && (
         <>
@@ -1433,6 +1480,7 @@ export default function Reports() {
   const [staffData, setStaffData] = useState(null)
   const [agingData, setAgingData] = useState(null)
   const [lowStockData, setLowStockData] = useState(null)
+  const [conditionValuation, setConditionValuation] = useState(null)
   const [reconData, setReconData] = useState(null)
 
   // Loading states
@@ -1444,6 +1492,7 @@ export default function Reports() {
   const [loadingStaff, setLoadingStaff] = useState(false)
   const [loadingAging, setLoadingAging] = useState(false)
   const [loadingLowStock, setLoadingLowStock] = useState(false)
+  const [loadingCondVal, setLoadingCondVal] = useState(false)
   const [loadingRecon, setLoadingRecon] = useState(false)
 
   const [error, setError] = useState(null)
@@ -1502,6 +1551,7 @@ export default function Reports() {
       case 'inventory':
         fetchReport('inventory-aging', setAgingData, setLoadingAging)
         fetchReport('low-stock', setLowStockData, setLoadingLowStock)
+        fetchReport('inventory-valuation', setConditionValuation, setLoadingCondVal)
         break
       case 'reconciliation':
         fetchReport('reconciliation', setReconData, setLoadingRecon)
@@ -1606,8 +1656,10 @@ export default function Reports() {
           <InventoryTab
             agingData={agingData}
             lowStockData={lowStockData}
+            conditionValuation={conditionValuation}
             loadingAging={loadingAging}
             loadingLowStock={loadingLowStock}
+            loadingCondVal={loadingCondVal}
           />
         )}
         {activeTab === 'reconciliation' && <ReconciliationTab data={reconData} loading={loadingRecon} />}

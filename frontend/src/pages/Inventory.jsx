@@ -954,8 +954,19 @@ export default function Inventory() {
                         );
                       })()}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {asset.condition || 'N/A'}
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      {asset.conditionStatus ? (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                          style={{ backgroundColor: asset.conditionStatus.color + '20', color: asset.conditionStatus.color }}
+                        >
+                          {asset.conditionStatus.name}
+                        </span>
+                      ) : asset.condition ? (
+                        <span className="text-gray-500">{asset.condition}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {asset.price_amount ? `${asset.price_currency} ${parseFloat(asset.price_amount).toFixed(2)}` : 'N/A'}
