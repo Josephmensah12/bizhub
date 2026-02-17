@@ -10,7 +10,6 @@ module.exports = (sequelize, DataTypes) => {
     },
     asset_tag: {
       type: DataTypes.STRING(20),
-      unique: true,
       allowNull: false,
       comment: 'Human-friendly unique ID like INV-000001'
     },
@@ -26,7 +25,6 @@ module.exports = (sequelize, DataTypes) => {
     },
     serial_number: {
       type: DataTypes.STRING(100),
-      unique: true,
       allowNull: true,
       comment: 'Optional when quantity > 1 (multiple units cannot share one serial)'
     },
@@ -198,7 +196,6 @@ module.exports = (sequelize, DataTypes) => {
     salesbinder_id: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      unique: true,
       comment: 'Original SalesBinder item ID for tracking imports'
     },
     // Storefront

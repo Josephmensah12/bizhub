@@ -109,7 +109,6 @@ module.exports = (sequelize, DataTypes) => {
     salesbinder_id: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      unique: true,
       comment: 'Original SalesBinder customer ID for tracking imports'
     },
     // Audit
@@ -126,7 +125,10 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true,
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    indexes: [
+      { unique: true, fields: ['salesbinder_id'] }
+    ]
   });
 
   // Virtual for display name
