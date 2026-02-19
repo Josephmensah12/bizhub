@@ -20,6 +20,11 @@ module.exports = {
         v_available   INTEGER;
         v_invoice_status TEXT;
       BEGIN
+        -- Skip check if no asset linked (e.g. preorder conversions)
+        IF NEW.asset_id IS NULL THEN
+          RETURN NEW;
+        END IF;
+
         -- Only enforce for invoices that are actively reserving (UNPAID, PARTIALLY_PAID)
         SELECT status INTO v_invoice_status
           FROM invoices
