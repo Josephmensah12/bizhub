@@ -8,10 +8,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const API_URL = process.env.API_URL || 'http://bizhub.railway.internal:3000';
 
-// Proxy /api requests to the backend
-app.use('/api', createProxyMiddleware({
+// Proxy /api requests to the backend (pathFilter keeps the /api prefix)
+app.use(createProxyMiddleware({
   target: API_URL,
   changeOrigin: true,
+  pathFilter: '/api',
 }));
 
 // Serve static files from the Vite build
