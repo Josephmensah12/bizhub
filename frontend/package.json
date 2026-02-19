@@ -7,13 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "serve dist -s -l tcp://0.0.0.0:${PORT:-3000}",
+    "start": "node server.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
     "axios": "^1.6.5",
     "date-fns": "^3.0.6",
+    "express": "^4.22.1",
     "html5-qrcode": "^2.3.8",
+    "http-proxy-middleware": "^3.0.5",
     "lodash": "^4.17.23",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
