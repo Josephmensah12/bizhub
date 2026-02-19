@@ -1,158 +1,202 @@
 /**
  * Inventory Availability Service
  *
- * Computes real-time available quantity for assets by examining invoice_items.
- * Reservation is "virtual" — an asset is reserved when it appears on an
- * active (non-CANCELLED, non-PAID) invoice line that hasn't been voided.
- *
- * On-hand quantity (asset.quantity) is only decremented when an invoice
- * becomes PAID, and restored on void/return/cancel.
+ * Manages inventory reservations and availability calculations
+ * Handles the complex logic of tracking what's available vs. reserved on invoices
  */
 
 const { Asset, InvoiceItem, Invoice, sequelize } = require('../models');
-const { QueryTypes, Op } = require('sequelize');
+const { Op } = require('sequelize');
 
 /**
- * Get total reserved quantity for a single asset.
- * Reserved = sum of qty on active (UNPAID | PARTIALLY_PAID) non-voided invoice items.
- *
- * @param {number} assetId
- * @param {object} [options]
- * @param {Transaction} [options.transaction] - Sequelize transaction
- * @returns {Promise<number>} reserved quantity
+ * Get total reserved quantity for an asset across all active invoices
+ * Active = non-CANCELLED, non-PAID invoices (UNPAID, PARTIALLY_PAID)
+ * 
+ * @param {number} assetId - Asset ID
+ * @returns {number} Total reserved quantity
  */
-async function getReservedQuantity(assetId, options = {}) {
-  const queryOptions = { type: QueryTypes.SELECT };
-  if (options.transaction) queryOptions.transaction = options.transaction;
-
-  const [result] = await sequelize.query(
-    `SELECT COALESCE(SUM(ii.quantity), 0) AS reserved
-     FROM invoice_items ii
-     JOIN invoices i ON ii.invoice_id = i.id
-     WHERE ii.asset_id = :assetId
-       AND i.status NOT IN ('CANCELLED', 'PAID')
-       AND ii.voided_at IS NULL`,
-    { replacements: { assetId }, ...queryOptions }
-  );
-
-  return parseInt(result.reserved) || 0;
-}
-
-/**
- * Compute availability for a single asset with row-level locking.
- * Uses SELECT … FOR UPDATE on the asset row to prevent race conditions
- * when multiple requests try to reserve the same item concurrently.
- *
- * @param {number} assetId
- * @param {object} [options]
- * @param {Transaction} [options.transaction] - REQUIRED for row locking
- * @returns {Promise<{ available: number, reserved: number, asset: Asset|null }>}
- */
-async function computeAvailability(assetId, options = {}) {
-  const { transaction } = options;
-
-  // Lock the asset row if inside a transaction
-  let asset;
-  if (transaction) {
-    asset = await Asset.findByPk(assetId, {
-      transaction,
-      lock: transaction.LOCK.UPDATE
+async function getReservedQuantity(assetId) {
+  try {
+    const reservedResult = await InvoiceItem.findOne({
+      attributes: [
+        [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('quantity')), 0), 'total_reserved']
+      ],
+      include: [{
+        model: Invoice,
+        as: 'invoice',
+        where: {
+          status: {
+            [Op.in]: ['UNPAID', 'PARTIALLY_PAID']
+          }
+        },
+        attributes: [] // Don't include invoice data, just use for filtering
+      }],
+      where: {
+        asset_id: assetId,
+        voided_at: null
+      },
+      raw: true
     });
-  } else {
-    asset = await Asset.findByPk(assetId);
+
+    return parseInt(reservedResult?.total_reserved || 0);
+  } catch (error) {
+    console.error('Error calculating reserved quantity:', error);
+    return 0;
   }
-
-  if (!asset) {
-    return { available: 0, reserved: 0, asset: null };
-  }
-
-  const reserved = await getReservedQuantity(assetId, { transaction });
-  const onHand = parseInt(asset.quantity) || 0;
-  const available = Math.max(0, onHand - reserved);
-
-  return { available, reserved, asset };
 }
 
 /**
- * Compute availability for multiple assets in a single query.
- * Returns a Map of assetId → { reserved, available, onHand }.
- *
- * @param {number[]} assetIds
- * @param {object} [options]
- * @param {Transaction} [options.transaction]
- * @returns {Promise<Map<number, { reserved: number, available: number, onHand: number }>>}
+ * Compute availability for a single asset with proper locking
+ * 
+ * @param {number} assetId - Asset ID  
+ * @param {Object} options - Options object
+ * @param {Transaction} options.transaction - Database transaction for locking
+ * @returns {Object} { available, asset } - Available quantity and asset object
  */
-async function computeBulkAvailability(assetIds, options = {}) {
-  const result = new Map();
+async function computeAvailability(assetId, { transaction } = {}) {
+  try {
+    const queryOptions = transaction ? { transaction, lock: true } : {};
+    
+    // Get asset with SELECT FOR UPDATE locking if transaction provided
+    const asset = await Asset.findByPk(assetId, queryOptions);
+    
+    if (!asset) {
+      return { available: 0, asset: null };
+    }
 
-  if (!assetIds || assetIds.length === 0) return result;
+    // Calculate reserved quantity on active invoices
+    const reserved = await getReservedQuantity(assetId);
+    
+    // Available = on-hand quantity minus reserved on active invoices
+    const available = Math.max(0, (asset.quantity || 0) - reserved);
 
-  const queryOptions = { type: QueryTypes.SELECT };
-  if (options.transaction) queryOptions.transaction = options.transaction;
-
-  // Get all reserved quantities in one query
-  const rows = await sequelize.query(
-    `SELECT ii.asset_id,
-            COALESCE(SUM(ii.quantity), 0) AS reserved
-     FROM invoice_items ii
-     JOIN invoices i ON ii.invoice_id = i.id
-     WHERE ii.asset_id IN (:assetIds)
-       AND i.status NOT IN ('CANCELLED', 'PAID')
-       AND ii.voided_at IS NULL
-     GROUP BY ii.asset_id`,
-    { replacements: { assetIds }, ...queryOptions }
-  );
-
-  // Build a lookup from the query results
-  const reservedMap = new Map();
-  for (const row of rows) {
-    reservedMap.set(parseInt(row.asset_id), parseInt(row.reserved) || 0);
+    return { 
+      available,
+      asset
+    };
+  } catch (error) {
+    console.error('Error computing availability:', error);
+    return { available: 0, asset: null };
   }
+}
 
-  // Get on-hand quantities for all requested assets
-  const findOptions = {
-    where: { id: { [Op.in]: assetIds } },
-    attributes: ['id', 'quantity'],
-    paranoid: false // include soft-deleted so callers can check
-  };
-  if (options.transaction) findOptions.transaction = options.transaction;
+/**
+ * Compute bulk availability for multiple assets
+ * 
+ * @param {number[]} assetIds - Array of asset IDs
+ * @returns {Map} Map of assetId -> { reserved, available, asset }
+ */
+async function computeBulkAvailability(assetIds) {
+  try {
+    if (!assetIds || assetIds.length === 0) {
+      return new Map();
+    }
 
-  const assets = await Asset.findAll(findOptions);
-
-  for (const asset of assets) {
-    const onHand = parseInt(asset.quantity) || 0;
-    const reserved = reservedMap.get(asset.id) || 0;
-    result.set(asset.id, {
-      reserved,
-      onHand,
-      available: Math.max(0, onHand - reserved)
+    // Get all assets in one query
+    const assets = await Asset.findAll({
+      where: {
+        id: {
+          [Op.in]: assetIds
+        }
+      }
     });
-  }
 
-  return result;
+    // Get reserved quantities for all assets in one query
+    const reservedResults = await InvoiceItem.findAll({
+      attributes: [
+        'asset_id',
+        [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('quantity')), 0), 'total_reserved']
+      ],
+      include: [{
+        model: Invoice,
+        as: 'invoice',
+        where: {
+          status: {
+            [Op.in]: ['UNPAID', 'PARTIALLY_PAID']
+          }
+        },
+        attributes: []
+      }],
+      where: {
+        asset_id: {
+          [Op.in]: assetIds
+        },
+        voided_at: null
+      },
+      group: ['asset_id'],
+      raw: true
+    });
+
+    // Create lookup map for reserved quantities
+    const reservedMap = new Map();
+    reservedResults.forEach(result => {
+      reservedMap.set(result.asset_id, parseInt(result.total_reserved || 0));
+    });
+
+    // Build final availability map
+    const availabilityMap = new Map();
+    
+    assets.forEach(asset => {
+      const reserved = reservedMap.get(asset.id) || 0;
+      const available = Math.max(0, (asset.quantity || 0) - reserved);
+      
+      availabilityMap.set(asset.id, {
+        reserved,
+        available,
+        asset
+      });
+    });
+
+    return availabilityMap;
+  } catch (error) {
+    console.error('Error computing bulk availability:', error);
+    return new Map();
+  }
 }
 
 /**
- * Check availability and reserve in one step.
- * This is a convenience wrapper that computes availability within a
- * transaction and returns whether the requested quantity is available.
- *
- * NOTE: The actual "reservation" happens when the caller creates the
- * InvoiceItem row. This function only validates that stock is sufficient.
- *
- * @param {number} assetId
- * @param {number} requestedQty
- * @param {object} [options]
- * @param {Transaction} [options.transaction]
- * @returns {Promise<{ ok: boolean, available: number, asset: Asset|null }>}
+ * Check and reserve inventory for an asset
+ * This is a placeholder - may be used for future reservation logic
+ * 
+ * @param {number} assetId - Asset ID
+ * @param {number} quantity - Quantity to reserve
+ * @param {Object} options - Options object
+ * @param {Transaction} options.transaction - Database transaction
+ * @returns {Object} { success, available, message }
  */
-async function checkAndReserve(assetId, requestedQty, options = {}) {
-  const { available, asset } = await computeAvailability(assetId, options);
-  return {
-    ok: available >= requestedQty,
-    available,
-    asset
-  };
+async function checkAndReserve(assetId, quantity, { transaction } = {}) {
+  try {
+    const { available, asset } = await computeAvailability(assetId, { transaction });
+    
+    if (!asset) {
+      return { 
+        success: false, 
+        available: 0, 
+        message: 'Asset not found' 
+      };
+    }
+
+    if (quantity > available) {
+      return { 
+        success: false, 
+        available, 
+        message: `Insufficient inventory. Available: ${available}, Requested: ${quantity}` 
+      };
+    }
+
+    return { 
+      success: true, 
+      available, 
+      message: 'Reservation successful' 
+    };
+  } catch (error) {
+    console.error('Error in checkAndReserve:', error);
+    return { 
+      success: false, 
+      available: 0, 
+      message: 'Error checking availability' 
+    };
+  }
 }
 
 module.exports = {
