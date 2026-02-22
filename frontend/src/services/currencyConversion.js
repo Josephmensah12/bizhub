@@ -59,8 +59,8 @@ async function getExchangeRate(baseCurrency, quoteCurrency) {
 
     // Fallback rates - markup only applied to GHS conversions
     const baseRates = {
-      'USD_GHS': 12.5,
-      'GBP_GHS': 16.0,
+      'USD_GHS': 11.0,
+      'GBP_GHS': 14.0,
       'USD_GBP': 0.79,
       'GBP_USD': 1.27
     };
