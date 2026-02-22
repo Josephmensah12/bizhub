@@ -29,8 +29,14 @@ async function startServer() {
 
   if (dbConnected) {
     try {
-      await db.sequelize.sync({ alter: true });
-      console.log('✅ Database schema synced');
+      if (NODE_ENV === 'production') {
+        // In production, only sync without altering — use migrations for schema changes
+        await db.sequelize.sync();
+        console.log('✅ Database schema synced (safe mode)');
+      } else {
+        await db.sequelize.sync({ alter: true });
+        console.log('✅ Database schema synced (alter mode)');
+      }
     } catch (err) {
       console.error('⚠️ Schema sync warning:', err.message);
     }
