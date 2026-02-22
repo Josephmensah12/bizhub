@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 function formatCurrency(amount) {
   if (amount == null) return 'GHS 0'
@@ -277,7 +278,7 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom 2-col: Lead Sources + Aging Stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Lead Sources */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-5">Lead Sources (This Month)</h2>
@@ -310,6 +311,31 @@ export default function Dashboard() {
             <AgingBar label="90+ days" count={agingData['90_plus_days'] || 0} maxCount={agingMax} color="bg-red-500" alert />
           </div>
         </div>
+      </div>
+
+      {/* Top 10 by Quantity */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h2 className="text-base font-semibold text-gray-900 mb-5">Top 10 Items by Quantity</h2>
+        {metrics?.top_by_quantity && metrics.top_by_quantity.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(metrics.top_by_quantity.length * 40, 200)}>
+            <BarChart
+              layout="vertical"
+              data={metrics.top_by_quantity.map(item => ({
+                name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
+                quantity: Number(item.quantity)
+              }))}
+              margin={{ top: 0, right: 30, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+              <XAxis type="number" allowDecimals={false} />
+              <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 13 }} />
+              <Tooltip />
+              <Bar dataKey="quantity" fill="#6366f1" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-sm text-gray-400 py-4 text-center">No inventory data</p>
+        )}
       </div>
     </div>
   )

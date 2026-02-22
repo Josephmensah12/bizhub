@@ -103,6 +103,16 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const todayTotalAmount = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.total_amount) || 0), 0);
   const todayCollected = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.amount_paid) || 0), 0);
 
+  // Top 10 items by quantity
+  const topByQuantity = await Asset.sequelize.query(
+    `SELECT id, asset_tag, make, model, quantity
+     FROM assets
+     WHERE deleted_at IS NULL
+     ORDER BY quantity DESC
+     LIMIT 10`,
+    { type: Asset.sequelize.QueryTypes.SELECT }
+  );
+
   // Build response
   const data = {
     today_sales: {
@@ -137,7 +147,8 @@ exports.getMetrics = asyncHandler(async (req, res) => {
       '60_days': aging30to60,
       '90_days': aging60to90,
       '90_plus_days': aging90Plus
-    }
+    },
+    top_by_quantity: topByQuantity
   };
 
   // Only include total_value for roles that can see cost
