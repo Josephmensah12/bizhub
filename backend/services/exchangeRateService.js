@@ -1,45 +1,65 @@
 /**
  * Exchange Rate Service
  *
- * Fetches and caches exchange rates for supported currency pairs
- * Phase 1: Uses hardcoded rates (can be replaced with external API in Phase 2)
+ * Fetches and caches exchange rates for supported currency pairs.
+ * Uses open.er-api.com (free, no key needed) with daily caching.
+ * Falls back to hardcoded rates if API fails.
  */
 
 const { ExchangeRateCache } = require('../models');
-const { Op } = require('sequelize');
+const https = require('https');
 
-// Hardcoded rates for Phase 1 (base rates without markup)
-const HARDCODED_RATES = {
-  'USD_GHS': 12.5,
-  'GHS_USD': 1 / 12.5,
-  'GBP_GHS': 16.0,
-  'GHS_GBP': 1 / 16.0,
+// Fallback rates (only used if API is unreachable)
+const FALLBACK_RATES = {
+  'USD_GHS': 11.0,
+  'GHS_USD': 1 / 11.0,
+  'GBP_GHS': 14.0,
+  'GHS_GBP': 1 / 14.0,
   'USD_GBP': 0.79,
   'GBP_USD': 1 / 0.79
 };
 
 /**
- * Get exchange rate for a currency pair
- * @param {string} baseCurrency - Base currency code
- * @param {string} quoteCurrency - Quote currency code
- * @param {Date} rateDate - Date for the rate (defaults to today)
- * @returns {Promise<number>} Exchange rate
+ * Fetch live rates from open.er-api.com
+ */
+function fetchLiveRates(baseCurrency) {
+  return new Promise((resolve, reject) => {
+    const url = `https://open.er-api.com/v6/latest/${baseCurrency}`;
+    https.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.result === 'success' && json.rates) {
+            resolve(json.rates);
+          } else {
+            reject(new Error('API returned unexpected response'));
+          }
+        } catch (e) {
+          reject(new Error('Failed to parse exchange rate API response'));
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+/**
+ * Get exchange rate for a currency pair.
+ * Checks cache first, then fetches live rate, falls back to hardcoded.
  */
 async function getExchangeRate(baseCurrency, quoteCurrency, rateDate = null) {
-  // Same currency = 1
-  if (baseCurrency === quoteCurrency) {
-    return 1;
-  }
+  if (baseCurrency === quoteCurrency) return 1;
 
-  const today = rateDate || new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = rateDate ? new Date(rateDate) : new Date();
+  const dateStr = today.toISOString().split('T')[0];
 
-  // Try to get from cache
+  // Try cache first
   const cached = await ExchangeRateCache.findOne({
     where: {
       base_currency: baseCurrency,
       quote_currency: quoteCurrency,
-      rate_date: today
+      rate_date: dateStr
     }
   });
 
@@ -47,75 +67,103 @@ async function getExchangeRate(baseCurrency, quoteCurrency, rateDate = null) {
     return parseFloat(cached.rate);
   }
 
-  // Fetch new rate (using hardcoded rates for Phase 1)
-  const pairKey = `${baseCurrency}_${quoteCurrency}`;
-  const rate = HARDCODED_RATES[pairKey];
+  // Fetch live rate
+  let rate = null;
+  let source = 'fallback';
 
+  try {
+    const rates = await fetchLiveRates(baseCurrency);
+    if (rates[quoteCurrency]) {
+      rate = rates[quoteCurrency];
+      source = 'open.er-api.com';
+
+      // Cache all supported pairs from this response
+      const supportedQuotes = ['USD', 'GHS', 'GBP'].filter(c => c !== baseCurrency);
+      for (const quote of supportedQuotes) {
+        if (rates[quote]) {
+          await ExchangeRateCache.upsert({
+            base_currency: baseCurrency,
+            quote_currency: quote,
+            rate: rates[quote],
+            rate_date: dateStr,
+            source: 'open.er-api.com',
+            fetched_at: new Date()
+          }).catch(() => {}); // Ignore upsert conflicts
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`Exchange rate API failed for ${baseCurrency}/${quoteCurrency}:`, err.message);
+  }
+
+  // Fallback to hardcoded
   if (!rate) {
-    throw new Error(`Exchange rate not available for ${baseCurrency}/${quoteCurrency}`);
+    const pairKey = `${baseCurrency}_${quoteCurrency}`;
+    rate = FALLBACK_RATES[pairKey];
+    source = 'fallback';
+
+    if (!rate) {
+      throw new Error(`Exchange rate not available for ${baseCurrency}/${quoteCurrency}`);
+    }
   }
 
   // Cache the rate
-  await ExchangeRateCache.create({
+  await ExchangeRateCache.upsert({
     base_currency: baseCurrency,
     quote_currency: quoteCurrency,
     rate: rate,
-    rate_date: today,
-    source: 'hardcoded',
+    rate_date: dateStr,
+    source,
     fetched_at: new Date()
-  });
+  }).catch(() => {});
 
   return rate;
 }
 
 /**
- * Get the latest exchange rate (with caching)
- * @param {string} baseCurrency
- * @param {string} quoteCurrency
- * @returns {Promise<Object>} Rate info with metadata
+ * Get the latest exchange rate with metadata
  */
 async function getLatestRate(baseCurrency, quoteCurrency) {
   const rate = await getExchangeRate(baseCurrency, quoteCurrency);
+
+  // Find the cached entry for source info
+  const dateStr = new Date().toISOString().split('T')[0];
+  const cached = await ExchangeRateCache.findOne({
+    where: {
+      base_currency: baseCurrency,
+      quote_currency: quoteCurrency,
+      rate_date: dateStr
+    }
+  });
 
   return {
     baseCurrency,
     quoteCurrency,
     rate,
-    source: 'hardcoded',
-    date: new Date().toISOString().split('T')[0],
-    note: 'Phase 1: Using hardcoded rates. Will integrate live API in Phase 2.'
+    source: cached?.source || 'unknown',
+    date: dateStr,
+    fetchedAt: cached?.fetched_at || new Date()
   };
 }
 
 /**
  * Convert amount between currencies
- * @param {number} amount
- * @param {string} fromCurrency
- * @param {string} toCurrency
- * @returns {Promise<number>} Converted amount
  */
 async function convertAmount(amount, fromCurrency, toCurrency) {
-  if (fromCurrency === toCurrency) {
-    return amount;
-  }
-
+  if (fromCurrency === toCurrency) return amount;
   const rate = await getExchangeRate(fromCurrency, toCurrency);
   return amount * rate;
 }
 
 /**
  * Get all cached rates for a specific date
- * @param {Date} date
- * @returns {Promise<Array>} Cached rates
  */
 async function getCachedRates(date = null) {
   const targetDate = date || new Date();
-  targetDate.setHours(0, 0, 0, 0);
+  const dateStr = targetDate.toISOString().split('T')[0];
 
   return await ExchangeRateCache.findAll({
-    where: {
-      rate_date: targetDate
-    },
+    where: { rate_date: dateStr },
     order: [['created_at', 'DESC']]
   });
 }
