@@ -1,4 +1,6 @@
-const { Asset, Invoice } = require('../models');
+const db = require('../models');
+const { Asset, Invoice } = db;
+const sequelize = db.sequelize;
 const { Op } = require('sequelize');
 const { canSeeCost } = require('../middleware/permissions');
 
@@ -36,7 +38,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     }
   }) || 0;
 
-  // Get aging stock (assets created more than 30/60/90 days ago)
+  // Get aging stock using purchase_date (actual acquisition date) with fallback to created_at
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -46,37 +48,40 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
+  // Use COALESCE(purchase_date, created_at) so imported items age from their real acquisition date
+  const ageDateExpr = sequelize.literal("COALESCE(purchase_date, created_at)");
+
   const agingUnder30 = await Asset.count({
     where: {
       status: 'In Stock',
-      created_at: { [Op.gte]: thirtyDaysAgo }
+      [Op.and]: sequelize.where(ageDateExpr, { [Op.gte]: thirtyDaysAgo })
     }
   });
 
   const aging30to60 = await Asset.count({
     where: {
       status: 'In Stock',
-      created_at: {
-        [Op.gte]: sixtyDaysAgo,
-        [Op.lt]: thirtyDaysAgo
-      }
+      [Op.and]: [
+        sequelize.where(ageDateExpr, { [Op.gte]: sixtyDaysAgo }),
+        sequelize.where(ageDateExpr, { [Op.lt]: thirtyDaysAgo })
+      ]
     }
   });
 
   const aging60to90 = await Asset.count({
     where: {
       status: 'In Stock',
-      created_at: {
-        [Op.gte]: ninetyDaysAgo,
-        [Op.lt]: sixtyDaysAgo
-      }
+      [Op.and]: [
+        sequelize.where(ageDateExpr, { [Op.gte]: ninetyDaysAgo }),
+        sequelize.where(ageDateExpr, { [Op.lt]: sixtyDaysAgo })
+      ]
     }
   });
 
   const aging90Plus = await Asset.count({
     where: {
       status: 'In Stock',
-      created_at: { [Op.lt]: ninetyDaysAgo }
+      [Op.and]: sequelize.where(ageDateExpr, { [Op.lt]: ninetyDaysAgo })
     }
   });
 
