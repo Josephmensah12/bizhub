@@ -54,7 +54,8 @@ async function main() {
     }
 
     // True USD cost = GHS cost / exchange rate
-    const usdCost = parseFloat((info.cost_ghs / rate).toFixed(2));
+    const rawCost = info.cost_ghs / rate;
+    const usdCost = isNaN(rawCost) || !isFinite(rawCost) ? null : parseFloat(rawCost.toFixed(2));
 
     await sequelize.query(`
       UPDATE asset_units 

@@ -2,11 +2,16 @@ require('dotenv').config();
 
 module.exports = {
   development: {
-    username: process.env.DB_USER || 'bizhub_user',
-    password: process.env.DB_PASSWORD || 'password',
-    database: process.env.DB_NAME || 'bizhub_db',
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
+    ...(process.env.DATABASE_URL
+      ? { use_env_variable: 'DATABASE_URL' }
+      : {
+          username: process.env.DB_USER || 'bizhub_user',
+          password: process.env.DB_PASSWORD || 'password',
+          database: process.env.DB_NAME || 'bizhub_db',
+          host: process.env.DB_HOST || 'localhost',
+          port: process.env.DB_PORT || 5432,
+        }
+    ),
     dialect: 'postgres',
     logging: console.log,
     pool: {

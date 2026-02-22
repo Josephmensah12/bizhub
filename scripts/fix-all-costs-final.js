@@ -79,12 +79,17 @@ async function main() {
     }
 
     // Determine exchange rate: spreadsheet field > DB enriched value > current live rate
-    let rate = info.exchange_rate;
-    let rateSource = 'spreadsheet';
+    // Parse rate - handle strings like "GHC 16.00"
+    let rate = typeof info.exchange_rate === 'string'
+      ? parseFloat(info.exchange_rate.replace(/[^0-9.]/g, ''))
+      : info.exchange_rate;
+    if (isNaN(rate) || !rate) rate = null;
+    let rateSource = rate ? 'spreadsheet' : null;
 
     if (!rate && unit.purchase_exchange_rate) {
       rate = parseFloat(unit.purchase_exchange_rate);
-      rateSource = 'enriched';
+      if (isNaN(rate)) rate = null;
+      if (rate) rateSource = 'enriched';
     }
     if (!rate) {
       rate = currentRate;
@@ -92,7 +97,8 @@ async function main() {
     }
 
     // Convert GHS cost back to USD
-    const usdCost = parseFloat((info.cost_ghs / rate).toFixed(2));
+    const rawCost = info.cost_ghs / rate;
+    const usdCost = isNaN(rawCost) || !isFinite(rawCost) ? null : parseFloat(rawCost.toFixed(2));
 
     await sequelize.query(`
       UPDATE asset_units 

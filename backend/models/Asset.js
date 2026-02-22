@@ -207,6 +207,19 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Original SalesBinder item ID for tracking imports'
     },
+    purchase_date: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    purchase_exchange_rate: {
+      type: DataTypes.DECIMAL(10, 4),
+      allowNull: true,
+      comment: 'USD/GHS exchange rate at time of purchase',
+      get() {
+        const val = this.getDataValue('purchase_exchange_rate');
+        return val === null ? null : parseFloat(val);
+      }
+    },
     // Storefront
     featured: {
       type: DataTypes.BOOLEAN,

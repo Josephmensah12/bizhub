@@ -222,7 +222,7 @@ async function main() {
 
         // Insert units
         for (const unit of group.units) {
-          const serial = (unit['Serial #'] || unit.SKU || '').trim();
+          const serial = String(unit['Serial #'] || unit.SKU || '').trim();
           if (!serial) continue;
 
           const unitCpu = unit.CPU || null;
