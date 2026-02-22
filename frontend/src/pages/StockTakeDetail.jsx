@@ -117,8 +117,8 @@ export default function StockTakeDetail() {
     setActionLoading(true)
     try {
       const res = await axios.post(`/api/v1/stock-takes/${id}/submit-review`)
-      setStockTake(res.data.data.stockTake)
-      fetchStockTake()
+      alert(res.data.message || 'Submitted for review')
+      navigate('/stock-takes')
     } catch (err) {
       alert(err.response?.data?.error?.message || 'Failed to submit')
     } finally {
@@ -131,9 +131,8 @@ export default function StockTakeDetail() {
     setActionLoading(true)
     try {
       const res = await axios.post(`/api/v1/stock-takes/${id}/finalize`)
-      setStockTake(res.data.data.stockTake)
-      setProgress(res.data.data.summary)
-      alert(res.data.message)
+      alert(res.data.message || 'Stock take finalized successfully')
+      navigate('/stock-takes')
     } catch (err) {
       alert(err.response?.data?.error?.message || 'Failed to finalize')
     } finally {
