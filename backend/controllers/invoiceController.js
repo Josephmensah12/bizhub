@@ -108,20 +108,15 @@ exports.list = asyncHandler(async (req, res) => {
     sortOrder = 'DESC'
   } = req.query;
 
-  // Default to current month
-  const now = new Date();
-  const defaultDateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
-  const defaultDateTo = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-  const startDate = dateFrom ? new Date(dateFrom) : defaultDateFrom;
-  const endDate = dateTo ? new Date(dateTo) : defaultDateTo;
-
   // Build where clause
-  const where = {
-    invoice_date: {
-      [Op.between]: [startDate, endDate]
-    }
-  };
+  const where = {};
+
+  // Only filter by date if explicitly provided
+  if (dateFrom || dateTo) {
+    const startDate = dateFrom ? new Date(dateFrom) : new Date('2000-01-01');
+    const endDate = dateTo ? new Date(dateTo) : new Date('2099-12-31');
+    where.invoice_date = { [Op.between]: [startDate, endDate] };
+  }
 
   if (status) {
     const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
