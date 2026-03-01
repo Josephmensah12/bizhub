@@ -221,8 +221,8 @@ exports.list = asyncHandler(async (req, res) => {
         totalPages: Math.ceil(count / limit)
       },
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString()
+        from: dateFrom || null,
+        to: dateTo || null
       }
     }
   });
