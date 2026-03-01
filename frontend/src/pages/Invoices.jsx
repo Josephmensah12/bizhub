@@ -44,6 +44,8 @@ function getDateRange(preset) {
   const month = now.getMonth();
 
   switch (preset) {
+    case 'all':
+      return null;
     case 'today':
       const today = new Date(year, month, now.getDate());
       return { from: today, to: today };
@@ -63,10 +65,7 @@ function getDateRange(preset) {
         to: now
       };
     default:
-      return {
-        from: new Date(year, month, 1),
-        to: new Date(year, month + 1, 0)
-      };
+      return null;
   }
 }
 
@@ -117,7 +116,7 @@ export default function Invoices() {
   const [showProfit, setShowProfit] = useState(false);
 
   // Filters
-  const [datePreset, setDatePreset] = useState('current-month');
+  const [datePreset, setDatePreset] = useState('all');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [statusFilter, setStatusFilter] = useState([]);
@@ -141,24 +140,23 @@ export default function Invoices() {
       setError(null);
 
       // Calculate date range
-      let dateFrom, dateTo;
-      if (datePreset === 'custom' && customDateFrom && customDateTo) {
-        dateFrom = customDateFrom;
-        dateTo = customDateTo;
-      } else {
-        const range = getDateRange(datePreset);
-        dateFrom = range.from.toISOString().split('T')[0];
-        dateTo = range.to.toISOString().split('T')[0];
-      }
-
       const params = {
-        dateFrom,
-        dateTo,
         page: pagination.page,
         limit: pagination.limit,
         sortBy: 'invoice_date',
         sortOrder: 'DESC'
       };
+
+      if (datePreset === 'custom' && customDateFrom && customDateTo) {
+        params.dateFrom = customDateFrom;
+        params.dateTo = customDateTo;
+      } else if (datePreset !== 'all') {
+        const range = getDateRange(datePreset);
+        if (range) {
+          params.dateFrom = range.from.toISOString().split('T')[0];
+          params.dateTo = range.to.toISOString().split('T')[0];
+        }
+      }
 
       if (statusFilter.length > 0) {
         params.status = statusFilter.join(',');
@@ -286,6 +284,14 @@ export default function Invoices() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
             <div className="flex gap-2">
+              <button
+                onClick={() => handleDatePresetChange('all')}
+                className={`px-3 py-1.5 text-sm rounded-md border ${
+                  datePreset === 'all' ? 'bg-primary-100 border-primary-500 text-primary-700' : 'border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                All
+              </button>
               <button
                 onClick={() => handleDatePresetChange('today')}
                 className={`px-3 py-1.5 text-sm rounded-md border ${
