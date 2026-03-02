@@ -115,6 +115,10 @@ export default function Invoices() {
   // Show/hide profit metrics
   const [showProfit, setShowProfit] = useState(false);
 
+  // Search
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+
   // Filters
   const [datePreset, setDatePreset] = useState('all');
   const [customDateFrom, setCustomDateFrom] = useState('');
@@ -129,10 +133,19 @@ export default function Invoices() {
     totalPages: 0
   });
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   // Fetch invoices when filters change
   useEffect(() => {
     fetchInvoices();
-  }, [datePreset, customDateFrom, customDateTo, statusFilter, pagination.page]);
+  }, [datePreset, customDateFrom, customDateTo, statusFilter, search, pagination.page]);
 
   const fetchInvoices = async () => {
     try {
@@ -160,6 +173,10 @@ export default function Invoices() {
 
       if (statusFilter.length > 0) {
         params.status = statusFilter.join(',');
+      }
+
+      if (search) {
+        params.search = search;
       }
 
       const response = await axios.get('/api/v1/invoices', { params });
@@ -280,6 +297,18 @@ export default function Invoices() {
       {/* Filters */}
       <div className="card mb-6">
         <div className="flex flex-wrap gap-4 items-end">
+          {/* Search */}
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Invoice #, customer name, or phone..."
+              className="w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
           {/* Date Preset */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>

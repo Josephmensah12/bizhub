@@ -102,6 +102,7 @@ exports.list = asyncHandler(async (req, res) => {
     dateTo,
     status,
     customerId,
+    search,
     page = 1,
     limit = 50,
     sortBy = 'invoice_date',
@@ -127,6 +128,17 @@ exports.list = asyncHandler(async (req, res) => {
     where.customer_id = customerId;
   }
 
+  if (search) {
+    where[Op.or] = [
+      { invoice_number: { [Op.iLike]: `%${search}%` } },
+      { '$customer.first_name$': { [Op.iLike]: `%${search}%` } },
+      { '$customer.last_name$': { [Op.iLike]: `%${search}%` } },
+      { '$customer.company_name$': { [Op.iLike]: `%${search}%` } },
+      { '$customer.phone_raw$': { [Op.iLike]: `%${search}%` } },
+      { '$customer.phone_e164$': { [Op.iLike]: `%${search}%` } },
+    ];
+  }
+
   // Sales users can only see their own invoices
   if (req.user?.role === 'Sales') {
     where.created_by = req.user.id;
@@ -140,6 +152,7 @@ exports.list = asyncHandler(async (req, res) => {
     limit: parseInt(limit),
     offset: parseInt(offset),
     order: [[sortBy, sortOrder]],
+    subQuery: false,
     include: [
       { model: Customer, as: 'customer', attributes: ['id', 'first_name', 'last_name', 'company_name'] },
       { model: User, as: 'creator', attributes: ['id', 'full_name'] }
