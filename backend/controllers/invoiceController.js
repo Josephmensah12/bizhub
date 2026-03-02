@@ -163,11 +163,13 @@ exports.list = asyncHandler(async (req, res) => {
   const metrics = await Invoice.findOne({
     where,
     attributes: [
-      [sequelize.fn('SUM', sequelize.col('total_amount')), 'totalRevenue'],
-      [sequelize.fn('SUM', sequelize.col('amount_paid')), 'totalCollected'],
-      [sequelize.fn('SUM', sequelize.col('balance_due')), 'totalOutstanding'],
-      [sequelize.fn('COUNT', sequelize.col('id')), 'invoiceCount']
+      [sequelize.fn('SUM', sequelize.col('Invoice.total_amount')), 'totalRevenue'],
+      [sequelize.fn('SUM', sequelize.col('Invoice.amount_paid')), 'totalCollected'],
+      [sequelize.fn('SUM', sequelize.col('Invoice.balance_due')), 'totalOutstanding'],
+      [sequelize.fn('COUNT', sequelize.col('Invoice.id')), 'invoiceCount']
     ],
+    include: search ? [{ model: Customer, as: 'customer', attributes: [] }] : [],
+    subQuery: false,
     raw: true
   });
 
@@ -180,11 +182,13 @@ exports.list = asyncHandler(async (req, res) => {
   const netMetrics = await Invoice.findOne({
     where: netWhere,
     attributes: [
-      [sequelize.fn('SUM', sequelize.col('total_amount')), 'netTotal'],
-      [sequelize.fn('SUM', sequelize.col('total_cost_amount')), 'netCost'],
-      [sequelize.fn('SUM', sequelize.col('total_profit_amount')), 'netProfit'],
-      [sequelize.fn('COUNT', sequelize.col('id')), 'netCount']
+      [sequelize.fn('SUM', sequelize.col('Invoice.total_amount')), 'netTotal'],
+      [sequelize.fn('SUM', sequelize.col('Invoice.total_cost_amount')), 'netCost'],
+      [sequelize.fn('SUM', sequelize.col('Invoice.total_profit_amount')), 'netProfit'],
+      [sequelize.fn('COUNT', sequelize.col('Invoice.id')), 'netCount']
     ],
+    include: search ? [{ model: Customer, as: 'customer', attributes: [] }] : [],
+    subQuery: false,
     raw: true
   });
   const netTotal = parseFloat(netMetrics.netTotal) || 0;
