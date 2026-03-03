@@ -407,8 +407,23 @@ async function main() {
           if (existing.length > 0) {
             assetId = existing[0].id;
             await sequelize.query(
-              `UPDATE assets SET is_serialized = true, updated_at = NOW() WHERE id = :id`,
-              { replacements: { id: assetId }, transaction: t }
+              `UPDATE assets SET is_serialized = true,
+                purchase_date = COALESCE(:purchase_date, purchase_date),
+                purchase_exchange_rate = COALESCE(:purchase_rate, purchase_exchange_rate),
+                cost_amount = COALESCE(:cost, cost_amount),
+                price_amount = COALESCE(:price, price_amount),
+                updated_at = NOW()
+              WHERE id = :id`,
+              {
+                replacements: {
+                  id: assetId,
+                  purchase_date: purchaseDate,
+                  purchase_rate: purchaseRate,
+                  cost: avgCost > 0 ? avgCost.toFixed(2) : null,
+                  price: avgPrice > 0 ? avgPrice.toFixed(2) : null
+                },
+                transaction: t
+              }
             );
             assetsUpdated++;
           } else {
