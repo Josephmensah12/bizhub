@@ -448,11 +448,11 @@ exports.customerInsights = asyncHandler(async (req, res) => {
  */
 exports.inventoryAgingReport = asyncHandler(async (req, res) => {
   const agingBuckets = await sequelize.query(`
-    SELECT 
-      CASE 
-        WHEN created_at >= NOW() - INTERVAL '30 days' THEN '0-30 days'
-        WHEN created_at >= NOW() - INTERVAL '60 days' THEN '31-60 days'
-        WHEN created_at >= NOW() - INTERVAL '90 days' THEN '61-90 days'
+    SELECT
+      CASE
+        WHEN COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '30 days' THEN '0-30 days'
+        WHEN COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '60 days' THEN '31-60 days'
+        WHEN COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '90 days' THEN '61-90 days'
         ELSE '90+ days'
       END as age_bucket,
       COUNT(*) as item_count,
@@ -463,20 +463,20 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
     WHERE status = 'In Stock'
       AND deleted_at IS NULL
     GROUP BY 1
-    ORDER BY MIN(created_at) DESC
+    ORDER BY MIN(COALESCE(purchase_date, created_at)) DESC
   `, { type: QueryTypes.SELECT });
 
   // Oldest unsold items
   const oldestItems = await sequelize.query(`
-    SELECT 
+    SELECT
       id, asset_tag, make, model, category, asset_type,
       serial_number, quantity, price_amount, cost_amount,
-      created_at,
-      EXTRACT(DAY FROM NOW() - created_at) as days_in_stock
+      COALESCE(purchase_date, created_at) as stock_date,
+      EXTRACT(DAY FROM NOW() - COALESCE(purchase_date, created_at)) as days_in_stock
     FROM assets
     WHERE status = 'In Stock'
       AND deleted_at IS NULL
-    ORDER BY created_at ASC
+    ORDER BY COALESCE(purchase_date, created_at) ASC
     LIMIT 20
   `, { type: QueryTypes.SELECT });
 
@@ -489,7 +489,7 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       SUM(quantity) as total_units,
       COALESCE(SUM(price_amount * quantity), 0) as retail_value,
       COALESCE(SUM(cost_amount * quantity), 0) as cost_value,
-      AVG(EXTRACT(DAY FROM NOW() - created_at)) as avg_days_in_stock
+      AVG(EXTRACT(DAY FROM NOW() - COALESCE(purchase_date, created_at))) as avg_days_in_stock
     FROM assets
     WHERE status = 'In Stock'
       AND deleted_at IS NULL
