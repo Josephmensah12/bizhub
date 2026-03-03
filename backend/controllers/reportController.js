@@ -62,6 +62,23 @@ function parseDateRange(query) {
 }
 
 /**
+ * Helper: Determine chart granularity based on date range
+ * > 60 days → monthly, otherwise daily
+ */
+function getGranularity(startDate, endDate) {
+  const diffMs = new Date(endDate) - new Date(startDate);
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  return diffDays > 60 ? 'monthly' : 'daily';
+}
+
+function trendGroupExpr(granularity) {
+  if (granularity === 'monthly') {
+    return { select: "DATE_TRUNC('month', invoice_date)::date as date", group: "DATE_TRUNC('month', invoice_date)" };
+  }
+  return { select: 'DATE(invoice_date) as date', group: 'DATE(invoice_date)' };
+}
+
+/**
  * GET /api/v1/reports/sales
  * Sales summary with trends
  */
@@ -102,10 +119,12 @@ exports.salesReport = asyncHandler(async (req, res) => {
     raw: true
   });
 
-  // Daily sales trend
+  // Sales trend (daily or monthly based on range)
+  const salesGranularity = getGranularity(startDate, endDate);
+  const salesTrendExpr = trendGroupExpr(salesGranularity);
   const dailyTrend = await sequelize.query(`
-    SELECT 
-      DATE(invoice_date) as date,
+    SELECT
+      ${salesTrendExpr.select},
       COUNT(*) as invoice_count,
       COALESCE(SUM(total_amount), 0) as revenue,
       COALESCE(SUM(total_cost_amount), 0) as cost,
@@ -114,7 +133,7 @@ exports.salesReport = asyncHandler(async (req, res) => {
     WHERE invoice_date BETWEEN :startDate AND :endDate
       AND status != 'CANCELLED'
       AND is_deleted = false
-    GROUP BY DATE(invoice_date)
+    GROUP BY ${salesTrendExpr.group}
     ORDER BY date ASC
   `, {
     replacements: { startDate, endDate },
@@ -151,7 +170,8 @@ exports.salesReport = asyncHandler(async (req, res) => {
         revenue: parseFloat(d.revenue),
         cost: parseFloat(d.cost),
         profit: parseFloat(d.profit)
-      }))
+      })),
+      granularity: salesGranularity
     }
   });
 });
@@ -652,10 +672,12 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     type: QueryTypes.SELECT
   });
 
-  // Margin trend over time
+  // Margin trend over time (daily or monthly based on range)
+  const marginGranularity = getGranularity(startDate, endDate);
+  const marginTrendExpr = trendGroupExpr(marginGranularity);
   const marginTrend = await sequelize.query(`
     SELECT
-      DATE(invoice_date) as date,
+      ${marginTrendExpr.select},
       CASE WHEN SUM(total_amount) > 0
         THEN (SUM(total_profit_amount) / SUM(total_amount) * 100)
         ELSE 0 END as avg_margin,
@@ -666,7 +688,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
       AND status != 'CANCELLED'
       AND is_deleted = false
       AND total_amount > 0
-    GROUP BY DATE(invoice_date)
+    GROUP BY ${marginTrendExpr.group}
     ORDER BY date ASC
   `, {
     replacements: { startDate, endDate },
@@ -740,7 +762,8 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
         avg_margin: parseFloat(t.avg_margin),
         total_profit: parseFloat(t.total_profit),
         total_revenue: parseFloat(t.total_revenue)
-      }))
+      })),
+      granularity: marginGranularity
     }
   });
 });
@@ -915,10 +938,15 @@ exports.reconciliation = asyncHandler(async (req, res) => {
       : 0
   }));
 
-  // 5. Daily collections breakdown
+  // 5. Collections breakdown (daily or monthly based on range)
+  const reconGranularity = getGranularity(startDate, endDate);
+  const reconTrendExpr = trendGroupExpr(reconGranularity);
+  const reconGroupExpr = reconGranularity === 'monthly'
+    ? { select: "DATE_TRUNC('month', p.payment_date)::date AS date", group: "DATE_TRUNC('month', p.payment_date)" }
+    : { select: 'DATE(p.payment_date) AS date', group: 'DATE(p.payment_date)' };
   const dailyCollections = await sequelize.query(`
     SELECT
-      DATE(p.payment_date) AS date,
+      ${reconGroupExpr.select},
       SUM(CASE WHEN p.payment_method = 'Cash' THEN p.amount ELSE 0 END) AS cash,
       SUM(CASE WHEN p.payment_method = 'MoMo' THEN p.amount ELSE 0 END) AS momo,
       SUM(CASE WHEN p.payment_method = 'Card' THEN p.amount ELSE 0 END) AS card,
@@ -929,7 +957,7 @@ exports.reconciliation = asyncHandler(async (req, res) => {
     WHERE p.payment_date BETWEEN :startDate AND :endDate
       AND p.voided_at IS NULL
       AND p.transaction_type = 'PAYMENT'
-    GROUP BY DATE(p.payment_date)
+    GROUP BY ${reconGroupExpr.group}
     ORDER BY date ASC
   `, {
     replacements: { startDate, endDate },
@@ -1034,6 +1062,7 @@ exports.reconciliation = asyncHandler(async (req, res) => {
       },
       by_method: byMethodFormatted,
       daily_collections: dailyFormatted,
+      granularity: reconGranularity,
       prior_period_collections: {
         amount: parseFloat(priorPeriodTotals[0].amount) || 0,
         count: parseInt(priorPeriodTotals[0].count) || 0,

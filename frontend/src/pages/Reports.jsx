@@ -141,11 +141,27 @@ function MetricCard({ title, value, subtitle, icon, trend, trendUp, info }) {
 }
 
 // ─── Sales Tab ────────────────────────────────────────────────
+function formatXAxisTick(d, granularity) {
+  const date = new Date(d)
+  if (granularity === 'monthly') {
+    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function formatXAxisTooltip(d, granularity) {
+  const date = new Date(d)
+  if (granularity === 'monthly') {
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  }
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
 function SalesTab({ data, loading }) {
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No sales data available" />
 
-  const { summary, daily_trend, status_breakdown } = data
+  const { summary, daily_trend, status_breakdown, granularity } = data
 
   return (
     <div className="space-y-6">
@@ -197,11 +213,11 @@ function SalesTab({ data, loading }) {
               </linearGradient>
             </defs>
             <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
-            <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
             <YAxis tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
             <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
               formatter={(value) => [formatCurrency(value)]}
-              labelFormatter={(d) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              labelFormatter={(d) => formatXAxisTooltip(d, granularity)}
             />
             <Legend />
             <Area type="monotone" dataKey="revenue" stroke={CHART_THEME.colors.primary} fill="url(#gradRevenue)" strokeWidth={2.5} name="Revenue" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
@@ -270,7 +286,7 @@ function MarginsTab({ data, loading }) {
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No margin data available" />
 
-  const { overall, by_category, by_model, loss_makers, trend } = data
+  const { overall, by_category, by_model, loss_makers, trend, granularity } = data
 
   return (
     <div className="space-y-6">
@@ -309,11 +325,11 @@ function MarginsTab({ data, loading }) {
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={trend}>
             <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
-            <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
             <YAxis tickFormatter={(v) => `${v.toFixed(0)}%`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
             <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
               formatter={(value, name) => [name === 'avg_margin' ? formatPercent(value) : formatCurrency(value), name === 'avg_margin' ? 'Avg Margin' : 'Profit']}
-              labelFormatter={(d) => new Date(d).toLocaleDateString()}
+              labelFormatter={(d) => formatXAxisTooltip(d, granularity)}
             />
             <Legend />
             <Line type="monotone" dataKey="avg_margin" stroke={CHART_THEME.colors.primary} strokeWidth={2.5} name="Avg Margin %" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
@@ -1169,7 +1185,7 @@ function ReconciliationTab({ data, loading }) {
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No reconciliation data available" />
 
-  const { summary, by_method, daily_collections, prior_period_collections, current_period_collections, outstanding_invoices } = data
+  const { summary, by_method, daily_collections, prior_period_collections, current_period_collections, outstanding_invoices, granularity } = data
 
   const totalOutstandingSum = outstanding_invoices.reduce((sum, inv) => sum + inv.balance_due, 0)
 
@@ -1227,7 +1243,7 @@ function ReconciliationTab({ data, loading }) {
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={daily_collections} className="cursor-pointer" barCategoryGap="15%">
               <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
-              <XAxis dataKey="date" tickFormatter={(d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
               <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
               <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
                 formatter={(value, name) => [formatCurrency(value), name.charAt(0).toUpperCase() + name.slice(1)]}
