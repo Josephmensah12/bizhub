@@ -151,6 +151,11 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    salesbinder_transaction_id: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      unique: true
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: false,

@@ -328,7 +328,7 @@ function MarginsTab({ data, loading }) {
             <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
             <YAxis tickFormatter={(v) => `${v.toFixed(0)}%`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
             <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
-              formatter={(value, name) => [name === 'avg_margin' ? formatPercent(value) : formatCurrency(value), name === 'avg_margin' ? 'Avg Margin' : 'Profit']}
+              formatter={(value) => [formatPercent(value), 'Avg Margin']}
               labelFormatter={(d) => formatXAxisTooltip(d, granularity)}
             />
             <Legend />
