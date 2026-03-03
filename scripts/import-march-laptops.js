@@ -269,8 +269,10 @@ async function main() {
     for (const row of rows) {
       const sb = sbCache[row['Item ID']] || {};
       row._sb_created = sb.created || null;
-      row._sb_cost = sb.cost || null;
-      row._sb_price = sb.price || null;
+      // SalesBinder cost is in GHS — convert to USD using exchange rate
+      const rate = sb.exchange_rate || row._exchange_rate;
+      row._sb_cost = (sb.cost && rate) ? parseFloat((sb.cost / rate).toFixed(2)) : null;
+      row._sb_price = sb.price || null; // price is already in GHS (price_currency = GHS)
       // Prefer SalesBinder exchange rate over Excel custom field
       if (sb.exchange_rate) row._exchange_rate = sb.exchange_rate;
       // Prefer SalesBinder detail condition over Excel custom field
@@ -456,7 +458,11 @@ async function main() {
           const serial = String(unit['Serial #'] || '').trim();
           if (!serial) { unitsSkipped++; continue; }
 
-          const unitCost = unit._sb_cost || unit.Cost || null;
+          // Cost: prefer SalesBinder (already converted to USD), else convert Excel Cost from GHS
+          let unitCost = unit._sb_cost || null;
+          if (!unitCost && unit.Cost && unit._exchange_rate) {
+            unitCost = parseFloat((unit.Cost / unit._exchange_rate).toFixed(2));
+          }
           const unitPrice = unit._sb_price || unit.Price || null;
           const conditionId = resolveConditionId(unit);
 
