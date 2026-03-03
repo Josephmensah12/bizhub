@@ -89,10 +89,13 @@ function StatusBadge({ status }) {
 }
 
 // ─── Aging Bar ───────────────────────────────────────────────
-function AgingBar({ label, count, maxCount, color, alert }) {
+function AgingBar({ label, count, maxCount, color, alert, active, onClick }) {
   const pct = maxCount > 0 ? Math.max((count / maxCount) * 100, 4) : 0
   return (
-    <div className="flex items-center gap-3">
+    <div
+      className={`flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${active ? 'bg-gray-100 ring-1 ring-gray-300' : 'hover:bg-gray-50'}`}
+      onClick={onClick}
+    >
       <div className="w-24 text-sm text-gray-500 shrink-0">{label}</div>
       <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
         <div
@@ -130,6 +133,8 @@ export default function Dashboard() {
   const [valuation, setValuation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [agingFilter, setAgingFilter] = useState(null)
+  const [filteredTop10, setFilteredTop10] = useState(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -173,9 +178,30 @@ export default function Dashboard() {
     )
   }
 
-  // Build weekly revenue data from lead_source or daily data if available
   const agingData = metrics?.aging_stock || {}
-  const agingMax = Math.max(agingData['30_days'] || 0, agingData['60_days'] || 0, agingData['90_plus_days'] || 0, 1)
+  const agingMax = Math.max(agingData.under_1y || 0, agingData['1_to_2y'] || 0, agingData.over_2y || 0, 1)
+
+  const AGING_BUCKETS = [
+    { key: 'under_1y', label: '< 1 year', color: 'bg-green-500' },
+    { key: '1_to_2y', label: '1-2 years', color: 'bg-yellow-500' },
+    { key: 'over_2y', label: '> 2 years', color: 'bg-red-500', alert: true },
+  ]
+
+  async function handleAgingClick(key) {
+    const next = agingFilter === key ? null : key
+    setAgingFilter(next)
+    if (next) {
+      try {
+        const res = await axios.get(`/api/v1/dashboard/metrics?aging=${next}`)
+        setFilteredTop10(res.data.data.top_by_quantity)
+      } catch { setFilteredTop10(null) }
+    } else {
+      setFilteredTop10(null)
+    }
+  }
+
+  const top10Data = filteredTop10 ?? metrics?.top_by_quantity
+  const top10Label = agingFilter ? `Top 10 Items — ${AGING_BUCKETS.find(b => b.key === agingFilter)?.label}` : 'Top 10 Items by Quantity'
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -304,23 +330,31 @@ export default function Dashboard() {
 
         {/* Aging Stock */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-5">Aging Stock</h2>
-          <div className="space-y-4">
-            <AgingBar label="< 30 days" count={agingData['30_days'] || 0} maxCount={agingMax} color="bg-green-500" />
-            <AgingBar label="30-60 days" count={agingData['60_days'] || 0} maxCount={agingMax} color="bg-yellow-500" />
-            <AgingBar label="90+ days" count={agingData['90_plus_days'] || 0} maxCount={agingMax} color="bg-red-500" alert />
+          <h2 className="text-base font-semibold text-gray-900 mb-4">Aging Stock</h2>
+          <p className="text-xs text-gray-400 mb-4">Click a bucket to filter Top 10</p>
+          <div className="space-y-2">
+            {AGING_BUCKETS.map(b => (
+              <AgingBar key={b.key} label={b.label} count={agingData[b.key] || 0} maxCount={agingMax} color={b.color} alert={b.alert} active={agingFilter === b.key} onClick={() => handleAgingClick(b.key)} />
+            ))}
           </div>
         </div>
       </div>
 
       {/* Top 10 by Quantity */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-5">Top 10 Items by Quantity</h2>
-        {metrics?.top_by_quantity && metrics.top_by_quantity.length > 0 ? (
-          <ResponsiveContainer width="100%" height={Math.max(metrics.top_by_quantity.length * 40, 200)}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold text-gray-900">{top10Label}</h2>
+          {agingFilter && (
+            <button onClick={() => { setAgingFilter(null); setFilteredTop10(null) }} className="text-xs text-gray-500 hover:text-gray-700">
+              Clear filter
+            </button>
+          )}
+        </div>
+        {top10Data && top10Data.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(top10Data.length * 40, 200)}>
             <BarChart
               layout="vertical"
-              data={metrics.top_by_quantity.map(item => ({
+              data={top10Data.map(item => ({
                 name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
                 quantity: Number(item.quantity)
               }))}
@@ -334,7 +368,7 @@ export default function Dashboard() {
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <p className="text-sm text-gray-400 py-4 text-center">No inventory data</p>
+          <p className="text-sm text-gray-400 py-4 text-center">{agingFilter ? 'No items in this age range' : 'No inventory data'}</p>
         )}
       </div>
     </div>

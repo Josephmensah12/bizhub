@@ -38,51 +38,28 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     }
   }) || 0;
 
-  // Get aging stock using purchase_date (actual acquisition date) with fallback to created_at
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  // Aging stock: <1 year, 1-2 years, >2 years (using purchase_date with created_at fallback)
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
-  const sixtyDaysAgo = new Date();
-  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-  // Use COALESCE(purchase_date, created_at) so imported items age from their real acquisition date
   const ageDateExpr = sequelize.literal("COALESCE(purchase_date, created_at)");
 
-  const agingUnder30 = await Asset.count({
-    where: {
-      status: 'In Stock',
-      [Op.and]: sequelize.where(ageDateExpr, { [Op.gte]: thirtyDaysAgo })
-    }
+  const agingUnder1y = await Asset.count({
+    where: { status: 'In Stock', [Op.and]: sequelize.where(ageDateExpr, { [Op.gte]: oneYearAgo }) }
   });
-
-  const aging30to60 = await Asset.count({
+  const aging1to2y = await Asset.count({
     where: {
       status: 'In Stock',
       [Op.and]: [
-        sequelize.where(ageDateExpr, { [Op.gte]: sixtyDaysAgo }),
-        sequelize.where(ageDateExpr, { [Op.lt]: thirtyDaysAgo })
+        sequelize.where(ageDateExpr, { [Op.gte]: twoYearsAgo }),
+        sequelize.where(ageDateExpr, { [Op.lt]: oneYearAgo })
       ]
     }
   });
-
-  const aging60to90 = await Asset.count({
-    where: {
-      status: 'In Stock',
-      [Op.and]: [
-        sequelize.where(ageDateExpr, { [Op.gte]: ninetyDaysAgo }),
-        sequelize.where(ageDateExpr, { [Op.lt]: sixtyDaysAgo })
-      ]
-    }
-  });
-
-  const aging90Plus = await Asset.count({
-    where: {
-      status: 'In Stock',
-      [Op.and]: sequelize.where(ageDateExpr, { [Op.lt]: ninetyDaysAgo })
-    }
+  const agingOver2y = await Asset.count({
+    where: { status: 'In Stock', [Op.and]: sequelize.where(ageDateExpr, { [Op.lt]: twoYearsAgo }) }
   });
 
   // --- Sales metrics (today) ---
@@ -108,11 +85,20 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const todayTotalAmount = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.total_amount) || 0), 0);
   const todayCollected = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.amount_paid) || 0), 0);
 
-  // Top 10 items by quantity
+  // Top 10 items by quantity — optionally filtered by aging bucket
+  const agingFilter = req.query.aging; // 'under_1y', '1_to_2y', 'over_2y'
+  let agingWhere = '';
+  if (agingFilter === 'under_1y') {
+    agingWhere = `AND COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '1 year'`;
+  } else if (agingFilter === '1_to_2y') {
+    agingWhere = `AND COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '2 years' AND COALESCE(purchase_date, created_at) < NOW() - INTERVAL '1 year'`;
+  } else if (agingFilter === 'over_2y') {
+    agingWhere = `AND COALESCE(purchase_date, created_at) < NOW() - INTERVAL '2 years'`;
+  }
   const topByQuantity = await Asset.sequelize.query(
     `SELECT id, asset_tag, make, model, quantity
      FROM assets
-     WHERE deleted_at IS NULL
+     WHERE deleted_at IS NULL AND status = 'In Stock' ${agingWhere}
      ORDER BY quantity DESC
      LIMIT 10`,
     { type: Asset.sequelize.QueryTypes.SELECT }
@@ -148,10 +134,9 @@ exports.getMetrics = asyncHandler(async (req, res) => {
       repairs_open: inRepairAssets
     },
     aging_stock: {
-      '30_days': agingUnder30,
-      '60_days': aging30to60,
-      '90_days': aging60to90,
-      '90_plus_days': aging90Plus
+      under_1y: agingUnder1y,
+      '1_to_2y': aging1to2y,
+      over_2y: agingOver2y
     },
     top_by_quantity: topByQuantity
   };
