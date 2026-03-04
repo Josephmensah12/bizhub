@@ -802,9 +802,9 @@ exports.lookup = asyncHandler(async (req, res) => {
   if (!asset) {
     unit = await AssetUnit.findOne({
       where: { serial_number: code },
-      include: [{ model: Asset, as: 'asset', where: { deleted_at: null } }]
+      include: [{ model: Asset, as: 'product', where: { deleted_at: null } }]
     });
-    if (unit) asset = unit.asset;
+    if (unit) asset = unit.product;
   }
 
   if (!asset) {
@@ -886,7 +886,7 @@ exports.addScan = asyncHandler(async (req, res) => {
   // Find the asset unit
   const unit = await AssetUnit.findOne({
     where: { serial_number: sn },
-    include: [{ model: Asset, as: 'asset', where: { deleted_at: null } }]
+    include: [{ model: Asset, as: 'product', where: { deleted_at: null } }]
   });
 
   if (!unit) {
@@ -921,7 +921,7 @@ exports.addScan = asyncHandler(async (req, res) => {
     });
   }
 
-  const asset = unit.asset;
+  const asset = unit.product;
 
   // Find the stock take item for this asset
   const item = await StockTakeItem.findOne({
