@@ -1128,7 +1128,8 @@ exports.removeScan = asyncHandler(async (req, res) => {
 
 /**
  * GET /:id/items/:itemId/scans
- * List all scans for a specific stock take item.
+ * List all asset units for the product with scan status.
+ * Returns { units: [...], scans: [...] } where each unit has a `scanned` flag.
  */
 exports.getItemScans = asyncHandler(async (req, res) => {
   const { id, itemId } = req.params;
@@ -1143,6 +1144,7 @@ exports.getItemScans = asyncHandler(async (req, res) => {
     });
   }
 
+  // Fetch all scans for this item
   const scans = await StockTakeScan.findAll({
     where: { stock_take_item_id: itemId },
     include: [
@@ -1152,7 +1154,30 @@ exports.getItemScans = asyncHandler(async (req, res) => {
     order: [['scanned_at', 'DESC']]
   });
 
-  res.json({ success: true, data: { scans, count: scans.length } });
+  // Fetch ALL asset units for the parent product
+  const allUnits = await AssetUnit.findAll({
+    where: { asset_id: item.asset_id },
+    attributes: ['id', 'serial_number', 'cpu', 'cpu_model', 'memory', 'storage', 'status'],
+    order: [['serial_number', 'ASC']]
+  });
+
+  // Build a set of scanned unit IDs for quick lookup
+  const scannedUnitIds = new Set(scans.map(s => s.asset_unit_id));
+
+  // Enrich each unit with scan info
+  const units = allUnits.map(u => {
+    const json = u.toJSON();
+    json.scanned = scannedUnitIds.has(u.id);
+    const scan = scans.find(s => s.asset_unit_id === u.id);
+    json.scanned_by = scan?.scanner?.full_name || null;
+    json.scanned_at = scan?.scanned_at || null;
+    return json;
+  });
+
+  res.json({
+    success: true,
+    data: { units, scans, total_units: allUnits.length, scanned_count: scans.length }
+  });
 });
 
 // ---------------------------------------------------------------------------

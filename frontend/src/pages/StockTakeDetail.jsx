@@ -361,7 +361,8 @@ export default function StockTakeDetail() {
   const fetchItemScans = async (itemId) => {
     try {
       const res = await axios.get(`/api/v1/stock-takes/${id}/items/${itemId}/scans`)
-      setItemScans(prev => ({ ...prev, [itemId]: res.data.data.scans }))
+      // API now returns { units, scans, total_units, scanned_count }
+      setItemScans(prev => ({ ...prev, [itemId]: res.data.data }))
     } catch (err) {
       console.error('Failed to load scans', err)
     }
@@ -385,11 +386,8 @@ export default function StockTakeDetail() {
       await axios.delete(`/api/v1/stock-takes/${id}/scans/${scanId}`)
       addToast('info', 'Scan removed')
 
-      // Update scan list
-      setItemScans(prev => ({
-        ...prev,
-        [itemId]: (prev[itemId] || []).filter(s => s.id !== scanId)
-      }))
+      // Re-fetch the item's unit/scan data
+      fetchItemScans(itemId)
 
       // Refresh items, progress, and batches from server
       await fetchItems()
@@ -799,7 +797,7 @@ export default function StockTakeDetail() {
                       onUpdateResolution={updateItemResolution}
                       isExpanded={!!expandedItems[item.id]}
                       onToggleExpand={() => toggleExpand(item.id)}
-                      scans={itemScans[item.id] || []}
+                      scanData={itemScans[item.id] || null}
                       onRemoveScan={handleRemoveScan}
                       isCounting={isCounting}
                     />
@@ -941,12 +939,14 @@ function BatchRow({ batch, isExpanded, onToggleExpand, scans, isCounting, onRemo
 // ItemRow sub-component with expandable serial scans
 // ---------------------------------------------------------------------------
 
-function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, onUpdateResolution, isExpanded, onToggleExpand, scans, onRemoveScan, isCounting }) {
+function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, onUpdateResolution, isExpanded, onToggleExpand, scanData, onRemoveScan, isCounting }) {
   const [countInput, setCountInput] = useState(item.counted_quantity != null ? String(item.counted_quantity) : '')
   const [resolutionNotes, setResolutionNotes] = useState(item.resolution_notes || '')
   const asset = item.asset || {}
   const isSerial = item.count_method === 'serial'
   const scanCount = item.scan_count || 0
+  const units = scanData?.units || []
+  const totalUnits = scanData?.total_units || 0
 
   // Sync countInput when item updates externally (from scan)
   useEffect(() => {
@@ -987,13 +987,13 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
   return (
     <>
       <tr id={`item-row-${item.id}`} className={`${varianceColor} transition-colors`}>
-        {/* Expand button for serial items with scans */}
+        {/* Expand button for serial items — shows all units */}
         <td className="px-2 py-2 text-center">
-          {isSerial && scanCount > 0 ? (
+          {isSerial ? (
             <button
               onClick={onToggleExpand}
               className="w-6 h-6 flex items-center justify-center rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 text-sm font-bold"
-              title={isExpanded ? 'Collapse scans' : `Expand ${scanCount} scanned serial${scanCount !== 1 ? 's' : ''}`}
+              title={isExpanded ? 'Collapse units' : `View serial numbers (${scanCount} scanned)`}
               aria-expanded={isExpanded}
               aria-label={isExpanded ? 'Collapse serial list' : 'Expand serial list'}
             >
@@ -1094,49 +1094,84 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
         )}
       </tr>
 
-      {/* Expanded scan rows */}
+      {/* Expanded unit rows — shows ALL serial numbers with scan status */}
       {isExpanded && (
         <tr>
           <td colSpan={colSpan} className="px-0 py-0">
             <div className="bg-gray-50 border-t border-b border-gray-200 px-8 py-3">
-              <div className="text-xs font-medium text-gray-500 uppercase mb-2">Scanned Serials ({scans.length})</div>
-              {scans.length === 0 ? (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium text-gray-500 uppercase">
+                  Serial Numbers ({totalUnits})
+                </span>
+                {scanCount > 0 && (
+                  <span className="text-xs text-green-600 font-medium">
+                    {scanCount} scanned
+                  </span>
+                )}
+              </div>
+              {!scanData ? (
                 <div className="text-xs text-gray-400">Loading...</div>
+              ) : units.length === 0 ? (
+                <div className="text-xs text-gray-400">No units found for this product</div>
               ) : (
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-gray-400">
+                      <th className="text-center py-1 pr-3 w-8">Status</th>
                       <th className="text-left py-1 pr-4">Serial Number</th>
                       <th className="text-left py-1 pr-4">CPU</th>
                       <th className="text-left py-1 pr-4">RAM</th>
                       <th className="text-left py-1 pr-4">Storage</th>
+                      <th className="text-left py-1 pr-4">Unit Status</th>
                       <th className="text-left py-1 pr-4">Scanned By</th>
                       <th className="text-left py-1 pr-4">Time</th>
                       {isCounting && <th className="text-center py-1">Remove</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {scans.map(scan => (
-                      <tr key={scan.id} className="border-t border-gray-100">
-                        <td className="py-1.5 pr-4 font-mono text-gray-700">{scan.serial_number}</td>
-                        <td className="py-1.5 pr-4 text-gray-500">{scan.unit?.cpu || '-'}</td>
-                        <td className="py-1.5 pr-4 text-gray-500">{scan.unit?.memory ? `${Math.round(scan.unit.memory / 1024)}GB` : '-'}</td>
-                        <td className="py-1.5 pr-4 text-gray-500">{scan.unit?.storage ? `${scan.unit.storage}GB` : '-'}</td>
-                        <td className="py-1.5 pr-4 text-gray-500">{scan.scanner?.full_name || '-'}</td>
-                        <td className="py-1.5 pr-4 text-gray-400">{new Date(scan.scanned_at).toLocaleTimeString()}</td>
-                        {isCounting && (
-                          <td className="py-1.5 text-center">
-                            <button
-                              onClick={() => onRemoveScan(scan.id, item.id)}
-                              className="text-red-400 hover:text-red-600"
-                              title="Remove scan"
-                            >
-                              &times;
-                            </button>
+                    {units.map(unit => {
+                      const scan = unit.scanned ? (scanData?.scans || []).find(s => s.asset_unit_id === unit.id) : null
+                      return (
+                        <tr key={unit.id} className={`border-t border-gray-100 ${unit.scanned ? 'bg-green-50' : ''}`}>
+                          <td className="py-1.5 pr-3 text-center">
+                            {unit.scanned ? (
+                              <span className="inline-block w-5 h-5 rounded-full bg-green-500 text-white text-[10px] leading-5 text-center" title="Scanned">&#10003;</span>
+                            ) : (
+                              <span className="inline-block w-5 h-5 rounded-full bg-gray-200 text-gray-400 text-[10px] leading-5 text-center" title="Not scanned">&ndash;</span>
+                            )}
                           </td>
-                        )}
-                      </tr>
-                    ))}
+                          <td className={`py-1.5 pr-4 font-mono ${unit.scanned ? 'text-green-700 font-medium' : 'text-gray-500'}`}>{unit.serial_number}</td>
+                          <td className="py-1.5 pr-4 text-gray-500">{unit.cpu || unit.cpu_model || '-'}</td>
+                          <td className="py-1.5 pr-4 text-gray-500">{unit.memory ? `${Math.round(unit.memory / 1024)}GB` : '-'}</td>
+                          <td className="py-1.5 pr-4 text-gray-500">{unit.storage ? `${unit.storage}GB` : '-'}</td>
+                          <td className="py-1.5 pr-4">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              unit.status === 'Available' ? 'bg-green-100 text-green-700' :
+                              unit.status === 'Reserved' ? 'bg-yellow-100 text-yellow-700' :
+                              unit.status === 'Sold' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {unit.status}
+                            </span>
+                          </td>
+                          <td className="py-1.5 pr-4 text-gray-500">{unit.scanned_by || '-'}</td>
+                          <td className="py-1.5 pr-4 text-gray-400">{unit.scanned_at ? new Date(unit.scanned_at).toLocaleTimeString() : '-'}</td>
+                          {isCounting && (
+                            <td className="py-1.5 text-center">
+                              {unit.scanned && scan ? (
+                                <button
+                                  onClick={() => onRemoveScan(scan.id, item.id)}
+                                  className="text-red-400 hover:text-red-600"
+                                  title="Remove scan"
+                                >
+                                  &times;
+                                </button>
+                              ) : null}
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               )}
