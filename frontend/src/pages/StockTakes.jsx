@@ -30,12 +30,19 @@ export default function StockTakes() {
   const [form, setForm] = useState({
     name: '',
     scope: 'full',
-    scope_filter: { category: '' },
+    scope_filter: { category: '', asset_type: '' },
     blind_count: false,
     notes: ''
   })
+  const [taxonomy, setTaxonomy] = useState({})
 
   useEffect(() => { fetchList() }, [statusFilter])
+
+  useEffect(() => {
+    axios.get('/api/v1/assets/taxonomy')
+      .then(res => setTaxonomy(res.data.data?.taxonomy || {}))
+      .catch(() => {})
+  }, [])
 
   const fetchList = async () => {
     try {
@@ -63,7 +70,9 @@ export default function StockTakes() {
         notes: form.notes || undefined
       }
       if (form.scope === 'category' && form.scope_filter.category) {
-        payload.scope_filter = { category: form.scope_filter.category }
+        const sf = { category: form.scope_filter.category }
+        if (form.scope_filter.asset_type) sf.asset_type = form.scope_filter.asset_type
+        payload.scope_filter = sf
       }
       const res = await axios.post('/api/v1/stock-takes', payload)
       setShowCreate(false)
@@ -90,7 +99,7 @@ export default function StockTakes() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Stock Takes</h1>
         <button
-          onClick={() => { setForm({ name: '', scope: 'full', scope_filter: { category: '' }, blind_count: false, notes: '' }); setCreateError(null); setShowCreate(true) }}
+          onClick={() => { setForm({ name: '', scope: 'full', scope_filter: { category: '', asset_type: '' }, blind_count: false, notes: '' }); setCreateError(null); setShowCreate(true) }}
           className="btn btn-primary"
         >
           + New Stock Take
@@ -199,32 +208,49 @@ export default function StockTakes() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Scope</label>
-                    <select
-                      value={form.scope}
-                      onChange={(e) => setForm(f => ({ ...f, scope: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="full">Full Inventory</option>
-                      <option value="category">By Category</option>
-                      <option value="location">By Location</option>
-                    </select>
-                  </div>
-                  {form.scope === 'category' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Scope</label>
+                  <select
+                    value={form.scope}
+                    onChange={(e) => setForm(f => ({ ...f, scope: e.target.value, scope_filter: { category: '', asset_type: '' } }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="full">Full Inventory</option>
+                    <option value="category">By Category</option>
+                    <option value="location">By Location</option>
+                  </select>
+                </div>
+                {form.scope === 'category' && (
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                      <input
-                        type="text"
+                      <select
                         value={form.scope_filter.category}
-                        onChange={(e) => setForm(f => ({ ...f, scope_filter: { ...f.scope_filter, category: e.target.value } }))}
-                        placeholder="e.g. Computer"
+                        onChange={(e) => setForm(f => ({ ...f, scope_filter: { category: e.target.value, asset_type: '' } }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
+                      >
+                        <option value="">All Categories</option>
+                        {Object.keys(taxonomy).map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Asset Type</label>
+                      <select
+                        value={form.scope_filter.asset_type}
+                        onChange={(e) => setForm(f => ({ ...f, scope_filter: { ...f.scope_filter, asset_type: e.target.value } }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        disabled={!form.scope_filter.category}
+                      >
+                        <option value="">All Types</option>
+                        {(form.scope_filter.category && taxonomy[form.scope_filter.category] || []).map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
