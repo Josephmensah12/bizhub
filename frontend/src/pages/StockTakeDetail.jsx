@@ -987,15 +987,17 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
   return (
     <>
       <tr id={`item-row-${item.id}`} className={`${varianceColor} transition-colors`}>
-        {/* Expand button for serial items */}
+        {/* Expand button for serial items with scans */}
         <td className="px-2 py-2 text-center">
           {isSerial && scanCount > 0 ? (
             <button
               onClick={onToggleExpand}
-              className="text-gray-400 hover:text-gray-700 text-lg leading-none"
-              title={isExpanded ? 'Collapse scans' : `Expand ${scanCount} scans`}
+              className="w-6 h-6 flex items-center justify-center rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 text-sm font-bold"
+              title={isExpanded ? 'Collapse scans' : `Expand ${scanCount} scanned serial${scanCount !== 1 ? 's' : ''}`}
+              aria-expanded={isExpanded}
+              aria-label={isExpanded ? 'Collapse serial list' : 'Expand serial list'}
             >
-              {isExpanded ? '-' : '+'}
+              {isExpanded ? '\u2212' : '+'}
             </button>
           ) : null}
         </td>
