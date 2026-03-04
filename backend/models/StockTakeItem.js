@@ -6,6 +6,7 @@
 
 const ITEM_STATUSES = ['pending', 'counted', 'verified', 'adjusted'];
 const RESOLUTIONS = ['match', 'sold_not_invoiced', 'damaged', 'lost_stolen', 'found_extra', 'miscount', 'other'];
+const COUNT_METHODS = ['serial', 'quantity'];
 
 module.exports = (sequelize, DataTypes) => {
   const StockTakeItem = sequelize.define('StockTakeItem', {
@@ -21,6 +22,11 @@ module.exports = (sequelize, DataTypes) => {
     asset_id: {
       type: DataTypes.INTEGER,
       allowNull: false
+    },
+    count_method: {
+      type: DataTypes.ENUM(...COUNT_METHODS),
+      allowNull: false,
+      defaultValue: 'quantity'
     },
     expected_quantity: {
       type: DataTypes.INTEGER,
@@ -81,6 +87,7 @@ module.exports = (sequelize, DataTypes) => {
 
   StockTakeItem.STATUSES = ITEM_STATUSES;
   StockTakeItem.RESOLUTIONS = RESOLUTIONS;
+  StockTakeItem.COUNT_METHODS = COUNT_METHODS;
 
   return StockTakeItem;
 };

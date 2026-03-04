@@ -18,13 +18,15 @@ const asyncHandler = handler => (req, res, next) => {
 async function computeSummary(stockTakeId) {
   const items = await StockTakeItem.findAll({
     where: { stock_take_id: stockTakeId },
-    attributes: ['status', 'variance', 'counted_quantity']
+    attributes: ['status', 'variance', 'counted_quantity', 'count_method']
   });
   const total_items = items.length;
   const counted = items.filter(i => i.counted_quantity != null).length;
   const matched = items.filter(i => i.variance === 0).length;
   const discrepancies = items.filter(i => i.variance != null && i.variance !== 0).length;
-  return { total_items, counted, matched, discrepancies };
+  const serial_items = items.filter(i => i.count_method === 'serial').length;
+  const quantity_items = items.filter(i => i.count_method === 'quantity').length;
+  return { total_items, counted, matched, discrepancies, serial_items, quantity_items };
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +227,7 @@ exports.start = asyncHandler(async (req, res) => {
 
   const assets = await Asset.findAll({
     where: assetWhere,
-    attributes: ['id', 'quantity']
+    attributes: ['id', 'quantity', 'is_serialized']
   });
 
   if (assets.length === 0) {
@@ -237,10 +239,11 @@ exports.start = asyncHandler(async (req, res) => {
 
   const transaction = await sequelize.transaction();
   try {
-    // Create items in bulk
+    // Create items in bulk — set count_method based on is_serialized
     const itemRows = assets.map(a => ({
       stock_take_id: stockTake.id,
       asset_id: a.id,
+      count_method: a.is_serialized ? 'serial' : 'quantity',
       expected_quantity: a.quantity || 0,
       status: 'pending'
     }));
@@ -295,7 +298,7 @@ exports.start = asyncHandler(async (req, res) => {
  * Get stock take items — paginated, filterable.
  */
 exports.getItems = asyncHandler(async (req, res) => {
-  const { status, search, hasVariance, page = 1, limit = 50 } = req.query;
+  const { status, search, hasVariance, countMethod, page = 1, limit = 50 } = req.query;
   const stockTake = await StockTake.findByPk(req.params.id);
   if (!stockTake) {
     return res.status(404).json({
@@ -306,6 +309,9 @@ exports.getItems = asyncHandler(async (req, res) => {
 
   const where = { stock_take_id: stockTake.id };
   if (status) where.status = status;
+  if (countMethod && ['serial', 'quantity'].includes(countMethod)) {
+    where.count_method = countMethod;
+  }
   if (hasVariance === 'true') {
     where.variance = { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: 0 }] };
   }
@@ -409,6 +415,14 @@ exports.updateItem = asyncHandler(async (req, res) => {
   const { counted_quantity, resolution, resolution_notes, serial_verified } = req.body;
 
   if (counted_quantity !== undefined) {
+    // Block manual count updates for serial items — scans are the source of truth
+    if (item.count_method === 'serial') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'SERIAL_COUNT_LOCKED', message: 'Serial items are counted by scanning. Manual count is not allowed.' }
+      });
+    }
+
     const qty = parseInt(counted_quantity);
     if (isNaN(qty) || qty < 0) {
       return res.status(400).json({
@@ -473,6 +487,9 @@ exports.batchCount = asyncHandler(async (req, res) => {
       where: { id: itemId, stock_take_id: stockTake.id }
     });
     if (!item) continue;
+
+    // Skip serial items — they are counted by scanning
+    if (item.count_method === 'serial') continue;
 
     const qty = parseInt(counted_quantity);
     if (isNaN(qty) || qty < 0) continue;
@@ -747,7 +764,7 @@ exports.export = asyncHandler(async (req, res) => {
     order: [['id', 'ASC']]
   });
 
-  const header = 'Asset Tag,Make,Model,Serial Number,Category,Type,Condition,Expected Qty,Counted Qty,Variance,Status,Resolution,Notes,Scanned Serials';
+  const header = 'Asset Tag,Make,Model,Serial Number,Category,Type,Condition,Count Method,Expected Qty,Counted Qty,Variance,Status,Resolution,Notes,Scanned Serials';
   const rows = items.map(i => {
     const a = i.asset || {};
     const scannedSerials = (i.scans || []).map(s => s.serial_number).join('; ');
@@ -759,6 +776,7 @@ exports.export = asyncHandler(async (req, res) => {
       a.category || '',
       a.asset_type || '',
       a.condition || '',
+      (i.count_method || 'quantity').toUpperCase(),
       i.expected_quantity,
       i.counted_quantity != null ? i.counted_quantity : '',
       i.variance != null ? i.variance : '',
@@ -929,7 +947,7 @@ exports.addScan = asyncHandler(async (req, res) => {
     return res.json({
       success: true,
       data: { item: item.toJSON(), scan: null, non_serialized: true },
-      message: `Non-serialized asset found: ${asset.make} ${asset.model}`
+      message: `This item is set to quantity-only counting. Use the manual count field.`
     });
   }
 
@@ -943,6 +961,14 @@ exports.addScan = asyncHandler(async (req, res) => {
     return res.status(404).json({
       success: false,
       error: { code: 'NOT_IN_STOCK_TAKE', message: `Asset ${asset.asset_tag} is not part of this stock take` }
+    });
+  }
+
+  // Reject scan for quantity-only items
+  if (item.count_method === 'quantity') {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'QUANTITY_ONLY', message: `This item is set to quantity-only counting. Use the manual count field for ${asset.make} ${asset.model}.` }
     });
   }
 

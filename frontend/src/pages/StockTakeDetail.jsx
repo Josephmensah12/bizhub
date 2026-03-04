@@ -72,6 +72,7 @@ export default function StockTakeDetail() {
   const [items, setItems] = useState([])
   const [itemsLoading, setItemsLoading] = useState(false)
   const [itemFilter, setItemFilter] = useState('all')
+  const [countMethodFilter, setCountMethodFilter] = useState('all')
   const [itemSearch, setItemSearch] = useState('')
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
 
@@ -131,6 +132,7 @@ export default function StockTakeDetail() {
       if (itemFilter === 'pending') params.status = 'pending'
       else if (itemFilter === 'counted') params.status = 'counted'
       else if (itemFilter === 'variance') params.hasVariance = 'true'
+      if (countMethodFilter !== 'all') params.countMethod = countMethodFilter
       if (itemSearch) params.search = itemSearch
 
       const res = await axios.get(`/api/v1/stock-takes/${id}/items`, { params })
@@ -141,7 +143,7 @@ export default function StockTakeDetail() {
     } finally {
       setItemsLoading(false)
     }
-  }, [id, itemFilter, itemSearch])
+  }, [id, itemFilter, countMethodFilter, itemSearch])
 
   // Fetch batches
   const fetchBatches = useCallback(async () => {
@@ -333,6 +335,8 @@ export default function StockTakeDetail() {
         addToast('warning', errMsg)
       } else if (errCode === 'SERIAL_NOT_FOUND') {
         addToast('error', `Not found: ${serial}`)
+      } else if (errCode === 'QUANTITY_ONLY') {
+        addToast('warning', errMsg)
       } else {
         addToast('error', errMsg || `Scan failed: ${serial}`)
       }
@@ -634,10 +638,15 @@ export default function StockTakeDetail() {
 
       {/* Stats cards */}
       {progress && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="card text-center">
             <div className="text-2xl font-bold text-gray-900">{progress.total_items}</div>
             <div className="text-sm text-gray-500">Total Products</div>
+            {(progress.serial_items > 0 || progress.quantity_items > 0) && (
+              <div className="text-xs text-gray-400 mt-1">
+                {progress.serial_items || 0} serial / {progress.quantity_items || 0} qty
+              </div>
+            )}
           </div>
           <div className="card text-center">
             <div className="text-2xl font-bold text-indigo-600">{totalScans}</div>
@@ -654,6 +663,13 @@ export default function StockTakeDetail() {
           <div className="card text-center">
             <div className="text-2xl font-bold text-red-600">{progress.discrepancies}</div>
             <div className="text-sm text-gray-500">Discrepancies</div>
+          </div>
+          <div className="card text-center">
+            <div className="text-2xl font-bold text-orange-600">
+              {items.filter(i => i.count_method === 'quantity' && i.counted_quantity != null).length}
+              <span className="text-sm font-normal text-gray-400">/{progress.quantity_items || 0}</span>
+            </div>
+            <div className="text-sm text-gray-500">Qty Items Counted</div>
           </div>
         </div>
       )}
@@ -705,6 +721,21 @@ export default function StockTakeDetail() {
         <div className="card">
           <div className="flex flex-wrap gap-4 items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Items</h3>
+            <div className="flex gap-1">
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'serial', label: 'Serial' },
+                { key: 'quantity', label: 'Quantity' }
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setCountMethodFilter(f.key)}
+                  className={`px-3 py-1 text-xs rounded-full ${countMethodFilter === f.key ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
             <div className="flex gap-1 ml-auto">
               {[
                 { key: 'all', label: 'All' },
@@ -914,7 +945,7 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
   const [countInput, setCountInput] = useState(item.counted_quantity != null ? String(item.counted_quantity) : '')
   const [resolutionNotes, setResolutionNotes] = useState(item.resolution_notes || '')
   const asset = item.asset || {}
-  const isSerialized = asset.is_serialized
+  const isSerial = item.count_method === 'serial'
   const scanCount = item.scan_count || 0
 
   // Sync countInput when item updates externally (from scan)
@@ -956,9 +987,9 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
   return (
     <>
       <tr id={`item-row-${item.id}`} className={`${varianceColor} transition-colors`}>
-        {/* Expand button for serialized items */}
+        {/* Expand button for serial items */}
         <td className="px-2 py-2 text-center">
-          {isSerialized && scanCount > 0 ? (
+          {isSerial && scanCount > 0 ? (
             <button
               onClick={onToggleExpand}
               className="text-gray-400 hover:text-gray-700 text-lg leading-none"
@@ -971,7 +1002,11 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
         <td className="px-3 py-2 font-mono text-xs text-gray-700">{asset.asset_tag}</td>
         <td className="px-3 py-2 text-gray-900">
           {asset.make} {asset.model}
-          {isSerialized && <span className="ml-1 text-xs text-indigo-500" title="Serialized">[S]</span>}
+          <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+            isSerial ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'
+          }`}>
+            {isSerial ? 'SERIAL' : 'QTY'}
+          </span>
         </td>
         <td className="px-3 py-2 text-gray-500 text-xs">{asset.category}</td>
         {!blindCount && (
@@ -979,11 +1014,11 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
         )}
         <td className="px-3 py-2 text-center">
           {isEditable ? (
-            isSerialized ? (
-              <span className="text-sm font-medium text-indigo-700" title="Auto-counted from serial scans">
+            isSerial ? (
+              <span className="text-sm font-medium text-indigo-700" title="Derived from scans">
                 {scanCount}
               </span>
-            ) : !isSerialized && item.expected_quantity <= 1 ? (
+            ) : !isSerial && item.expected_quantity <= 1 ? (
               <input
                 type="checkbox"
                 checked={item.counted_quantity === 1}
