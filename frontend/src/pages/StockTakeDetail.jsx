@@ -28,6 +28,33 @@ const RESOLUTION_OPTIONS = [
   { value: 'other', label: 'Other' }
 ]
 
+// ---------------------------------------------------------------------------
+// Toast notification system
+// ---------------------------------------------------------------------------
+
+function ToastContainer({ toasts, onDismiss }) {
+  return (
+    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm">
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-start gap-2 animate-slide-in ${
+            t.type === 'success' ? 'bg-green-600 text-white' :
+            t.type === 'error' ? 'bg-red-600 text-white' :
+            t.type === 'warning' ? 'bg-yellow-500 text-white' :
+            'bg-blue-600 text-white'
+          }`}
+        >
+          <span className="flex-1">{t.message}</span>
+          <button onClick={() => onDismiss(t.id)} className="text-white/70 hover:text-white ml-2 shrink-0">&times;</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+let toastId = 0
+
 export default function StockTakeDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -48,12 +75,33 @@ export default function StockTakeDetail() {
   const [itemSearch, setItemSearch] = useState('')
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
 
-  // Scanner state
+  // Serial scan input state
+  const [serialInput, setSerialInput] = useState('')
+  const [scanProcessing, setScanProcessing] = useState(false)
+  const serialInputRef = useRef(null)
+
+  // Expanded rows (for viewing scanned serials)
+  const [expandedItems, setExpandedItems] = useState({})
+  const [itemScans, setItemScans] = useState({})
+
+  // Camera scanner state
   const [scannerOpen, setScannerOpen] = useState(false)
-  const [scanLog, setScanLog] = useState([])
   const scannerRef = useRef(null)
   const html5QrcodeRef = useRef(null)
   const lastScanRef = useRef({ code: null, time: 0 })
+
+  // Toast notifications
+  const [toasts, setToasts] = useState([])
+
+  const addToast = useCallback((type, message) => {
+    const tid = ++toastId
+    setToasts(prev => [...prev, { id: tid, type, message }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== tid)), 4000)
+  }, [])
+
+  const dismissToast = useCallback((tid) => {
+    setToasts(prev => prev.filter(t => t.id !== tid))
+  }, [])
 
   // Fetch stock take
   const fetchStockTake = useCallback(async () => {
@@ -93,6 +141,14 @@ export default function StockTakeDetail() {
     if (stockTake && stockTake.status !== 'draft') fetchItems()
   }, [stockTake?.status, fetchItems])
 
+  // Keep serial input focused when in counting mode
+  const isCounting = stockTake && ['in_progress', 'under_review'].includes(stockTake.status)
+  useEffect(() => {
+    if (isCounting && serialInputRef.current && !scannerOpen) {
+      serialInputRef.current.focus()
+    }
+  }, [isCounting, items, scannerOpen])
+
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
@@ -105,8 +161,9 @@ export default function StockTakeDetail() {
       setStockTake(res.data.data.stockTake)
       setProgress(res.data.data.progress)
       fetchItems()
+      addToast('success', `Stock take started with ${res.data.message}`)
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed to start')
+      addToast('error', err.response?.data?.error?.message || 'Failed to start')
     } finally {
       setActionLoading(false)
     }
@@ -116,11 +173,11 @@ export default function StockTakeDetail() {
     if (!window.confirm('Submit for review? All items must be counted.')) return
     setActionLoading(true)
     try {
-      const res = await axios.post(`/api/v1/stock-takes/${id}/submit-review`)
-      alert(res.data.message || 'Submitted for review')
+      await axios.post(`/api/v1/stock-takes/${id}/submit-review`)
+      addToast('success', 'Submitted for review')
       navigate('/stock-takes')
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed to submit')
+      addToast('error', err.response?.data?.error?.message || 'Failed to submit')
     } finally {
       setActionLoading(false)
     }
@@ -131,10 +188,10 @@ export default function StockTakeDetail() {
     setActionLoading(true)
     try {
       const res = await axios.post(`/api/v1/stock-takes/${id}/finalize`)
-      alert(res.data.message || 'Stock take finalized successfully')
+      addToast('success', res.data.message || 'Stock take finalized')
       navigate('/stock-takes')
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed to finalize')
+      addToast('error', err.response?.data?.error?.message || 'Failed to finalize')
     } finally {
       setActionLoading(false)
     }
@@ -146,8 +203,9 @@ export default function StockTakeDetail() {
     try {
       const res = await axios.post(`/api/v1/stock-takes/${id}/cancel`)
       setStockTake(res.data.data.stockTake)
+      addToast('warning', 'Stock take cancelled')
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed to cancel')
+      addToast('error', err.response?.data?.error?.message || 'Failed to cancel')
     } finally {
       setActionLoading(false)
     }
@@ -167,19 +225,19 @@ export default function StockTakeDetail() {
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch (err) {
-      alert('Failed to export CSV')
+      addToast('error', 'Failed to export CSV')
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Count updates
+  // Count updates (non-serialized items)
   // ---------------------------------------------------------------------------
 
   const updateItemCount = async (itemId, counted_quantity) => {
     try {
       const res = await axios.put(`/api/v1/stock-takes/${id}/items/${itemId}`, { counted_quantity })
-      setItems(prev => prev.map(i => i.id === itemId ? res.data.data.item : i))
-      fetchStockTake() // refresh progress
+      setItems(prev => prev.map(i => i.id === itemId ? { ...res.data.data.item, scan_count: i.scan_count } : i))
+      fetchStockTake()
     } catch (err) {
       console.error('Failed to update count', err)
     }
@@ -190,19 +248,147 @@ export default function StockTakeDetail() {
       const payload = { resolution }
       if (resolution_notes !== undefined) payload.resolution_notes = resolution_notes
       const res = await axios.put(`/api/v1/stock-takes/${id}/items/${itemId}`, payload)
-      setItems(prev => prev.map(i => i.id === itemId ? res.data.data.item : i))
+      setItems(prev => prev.map(i => i.id === itemId ? { ...res.data.data.item, scan_count: i.scan_count } : i))
     } catch (err) {
       console.error('Failed to update resolution', err)
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Scanner
+  // Serial scanning (keyboard input)
+  // ---------------------------------------------------------------------------
+
+  const handleSerialScan = async (serial) => {
+    if (!serial.trim() || scanProcessing) return
+    setScanProcessing(true)
+    try {
+      const res = await axios.post(`/api/v1/stock-takes/${id}/scans`, { serial_number: serial.trim() })
+
+      if (res.data.data.non_serialized) {
+        // Non-serialized asset found — highlight it
+        addToast('info', res.data.message)
+        const item = res.data.data.item
+        const el = document.getElementById(`item-row-${item.id}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el.classList.add('ring-2', 'ring-blue-500')
+          setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500'), 3000)
+        }
+      } else {
+        const { scan, item } = res.data.data
+        addToast('success', `Scanned: ${scan.unit?.serial_number || serial} -> ${item.asset?.make} ${item.asset?.model} (${item.scan_count}/${item.expected_quantity})`)
+
+        // Update item in list
+        setItems(prev => prev.map(i => {
+          if (i.id === item.id) {
+            return { ...i, counted_quantity: item.counted_quantity, variance: item.variance, status: item.status, resolution: item.resolution, scan_count: item.scan_count }
+          }
+          return i
+        }))
+
+        // If this item is expanded, refresh its scans
+        if (expandedItems[item.id]) {
+          fetchItemScans(item.id)
+        }
+
+        // Scroll to item
+        const el = document.getElementById(`item-row-${item.id}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el.classList.add('ring-2', 'ring-green-500')
+          setTimeout(() => el.classList.remove('ring-2', 'ring-green-500'), 2000)
+        }
+
+        fetchStockTake()
+      }
+    } catch (err) {
+      const errCode = err.response?.data?.error?.code
+      const errMsg = err.response?.data?.error?.message
+      if (errCode === 'DUPLICATE_SCAN') {
+        addToast('warning', errMsg)
+      } else if (errCode === 'SERIAL_NOT_FOUND') {
+        addToast('error', `Not found: ${serial}`)
+      } else {
+        addToast('error', errMsg || `Scan failed: ${serial}`)
+      }
+    } finally {
+      setScanProcessing(false)
+      setSerialInput('')
+      serialInputRef.current?.focus()
+    }
+  }
+
+  const handleSerialKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSerialScan(serialInput)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Expand/collapse scanned serials
+  // ---------------------------------------------------------------------------
+
+  const fetchItemScans = async (itemId) => {
+    try {
+      const res = await axios.get(`/api/v1/stock-takes/${id}/items/${itemId}/scans`)
+      setItemScans(prev => ({ ...prev, [itemId]: res.data.data.scans }))
+    } catch (err) {
+      console.error('Failed to load scans', err)
+    }
+  }
+
+  const toggleExpand = (itemId) => {
+    setExpandedItems(prev => {
+      const next = { ...prev }
+      if (next[itemId]) {
+        delete next[itemId]
+      } else {
+        next[itemId] = true
+        fetchItemScans(itemId)
+      }
+      return next
+    })
+  }
+
+  const handleRemoveScan = async (scanId, itemId) => {
+    try {
+      const res = await axios.delete(`/api/v1/stock-takes/${id}/scans/${scanId}`)
+      addToast('info', 'Scan removed')
+
+      // Update scan list
+      setItemScans(prev => ({
+        ...prev,
+        [itemId]: (prev[itemId] || []).filter(s => s.id !== scanId)
+      }))
+
+      // Update item count
+      const newCount = res.data.data.scan_count
+      setItems(prev => prev.map(i => {
+        if (i.id === itemId) {
+          return {
+            ...i,
+            counted_quantity: newCount > 0 ? newCount : null,
+            variance: newCount > 0 ? newCount - i.expected_quantity : null,
+            status: newCount > 0 ? 'counted' : 'pending',
+            scan_count: newCount
+          }
+        }
+        return i
+      }))
+
+      fetchStockTake()
+    } catch (err) {
+      addToast('error', 'Failed to remove scan')
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Camera scanner
   // ---------------------------------------------------------------------------
 
   const openScanner = async () => {
     setScannerOpen(true)
-    // Delay to allow DOM to render
     setTimeout(async () => {
       try {
         const { Html5Qrcode } = await import('html5-qrcode')
@@ -212,12 +398,12 @@ export default function StockTakeDetail() {
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
-          onScanSuccess,
-          () => {} // ignore scan failures (continuous)
+          onCameraScanSuccess,
+          () => {}
         )
       } catch (err) {
         console.error('Scanner start error:', err)
-        addScanLog('error', 'Camera access denied or not available')
+        addToast('error', 'Camera access denied or not available')
       }
     }, 300)
   }
@@ -232,52 +418,19 @@ export default function StockTakeDetail() {
       console.error('Scanner stop error:', err)
     }
     setScannerOpen(false)
+    // Re-focus serial input
+    setTimeout(() => serialInputRef.current?.focus(), 100)
   }
 
-  const addScanLog = (type, text, itemData = null) => {
-    setScanLog(prev => [{ type, text, time: new Date(), itemData }, ...prev].slice(0, 10))
-  }
-
-  const onScanSuccess = async (decodedText) => {
-    // Debounce: skip duplicate scan within 3 seconds
+  const onCameraScanSuccess = async (decodedText) => {
     const now = Date.now()
-    if (decodedText === lastScanRef.current.code && now - lastScanRef.current.time < 3000) {
-      return
-    }
+    if (decodedText === lastScanRef.current.code && now - lastScanRef.current.time < 3000) return
     lastScanRef.current = { code: decodedText, time: now }
 
-    // Vibrate if supported
     if (navigator.vibrate) navigator.vibrate(100)
 
-    try {
-      const res = await axios.get(`/api/v1/stock-takes/${id}/lookup`, { params: { code: decodedText } })
-      const item = res.data.data.item
-      const asset = item.asset
-
-      if (item.counted_quantity != null) {
-        // Already counted
-        addScanLog('warning', `Already counted: ${asset.asset_tag} - ${asset.make} ${asset.model}`, item)
-        return
-      }
-
-      // Auto-mark serialized items (expected qty = 1)
-      if (item.expected_quantity <= 1) {
-        await updateItemCount(item.id, 1)
-        addScanLog('success', `Found: ${asset.asset_tag} - ${asset.make} ${asset.model}`, item)
-      } else {
-        // Bulk item — add to log, user needs to enter count manually
-        addScanLog('info', `Bulk: ${asset.asset_tag} - ${asset.make} ${asset.model} (qty: ${item.expected_quantity})`, item)
-        // Scroll to item in list
-        const el = document.getElementById(`item-row-${item.id}`)
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          el.classList.add('ring-2', 'ring-blue-500')
-          setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500'), 3000)
-        }
-      }
-    } catch (err) {
-      addScanLog('error', `Not found: ${decodedText}`)
-    }
+    // Use the same scan API
+    handleSerialScan(decodedText)
   }
 
   // ---------------------------------------------------------------------------
@@ -298,6 +451,8 @@ export default function StockTakeDetail() {
 
   return (
     <div className="space-y-6">
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
       {/* Header */}
       <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
@@ -322,7 +477,7 @@ export default function StockTakeDetail() {
             <>
               <button onClick={openScanner} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center gap-2">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-                Scan
+                Camera
               </button>
               <button onClick={handleSubmitReview} disabled={actionLoading} className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50">
                 Submit for Review
@@ -346,6 +501,36 @@ export default function StockTakeDetail() {
           )}
         </div>
       </div>
+
+      {/* Serial scan input bar — always visible during counting */}
+      {isCounting && (
+        <div className="card bg-indigo-50 border border-indigo-200">
+          <div className="flex items-center gap-3">
+            <svg className="w-6 h-6 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+            <input
+              ref={serialInputRef}
+              type="text"
+              value={serialInput}
+              onChange={(e) => setSerialInput(e.target.value)}
+              onKeyDown={handleSerialKeyDown}
+              placeholder="Scan or type serial number..."
+              className="flex-1 px-4 py-2.5 text-sm border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+              autoFocus
+              disabled={scanProcessing}
+            />
+            <button
+              onClick={() => handleSerialScan(serialInput)}
+              disabled={!serialInput.trim() || scanProcessing}
+              className="px-4 py-2.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50 shrink-0"
+            >
+              {scanProcessing ? 'Scanning...' : 'Add'}
+            </button>
+          </div>
+          <p className="text-xs text-indigo-600 mt-2">Scan barcode or type serial number and press Enter. Focus stays here for continuous scanning.</p>
+        </div>
+      )}
 
       {/* Progress bar */}
       {progress && progress.total_items > 0 && (
@@ -445,10 +630,10 @@ export default function StockTakeDetail() {
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-2 py-2 w-8"></th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Asset Tag</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Serial #</th>
                     {!stockTake.blind_count && (
                       <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Expected</th>
                     )}
@@ -466,10 +651,15 @@ export default function StockTakeDetail() {
                       key={item.id}
                       item={item}
                       blindCount={stockTake.blind_count}
-                      isEditable={['in_progress', 'under_review'].includes(stockTake.status)}
+                      isEditable={isCounting}
                       showResolution={stockTake.status === 'under_review'}
                       onUpdateCount={updateItemCount}
                       onUpdateResolution={updateItemResolution}
+                      isExpanded={!!expandedItems[item.id]}
+                      onToggleExpand={() => toggleExpand(item.id)}
+                      scans={itemScans[item.id] || []}
+                      onRemoveScan={handleRemoveScan}
+                      isCounting={isCounting}
                     />
                   ))}
                 </tbody>
@@ -494,7 +684,7 @@ export default function StockTakeDetail() {
         </div>
       )}
 
-      {/* Scanner Modal */}
+      {/* Camera Scanner Modal */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-90 flex flex-col">
           <div className="flex justify-between items-center p-4 bg-black text-white">
@@ -504,30 +694,6 @@ export default function StockTakeDetail() {
           <div className="flex-1 flex flex-col items-center justify-center p-4">
             <div id="scanner-reader" ref={scannerRef} className="w-full max-w-md"></div>
           </div>
-          {/* Scan log */}
-          <div className="bg-gray-900 text-white p-4 max-h-48 overflow-y-auto">
-            <h4 className="text-xs uppercase text-gray-400 mb-2">Scan Log</h4>
-            {scanLog.length === 0 ? (
-              <p className="text-sm text-gray-500">Scan a barcode to begin...</p>
-            ) : (
-              <div className="space-y-1">
-                {scanLog.map((entry, i) => (
-                  <div
-                    key={i}
-                    className={`text-sm px-2 py-1 rounded ${
-                      entry.type === 'success' ? 'bg-green-900 text-green-200' :
-                      entry.type === 'warning' ? 'bg-yellow-900 text-yellow-200' :
-                      entry.type === 'error' ? 'bg-red-900 text-red-200' :
-                      'bg-blue-900 text-blue-200'
-                    }`}
-                  >
-                    <span className="text-xs text-gray-400 mr-2">{entry.time.toLocaleTimeString()}</span>
-                    {entry.text}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>
@@ -535,14 +701,22 @@ export default function StockTakeDetail() {
 }
 
 // ---------------------------------------------------------------------------
-// ItemRow sub-component
+// ItemRow sub-component with expandable serial scans
 // ---------------------------------------------------------------------------
 
-function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, onUpdateResolution }) {
+function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, onUpdateResolution, isExpanded, onToggleExpand, scans, onRemoveScan, isCounting }) {
   const [countInput, setCountInput] = useState(item.counted_quantity != null ? String(item.counted_quantity) : '')
   const [resolutionNotes, setResolutionNotes] = useState(item.resolution_notes || '')
   const asset = item.asset || {}
-  const isSerialized = item.expected_quantity <= 1
+  const isSerialized = asset.is_serialized
+  const scanCount = item.scan_count || 0
+
+  // Sync countInput when item updates externally (from scan)
+  useEffect(() => {
+    if (item.counted_quantity != null) {
+      setCountInput(String(item.counted_quantity))
+    }
+  }, [item.counted_quantity])
 
   const varianceColor = item.variance == null ? '' :
     item.variance === 0 ? 'bg-green-50' :
@@ -568,89 +742,165 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
     setCountInput(e.target.checked ? '1' : '0')
   }
 
+  // Determine column count for expanded row
+  let colSpan = 8 // expand btn + tag + item + category + counted + variance + status
+  if (!blindCount) colSpan++
+  if (showResolution) colSpan++
+
   return (
-    <tr id={`item-row-${item.id}`} className={`${varianceColor} transition-colors`}>
-      <td className="px-3 py-2 font-mono text-xs text-gray-700">{asset.asset_tag}</td>
-      <td className="px-3 py-2 text-gray-900">{asset.make} {asset.model}</td>
-      <td className="px-3 py-2 text-gray-500 text-xs">{asset.category}</td>
-      <td className="px-3 py-2 text-gray-500 text-xs font-mono">{asset.serial_number || '-'}</td>
-      {!blindCount && (
-        <td className="px-3 py-2 text-center text-gray-700">{item.expected_quantity}</td>
-      )}
-      <td className="px-3 py-2 text-center">
-        {isEditable ? (
-          isSerialized ? (
-            <input
-              type="checkbox"
-              checked={item.counted_quantity === 1}
-              onChange={handleCheckFound}
-              className="rounded border-gray-300 text-primary-600"
-              title="Physically found"
-            />
-          ) : (
-            <input
-              type="number"
-              min="0"
-              value={countInput}
-              onChange={(e) => setCountInput(e.target.value)}
-              onBlur={handleCountBlur}
-              onKeyDown={handleCountKey}
-              className="w-16 px-2 py-1 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-            />
-          )
-        ) : (
-          <span>{item.counted_quantity != null ? item.counted_quantity : '-'}</span>
-        )}
-      </td>
-      <td className="px-3 py-2 text-center">
-        {item.variance != null ? (
-          <span className={`font-medium ${item.variance === 0 ? 'text-green-600' : item.variance < 0 ? 'text-red-600' : 'text-yellow-600'}`}>
-            {item.variance > 0 ? '+' : ''}{item.variance}
-          </span>
-        ) : '-'}
-      </td>
-      <td className="px-3 py-2 text-center">
-        <span className={`px-2 py-0.5 rounded-full text-xs ${
-          item.status === 'pending' ? 'bg-gray-100 text-gray-600' :
-          item.status === 'counted' ? 'bg-blue-100 text-blue-700' :
-          item.status === 'verified' ? 'bg-green-100 text-green-700' :
-          item.status === 'adjusted' ? 'bg-purple-100 text-purple-700' : ''
-        }`}>
-          {item.status}
-        </span>
-      </td>
-      {showResolution && item.variance != null && item.variance !== 0 && (
-        <td className="px-3 py-2">
-          <div className="flex flex-col gap-1">
-            <select
-              value={item.resolution || ''}
-              onChange={(e) => onUpdateResolution(item.id, e.target.value || null)}
-              className="text-xs px-2 py-1 border border-gray-300 rounded-md"
+    <>
+      <tr id={`item-row-${item.id}`} className={`${varianceColor} transition-colors`}>
+        {/* Expand button for serialized items */}
+        <td className="px-2 py-2 text-center">
+          {isSerialized && scanCount > 0 ? (
+            <button
+              onClick={onToggleExpand}
+              className="text-gray-400 hover:text-gray-700 text-lg leading-none"
+              title={isExpanded ? 'Collapse scans' : `Expand ${scanCount} scans`}
             >
-              {RESOLUTION_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            {item.resolution && item.resolution !== 'match' && (
-              <input
-                type="text"
-                value={resolutionNotes}
-                onChange={(e) => setResolutionNotes(e.target.value)}
-                onBlur={() => {
-                  if (resolutionNotes !== (item.resolution_notes || '')) {
-                    onUpdateResolution(item.id, item.resolution, resolutionNotes)
-                  }
-                }}
-                placeholder="Notes..."
-                className="text-xs px-2 py-1 border border-gray-300 rounded-md"
-              />
-            )}
-          </div>
+              {isExpanded ? '-' : '+'}
+            </button>
+          ) : null}
         </td>
+        <td className="px-3 py-2 font-mono text-xs text-gray-700">{asset.asset_tag}</td>
+        <td className="px-3 py-2 text-gray-900">
+          {asset.make} {asset.model}
+          {isSerialized && <span className="ml-1 text-xs text-indigo-500" title="Serialized">[S]</span>}
+        </td>
+        <td className="px-3 py-2 text-gray-500 text-xs">{asset.category}</td>
+        {!blindCount && (
+          <td className="px-3 py-2 text-center text-gray-700">{item.expected_quantity}</td>
+        )}
+        <td className="px-3 py-2 text-center">
+          {isEditable ? (
+            isSerialized ? (
+              <span className="text-sm font-medium text-indigo-700" title="Auto-counted from serial scans">
+                {scanCount}
+              </span>
+            ) : !isSerialized && item.expected_quantity <= 1 ? (
+              <input
+                type="checkbox"
+                checked={item.counted_quantity === 1}
+                onChange={handleCheckFound}
+                className="rounded border-gray-300 text-primary-600"
+                title="Physically found"
+              />
+            ) : (
+              <input
+                type="number"
+                min="0"
+                value={countInput}
+                onChange={(e) => setCountInput(e.target.value)}
+                onBlur={handleCountBlur}
+                onKeyDown={handleCountKey}
+                className="w-16 px-2 py-1 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              />
+            )
+          ) : (
+            <span>{item.counted_quantity != null ? item.counted_quantity : '-'}</span>
+          )}
+        </td>
+        <td className="px-3 py-2 text-center">
+          {item.variance != null ? (
+            <span className={`font-medium ${item.variance === 0 ? 'text-green-600' : item.variance < 0 ? 'text-red-600' : 'text-yellow-600'}`}>
+              {item.variance > 0 ? '+' : ''}{item.variance}
+            </span>
+          ) : '-'}
+        </td>
+        <td className="px-3 py-2 text-center">
+          <span className={`px-2 py-0.5 rounded-full text-xs ${
+            item.status === 'pending' ? 'bg-gray-100 text-gray-600' :
+            item.status === 'counted' ? 'bg-blue-100 text-blue-700' :
+            item.status === 'verified' ? 'bg-green-100 text-green-700' :
+            item.status === 'adjusted' ? 'bg-purple-100 text-purple-700' : ''
+          }`}>
+            {item.status}
+          </span>
+        </td>
+        {showResolution && item.variance != null && item.variance !== 0 && (
+          <td className="px-3 py-2">
+            <div className="flex flex-col gap-1">
+              <select
+                value={item.resolution || ''}
+                onChange={(e) => onUpdateResolution(item.id, e.target.value || null)}
+                className="text-xs px-2 py-1 border border-gray-300 rounded-md"
+              >
+                {RESOLUTION_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              {item.resolution && item.resolution !== 'match' && (
+                <input
+                  type="text"
+                  value={resolutionNotes}
+                  onChange={(e) => setResolutionNotes(e.target.value)}
+                  onBlur={() => {
+                    if (resolutionNotes !== (item.resolution_notes || '')) {
+                      onUpdateResolution(item.id, item.resolution, resolutionNotes)
+                    }
+                  }}
+                  placeholder="Notes..."
+                  className="text-xs px-2 py-1 border border-gray-300 rounded-md"
+                />
+              )}
+            </div>
+          </td>
+        )}
+        {showResolution && (item.variance == null || item.variance === 0) && (
+          <td className="px-3 py-2 text-xs text-gray-400">-</td>
+        )}
+      </tr>
+
+      {/* Expanded scan rows */}
+      {isExpanded && (
+        <tr>
+          <td colSpan={colSpan} className="px-0 py-0">
+            <div className="bg-gray-50 border-t border-b border-gray-200 px-8 py-3">
+              <div className="text-xs font-medium text-gray-500 uppercase mb-2">Scanned Serials ({scans.length})</div>
+              {scans.length === 0 ? (
+                <div className="text-xs text-gray-400">Loading...</div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-400">
+                      <th className="text-left py-1 pr-4">Serial Number</th>
+                      <th className="text-left py-1 pr-4">CPU</th>
+                      <th className="text-left py-1 pr-4">RAM</th>
+                      <th className="text-left py-1 pr-4">Storage</th>
+                      <th className="text-left py-1 pr-4">Scanned By</th>
+                      <th className="text-left py-1 pr-4">Time</th>
+                      {isCounting && <th className="text-center py-1">Remove</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scans.map(scan => (
+                      <tr key={scan.id} className="border-t border-gray-100">
+                        <td className="py-1.5 pr-4 font-mono text-gray-700">{scan.serial_number}</td>
+                        <td className="py-1.5 pr-4 text-gray-500">{scan.unit?.cpu || '-'}</td>
+                        <td className="py-1.5 pr-4 text-gray-500">{scan.unit?.memory ? `${Math.round(scan.unit.memory / 1024)}GB` : '-'}</td>
+                        <td className="py-1.5 pr-4 text-gray-500">{scan.unit?.storage ? `${scan.unit.storage}GB` : '-'}</td>
+                        <td className="py-1.5 pr-4 text-gray-500">{scan.scanner?.full_name || '-'}</td>
+                        <td className="py-1.5 pr-4 text-gray-400">{new Date(scan.scanned_at).toLocaleTimeString()}</td>
+                        {isCounting && (
+                          <td className="py-1.5 text-center">
+                            <button
+                              onClick={() => onRemoveScan(scan.id, item.id)}
+                              className="text-red-400 hover:text-red-600"
+                              title="Remove scan"
+                            >
+                              &times;
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </td>
+        </tr>
       )}
-      {showResolution && (item.variance == null || item.variance === 0) && (
-        <td className="px-3 py-2 text-xs text-gray-400">-</td>
-      )}
-    </tr>
+    </>
   )
 }

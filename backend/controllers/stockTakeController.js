@@ -4,7 +4,7 @@
  * CRUD + workflow operations for physical inventory counting sessions.
  */
 
-const { StockTake, StockTakeItem, Asset, User, InventoryItemEvent, ActivityLog, sequelize } = require('../models');
+const { StockTake, StockTakeItem, StockTakeScan, Asset, AssetUnit, User, InventoryItemEvent, ActivityLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 const asyncHandler = handler => (req, res, next) => {
@@ -179,6 +179,7 @@ exports.delete = asyncHandler(async (req, res) => {
     });
   }
 
+  await StockTakeScan.destroy({ where: { stock_take_id: stockTake.id } });
   await StockTakeItem.destroy({ where: { stock_take_id: stockTake.id } });
   await stockTake.destroy();
 
@@ -316,7 +317,7 @@ exports.getItems = asyncHandler(async (req, res) => {
     include: [{
       model: Asset,
       as: 'asset',
-      attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'category', 'asset_type', 'quantity', 'condition'],
+      attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'category', 'asset_type', 'quantity', 'condition', 'is_serialized'],
       where: assetWhere,
       required: true
     }],
@@ -325,10 +326,32 @@ exports.getItems = asyncHandler(async (req, res) => {
     offset
   });
 
+  // For serialized assets, attach scan count per item
+  const itemIds = rows.map(r => r.id);
+  const scanCounts = await StockTakeScan.findAll({
+    where: { stock_take_item_id: { [Op.in]: itemIds } },
+    attributes: [
+      'stock_take_item_id',
+      [sequelize.fn('COUNT', sequelize.col('id')), 'scan_count']
+    ],
+    group: ['stock_take_item_id'],
+    raw: true
+  });
+  const scanCountMap = {};
+  for (const sc of scanCounts) {
+    scanCountMap[sc.stock_take_item_id] = parseInt(sc.scan_count);
+  }
+
+  const data = rows.map(r => {
+    const json = r.toJSON();
+    json.scan_count = scanCountMap[r.id] || 0;
+    return json;
+  });
+
   res.json({
     success: true,
     data: {
-      items: rows,
+      items: data,
       blind_count: stockTake.blind_count,
       pagination: {
         total: count,
@@ -697,17 +720,25 @@ exports.export = asyncHandler(async (req, res) => {
 
   const items = await StockTakeItem.findAll({
     where: { stock_take_id: stockTake.id },
-    include: [{
-      model: Asset,
-      as: 'asset',
-      attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'category', 'asset_type', 'condition']
-    }],
+    include: [
+      {
+        model: Asset,
+        as: 'asset',
+        attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'category', 'asset_type', 'condition', 'is_serialized']
+      },
+      {
+        model: StockTakeScan,
+        as: 'scans',
+        include: [{ model: AssetUnit, as: 'unit', attributes: ['serial_number', 'cpu', 'memory', 'storage'] }]
+      }
+    ],
     order: [['id', 'ASC']]
   });
 
-  const header = 'Asset Tag,Make,Model,Serial Number,Category,Type,Condition,Expected Qty,Counted Qty,Variance,Status,Resolution,Notes';
+  const header = 'Asset Tag,Make,Model,Serial Number,Category,Type,Condition,Expected Qty,Counted Qty,Variance,Status,Resolution,Notes,Scanned Serials';
   const rows = items.map(i => {
     const a = i.asset || {};
+    const scannedSerials = (i.scans || []).map(s => s.serial_number).join('; ');
     return [
       a.asset_tag || '',
       a.make || '',
@@ -721,7 +752,8 @@ exports.export = asyncHandler(async (req, res) => {
       i.variance != null ? i.variance : '',
       i.status,
       i.resolution || '',
-      (i.resolution_notes || '').replace(/"/g, '""')
+      (i.resolution_notes || '').replace(/"/g, '""'),
+      scannedSerials
     ].map(v => `"${v}"`).join(',');
   });
 
@@ -753,8 +785,8 @@ exports.lookup = asyncHandler(async (req, res) => {
     });
   }
 
-  // Find asset by serial_number or asset_tag
-  const asset = await Asset.findOne({
+  // First try asset by serial_number or asset_tag
+  let asset = await Asset.findOne({
     where: {
       [Op.or]: [
         { serial_number: code },
@@ -763,6 +795,17 @@ exports.lookup = asyncHandler(async (req, res) => {
       deleted_at: null
     }
   });
+
+  let unit = null;
+
+  // If not found at asset level, search asset_units by serial_number
+  if (!asset) {
+    unit = await AssetUnit.findOne({
+      where: { serial_number: code },
+      include: [{ model: Asset, as: 'asset', where: { deleted_at: null } }]
+    });
+    if (unit) asset = unit.asset;
+  }
 
   if (!asset) {
     return res.status(404).json({
@@ -777,7 +820,7 @@ exports.lookup = asyncHandler(async (req, res) => {
     include: [{
       model: Asset,
       as: 'asset',
-      attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'category', 'quantity', 'condition']
+      attributes: ['id', 'asset_tag', 'make', 'model', 'serial_number', 'category', 'quantity', 'condition', 'is_serialized']
     }]
   });
 
@@ -788,7 +831,229 @@ exports.lookup = asyncHandler(async (req, res) => {
     });
   }
 
-  res.json({ success: true, data: { item } });
+  const result = item.toJSON();
+  if (unit) result.matched_unit = { id: unit.id, serial_number: unit.serial_number };
+
+  res.json({ success: true, data: { item: result } });
+});
+
+// ---------------------------------------------------------------------------
+// Serial Scanning
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /:id/scans
+ * Add a serial scan. Looks up the AssetUnit by serial_number, finds the parent
+ * StockTakeItem, creates a StockTakeScan, and recomputes counted_quantity.
+ * Body: { serial_number }
+ */
+exports.addScan = asyncHandler(async (req, res) => {
+  const { serial_number } = req.body;
+  if (!serial_number || !serial_number.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'MISSING_SERIAL', message: 'serial_number is required' }
+    });
+  }
+
+  const stockTake = await StockTake.findByPk(req.params.id);
+  if (!stockTake) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Stock take not found' }
+    });
+  }
+  if (!['in_progress', 'under_review'].includes(stockTake.status)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NOT_COUNTING', message: 'Stock take is not in counting status' }
+    });
+  }
+
+  const sn = serial_number.trim();
+
+  // Check for duplicate scan in this session
+  const existing = await StockTakeScan.findOne({
+    where: { stock_take_id: stockTake.id, serial_number: sn }
+  });
+  if (existing) {
+    return res.status(409).json({
+      success: false,
+      error: { code: 'DUPLICATE_SCAN', message: `Serial ${sn} already scanned in this stock take` }
+    });
+  }
+
+  // Find the asset unit
+  const unit = await AssetUnit.findOne({
+    where: { serial_number: sn },
+    include: [{ model: Asset, as: 'asset', where: { deleted_at: null } }]
+  });
+
+  if (!unit) {
+    // Also try asset-level serial_number or asset_tag
+    const asset = await Asset.findOne({
+      where: {
+        [Op.or]: [{ serial_number: sn }, { asset_tag: sn }],
+        deleted_at: null
+      }
+    });
+    if (!asset) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'SERIAL_NOT_FOUND', message: `No unit or asset found with serial ${sn}` }
+      });
+    }
+    // Non-serialized asset match — don't create a scan record, just return the item
+    const item = await StockTakeItem.findOne({
+      where: { stock_take_id: stockTake.id, asset_id: asset.id },
+      include: [{ model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'make', 'model', 'is_serialized'] }]
+    });
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_IN_STOCK_TAKE', message: `Asset ${asset.asset_tag} is not part of this stock take` }
+      });
+    }
+    return res.json({
+      success: true,
+      data: { item: item.toJSON(), scan: null, non_serialized: true },
+      message: `Non-serialized asset found: ${asset.make} ${asset.model}`
+    });
+  }
+
+  const asset = unit.asset;
+
+  // Find the stock take item for this asset
+  const item = await StockTakeItem.findOne({
+    where: { stock_take_id: stockTake.id, asset_id: asset.id }
+  });
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_IN_STOCK_TAKE', message: `Asset ${asset.asset_tag} is not part of this stock take` }
+    });
+  }
+
+  // Create the scan record
+  const scan = await StockTakeScan.create({
+    stock_take_id: stockTake.id,
+    stock_take_item_id: item.id,
+    asset_id: asset.id,
+    asset_unit_id: unit.id,
+    serial_number: sn,
+    scanned_by: req.user?.id,
+    scanned_at: new Date()
+  });
+
+  // Recompute counted_quantity from scan count
+  const scanCount = await StockTakeScan.count({
+    where: { stock_take_item_id: item.id }
+  });
+  item.counted_quantity = scanCount;
+  item.variance = scanCount - item.expected_quantity;
+  item.status = 'counted';
+  item.counted_by = req.user?.id;
+  item.counted_at = new Date();
+  if (item.variance === 0) item.resolution = 'match';
+  else if (item.resolution === 'match') item.resolution = null;
+  await item.save();
+
+  // Return enriched data
+  const scanData = scan.toJSON();
+  scanData.unit = { id: unit.id, serial_number: unit.serial_number, cpu: unit.cpu, memory: unit.memory, storage: unit.storage };
+
+  const itemData = item.toJSON();
+  itemData.asset = { id: asset.id, asset_tag: asset.asset_tag, make: asset.make, model: asset.model, is_serialized: asset.is_serialized };
+  itemData.scan_count = scanCount;
+
+  res.status(201).json({
+    success: true,
+    data: { scan: scanData, item: itemData },
+    message: `Scanned: ${sn} → ${asset.make} ${asset.model}`
+  });
+});
+
+/**
+ * DELETE /:id/scans/:scanId
+ * Remove a scan and recompute the counted_quantity.
+ */
+exports.removeScan = asyncHandler(async (req, res) => {
+  const { id, scanId } = req.params;
+  const stockTake = await StockTake.findByPk(id);
+  if (!stockTake) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Stock take not found' }
+    });
+  }
+  if (!['in_progress', 'under_review'].includes(stockTake.status)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NOT_COUNTING', message: 'Stock take is not in counting status' }
+    });
+  }
+
+  const scan = await StockTakeScan.findOne({
+    where: { id: scanId, stock_take_id: id }
+  });
+  if (!scan) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'SCAN_NOT_FOUND', message: 'Scan record not found' }
+    });
+  }
+
+  const itemId = scan.stock_take_item_id;
+  await scan.destroy();
+
+  // Recompute counted_quantity
+  const scanCount = await StockTakeScan.count({
+    where: { stock_take_item_id: itemId }
+  });
+  const item = await StockTakeItem.findByPk(itemId);
+  if (item) {
+    item.counted_quantity = scanCount > 0 ? scanCount : null;
+    item.variance = scanCount > 0 ? scanCount - item.expected_quantity : null;
+    item.status = scanCount > 0 ? 'counted' : 'pending';
+    if (item.variance === 0) item.resolution = 'match';
+    else if (item.resolution === 'match') item.resolution = null;
+    await item.save();
+  }
+
+  res.json({
+    success: true,
+    data: { item_id: itemId, scan_count: scanCount },
+    message: 'Scan removed'
+  });
+});
+
+/**
+ * GET /:id/items/:itemId/scans
+ * List all scans for a specific stock take item.
+ */
+exports.getItemScans = asyncHandler(async (req, res) => {
+  const { id, itemId } = req.params;
+
+  const item = await StockTakeItem.findOne({
+    where: { id: itemId, stock_take_id: id }
+  });
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'ITEM_NOT_FOUND', message: 'Stock take item not found' }
+    });
+  }
+
+  const scans = await StockTakeScan.findAll({
+    where: { stock_take_item_id: itemId },
+    include: [
+      { model: AssetUnit, as: 'unit', attributes: ['id', 'serial_number', 'cpu', 'cpu_model', 'memory', 'storage', 'status'] },
+      { model: User, as: 'scanner', attributes: ['id', 'full_name'] }
+    ],
+    order: [['scanned_at', 'DESC']]
+  });
+
+  res.json({ success: true, data: { scans, count: scans.length } });
 });
 
 module.exports = exports;

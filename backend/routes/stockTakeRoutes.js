@@ -24,6 +24,11 @@ router.get('/:id/items', stockTakeController.getItems);
 router.put('/:id/items/:itemId', stockTakeController.updateItem);
 router.post('/:id/items/batch-count', stockTakeController.batchCount);
 
+// Serial scanning
+router.post('/:id/scans', stockTakeController.addScan);
+router.delete('/:id/scans/:scanId', stockTakeController.removeScan);
+router.get('/:id/items/:itemId/scans', stockTakeController.getItemScans);
+
 // Queries
 router.get('/:id/discrepancies', stockTakeController.discrepancies);
 router.get('/:id/export', stockTakeController.export);
