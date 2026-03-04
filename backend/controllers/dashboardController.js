@@ -85,6 +85,24 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const todayTotalAmount = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.total_amount) || 0), 0);
   const todayCollected = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.amount_paid) || 0), 0);
 
+  // Recent invoices (today) for the dashboard table
+  const recentInvoiceWhere = { ...invoiceWhere };
+  const recentInvoices = await sequelize.query(
+    `SELECT i.id, i.invoice_number, i.total_amount, i.status, i.invoice_date,
+            TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) as customer_name
+     FROM invoices i
+     LEFT JOIN customers c ON i.customer_id = c.id
+     WHERE i.status != 'CANCELLED'
+       AND i.invoice_date >= $1
+       ${role === 'Sales' ? 'AND i.created_by = $2' : ''}
+     ORDER BY i.created_at DESC
+     LIMIT 10`,
+    {
+      bind: role === 'Sales' ? [todayStart, req.user.id] : [todayStart],
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+
   // Top 10 items by quantity — optionally filtered by aging bucket
   const agingFilter = req.query.aging; // 'under_1y', '1_to_2y', 'over_2y'
   let agingWhere = '';
@@ -111,6 +129,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
       collected: parseFloat(todayCollected.toFixed(2)),
       transaction_count: todayInvoices.length
     },
+    recent_invoices: recentInvoices,
     inventory_on_hand: {
       total_units: totalAssets,
       ready_for_sale: inStockAssets,
