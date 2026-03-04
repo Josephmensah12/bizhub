@@ -29,6 +29,11 @@ router.post('/:id/scans', stockTakeController.addScan);
 router.delete('/:id/scans/:scanId', stockTakeController.removeScan);
 router.get('/:id/items/:itemId/scans', stockTakeController.getItemScans);
 
+// Batches
+router.get('/:id/batches', stockTakeController.getBatches);
+router.post('/:id/batches/:batchId/close', stockTakeController.closeBatch);
+router.get('/:id/batches/:batchId/scans', stockTakeController.getBatchScans);
+
 // Queries
 router.get('/:id/discrepancies', stockTakeController.discrepancies);
 router.get('/:id/export', stockTakeController.export);

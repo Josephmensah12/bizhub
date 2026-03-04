@@ -84,6 +84,13 @@ export default function StockTakeDetail() {
   const [expandedItems, setExpandedItems] = useState({})
   const [itemScans, setItemScans] = useState({})
 
+  // Batch state
+  const [batches, setBatches] = useState([])
+  const [activeBatch, setActiveBatch] = useState(null)
+  const [expandedBatches, setExpandedBatches] = useState({})
+  const [batchScans, setBatchScans] = useState({})
+  const [closingBatch, setClosingBatch] = useState(false)
+
   // Camera scanner state
   const [scannerOpen, setScannerOpen] = useState(false)
   const scannerRef = useRef(null)
@@ -136,10 +143,25 @@ export default function StockTakeDetail() {
     }
   }, [id, itemFilter, itemSearch])
 
+  // Fetch batches
+  const fetchBatches = useCallback(async () => {
+    try {
+      const res = await axios.get(`/api/v1/stock-takes/${id}/batches`)
+      const batchList = res.data.data.batches
+      setBatches(batchList)
+      setActiveBatch(batchList.find(b => b.status === 'active') || null)
+    } catch (err) {
+      console.error('Failed to load batches', err)
+    }
+  }, [id])
+
   useEffect(() => { fetchStockTake() }, [fetchStockTake])
   useEffect(() => {
-    if (stockTake && stockTake.status !== 'draft') fetchItems()
-  }, [stockTake?.status, fetchItems])
+    if (stockTake && stockTake.status !== 'draft') {
+      fetchItems()
+      fetchBatches()
+    }
+  }, [stockTake?.status, fetchItems, fetchBatches])
 
   // Keep serial input focused when in counting mode
   const isCounting = stockTake && ['in_progress', 'under_review'].includes(stockTake.status)
@@ -161,6 +183,7 @@ export default function StockTakeDetail() {
       setStockTake(res.data.data.stockTake)
       setProgress(res.data.data.progress)
       fetchItems()
+      fetchBatches()
       addToast('success', `Stock take started with ${res.data.message}`)
     } catch (err) {
       addToast('error', err.response?.data?.error?.message || 'Failed to start')
@@ -275,17 +298,23 @@ export default function StockTakeDetail() {
           setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500'), 3000)
         }
       } else {
-        const { scan, item } = res.data.data
+        const { scan, item, batch, new_batch_created } = res.data.data
+        const batchNum = scan.batch_number || batch?.batch_number
         addToast('success', `Scanned: ${scan.unit?.serial_number || serial} -> ${item.asset?.make} ${item.asset?.model} (${item.scan_count}/${item.expected_quantity})`)
+
+        if (new_batch_created) {
+          addToast('info', `Batch #${batchNum - 1} full (20/20). Batch #${batchNum} started.`)
+        }
 
         // If this item is expanded, refresh its scans
         if (expandedItems[item.id]) {
           fetchItemScans(item.id)
         }
 
-        // Refresh items and progress from server to ensure counts are accurate
+        // Refresh items, progress, and batches from server
         await fetchItems()
         fetchStockTake()
+        fetchBatches()
 
         // Scroll to item after refresh
         setTimeout(() => {
@@ -322,7 +351,7 @@ export default function StockTakeDetail() {
   }
 
   // ---------------------------------------------------------------------------
-  // Expand/collapse scanned serials
+  // Expand/collapse scanned serials (per item)
   // ---------------------------------------------------------------------------
 
   const fetchItemScans = async (itemId) => {
@@ -358,12 +387,58 @@ export default function StockTakeDetail() {
         [itemId]: (prev[itemId] || []).filter(s => s.id !== scanId)
       }))
 
-      // Refresh items and progress from server
+      // Refresh items, progress, and batches from server
       await fetchItems()
       fetchStockTake()
+      fetchBatches()
     } catch (err) {
       addToast('error', 'Failed to remove scan')
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Batch operations
+  // ---------------------------------------------------------------------------
+
+  const handleCloseBatch = async () => {
+    if (!activeBatch) return
+    if (activeBatch.scanned_count === 0) {
+      addToast('warning', 'Cannot close an empty batch. Scan at least one serial first.')
+      return
+    }
+    setClosingBatch(true)
+    try {
+      const res = await axios.post(`/api/v1/stock-takes/${id}/batches/${activeBatch.id}/close`)
+      addToast('success', res.data.message)
+      fetchBatches()
+    } catch (err) {
+      addToast('error', err.response?.data?.error?.message || 'Failed to close batch')
+    } finally {
+      setClosingBatch(false)
+      serialInputRef.current?.focus()
+    }
+  }
+
+  const fetchBatchScans = async (batchId) => {
+    try {
+      const res = await axios.get(`/api/v1/stock-takes/${id}/batches/${batchId}/scans`)
+      setBatchScans(prev => ({ ...prev, [batchId]: res.data.data.scans }))
+    } catch (err) {
+      console.error('Failed to load batch scans', err)
+    }
+  }
+
+  const toggleBatchExpand = (batchId) => {
+    setExpandedBatches(prev => {
+      const next = { ...prev }
+      if (next[batchId]) {
+        delete next[batchId]
+      } else {
+        next[batchId] = true
+        fetchBatchScans(batchId)
+      }
+      return next
+    })
   }
 
   // ---------------------------------------------------------------------------
@@ -432,6 +507,8 @@ export default function StockTakeDetail() {
     ? Math.round((progress.counted / progress.total_items) * 100)
     : 0
 
+  const totalScans = items.reduce((sum, i) => sum + (i.scan_count || 0), 0)
+
   return (
     <div className="space-y-6">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -485,7 +562,7 @@ export default function StockTakeDetail() {
         </div>
       </div>
 
-      {/* Serial scan input bar — always visible during counting */}
+      {/* Serial scan input bar with batch indicator */}
       {isCounting && (
         <div className="card bg-indigo-50 border border-indigo-200">
           <div className="flex items-center gap-3">
@@ -511,7 +588,31 @@ export default function StockTakeDetail() {
               {scanProcessing ? 'Scanning...' : 'Add'}
             </button>
           </div>
-          <p className="text-xs text-indigo-600 mt-2">Scan barcode or type serial number and press Enter. Focus stays here for continuous scanning.</p>
+          {/* Batch progress indicator */}
+          {activeBatch && (
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex-1">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-indigo-700 font-medium">Batch #{activeBatch.batch_number}</span>
+                  <span className="text-indigo-600">{activeBatch.scanned_count}/{activeBatch.target_size}</span>
+                </div>
+                <div className="w-full bg-indigo-200 rounded-full h-2">
+                  <div
+                    className="h-2 rounded-full bg-indigo-600 transition-all"
+                    style={{ width: `${Math.min(100, (activeBatch.scanned_count / activeBatch.target_size) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseBatch}
+                disabled={closingBatch || activeBatch.scanned_count === 0}
+                className="px-3 py-1.5 text-xs bg-white border border-indigo-300 text-indigo-700 rounded-md hover:bg-indigo-100 disabled:opacity-50 shrink-0"
+              >
+                {closingBatch ? 'Closing...' : 'Finish Batch'}
+              </button>
+            </div>
+          )}
+          <p className="text-xs text-indigo-600 mt-2">Scan barcode or type serial number and press Enter. Batches auto-close at 20 scans.</p>
         </div>
       )}
 
@@ -539,7 +640,7 @@ export default function StockTakeDetail() {
             <div className="text-sm text-gray-500">Total Products</div>
           </div>
           <div className="card text-center">
-            <div className="text-2xl font-bold text-indigo-600">{items.reduce((sum, i) => sum + (i.scan_count || 0), 0)}</div>
+            <div className="text-2xl font-bold text-indigo-600">{totalScans}</div>
             <div className="text-sm text-gray-500">Serials Scanned</div>
           </div>
           <div className="card text-center">
@@ -573,6 +674,29 @@ export default function StockTakeDetail() {
             {stockTake.summary.adjustments_made} inventory adjustments applied.
             Finalized by {stockTake.finalizer?.full_name || 'Unknown'} on {new Date(stockTake.finalized_at).toLocaleString()}.
           </p>
+        </div>
+      )}
+
+      {/* Batch Panel */}
+      {batches.length > 0 && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Scan Batches</h3>
+            <span className="text-sm text-gray-500">{batches.length} batch{batches.length !== 1 ? 'es' : ''}</span>
+          </div>
+          <div className="space-y-2">
+            {batches.map(batch => (
+              <BatchRow
+                key={batch.id}
+                batch={batch}
+                isExpanded={!!expandedBatches[batch.id]}
+                onToggleExpand={() => toggleBatchExpand(batch.id)}
+                scans={batchScans[batch.id] || []}
+                isCounting={isCounting}
+                onRemoveScan={handleRemoveScan}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -681,6 +805,101 @@ export default function StockTakeDetail() {
           <div className="flex-1 flex flex-col items-center justify-center p-4">
             <div id="scanner-reader" ref={scannerRef} className="w-full max-w-md"></div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// BatchRow sub-component
+// ---------------------------------------------------------------------------
+
+function BatchRow({ batch, isExpanded, onToggleExpand, scans, isCounting, onRemoveScan }) {
+  const isActive = batch.status === 'active'
+
+  return (
+    <div className={`border rounded-lg ${isActive ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+      {/* Batch header */}
+      <div
+        className="flex items-center justify-between px-4 py-3 cursor-pointer"
+        onClick={onToggleExpand}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400">{isExpanded ? '-' : '+'}</span>
+          <span className="text-sm font-medium text-gray-900">Batch #{batch.batch_number}</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+            isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
+          }`}>
+            {isActive ? 'Active' : 'Closed'}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-sm text-gray-500">
+          <span>{batch.scanned_count}/{batch.target_size} scans</span>
+          {batch.started_at && (
+            <span className="text-xs">{new Date(batch.started_at).toLocaleTimeString()}</span>
+          )}
+          {batch.closed_at && (
+            <span className="text-xs text-gray-400">Closed {new Date(batch.closed_at).toLocaleTimeString()}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Batch progress bar */}
+      <div className="px-4 pb-2">
+        <div className="w-full bg-gray-200 rounded-full h-1.5">
+          <div
+            className={`h-1.5 rounded-full transition-all ${isActive ? 'bg-indigo-500' : 'bg-gray-400'}`}
+            style={{ width: `${Math.min(100, (batch.scanned_count / batch.target_size) * 100)}%` }}
+          ></div>
+        </div>
+      </div>
+
+      {/* Expanded scan list */}
+      {isExpanded && (
+        <div className="border-t border-gray-200 px-4 py-3">
+          {scans.length === 0 ? (
+            <div className="text-xs text-gray-400 py-2">Loading scans...</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-400">
+                  <th className="text-left py-1 pr-3">#</th>
+                  <th className="text-left py-1 pr-3">Serial Number</th>
+                  <th className="text-left py-1 pr-3">Product</th>
+                  <th className="text-left py-1 pr-3">CPU</th>
+                  <th className="text-left py-1 pr-3">RAM</th>
+                  <th className="text-left py-1 pr-3">Storage</th>
+                  <th className="text-left py-1 pr-3">Time</th>
+                  {isCounting && <th className="text-center py-1">Remove</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {scans.map((scan, idx) => (
+                  <tr key={scan.id} className="border-t border-gray-100">
+                    <td className="py-1.5 pr-3 text-gray-400">{idx + 1}</td>
+                    <td className="py-1.5 pr-3 font-mono text-gray-700">{scan.serial_number}</td>
+                    <td className="py-1.5 pr-3 text-gray-600">{scan.asset?.make} {scan.asset?.model}</td>
+                    <td className="py-1.5 pr-3 text-gray-500">{scan.unit?.cpu || '-'}</td>
+                    <td className="py-1.5 pr-3 text-gray-500">{scan.unit?.memory ? `${Math.round(scan.unit.memory / 1024)}GB` : '-'}</td>
+                    <td className="py-1.5 pr-3 text-gray-500">{scan.unit?.storage ? `${scan.unit.storage}GB` : '-'}</td>
+                    <td className="py-1.5 pr-3 text-gray-400">{new Date(scan.scanned_at).toLocaleTimeString()}</td>
+                    {isCounting && (
+                      <td className="py-1.5 text-center">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onRemoveScan(scan.id, scan.stock_take_item_id) }}
+                          className="text-red-400 hover:text-red-600"
+                          title="Remove scan"
+                        >
+                          &times;
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

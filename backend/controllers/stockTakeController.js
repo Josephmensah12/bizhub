@@ -4,7 +4,7 @@
  * CRUD + workflow operations for physical inventory counting sessions.
  */
 
-const { StockTake, StockTakeItem, StockTakeScan, Asset, AssetUnit, User, InventoryItemEvent, ActivityLog, sequelize } = require('../models');
+const { StockTake, StockTakeItem, StockTakeScan, StockTakeBatch, Asset, AssetUnit, User, InventoryItemEvent, ActivityLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 const asyncHandler = handler => (req, res, next) => {
@@ -180,6 +180,7 @@ exports.delete = asyncHandler(async (req, res) => {
   }
 
   await StockTakeScan.destroy({ where: { stock_take_id: stockTake.id } });
+  await StockTakeBatch.destroy({ where: { stock_take_id: stockTake.id } });
   await StockTakeItem.destroy({ where: { stock_take_id: stockTake.id } });
   await stockTake.destroy();
 
@@ -249,6 +250,17 @@ exports.start = asyncHandler(async (req, res) => {
     stockTake.status = 'in_progress';
     stockTake.started_at = new Date();
     await stockTake.save({ transaction });
+
+    // Create the first batch
+    await StockTakeBatch.create({
+      stock_take_id: stockTake.id,
+      batch_number: 1,
+      status: 'active',
+      target_size: 20,
+      scanned_count: 0,
+      started_at: new Date(),
+      created_by: req.user?.id
+    }, { transaction });
 
     await transaction.commit();
   } catch (err) {
@@ -934,16 +946,66 @@ exports.addScan = asyncHandler(async (req, res) => {
     });
   }
 
-  // Create the scan record
+  // Find or create active batch
+  let activeBatch = await StockTakeBatch.findOne({
+    where: { stock_take_id: stockTake.id, status: 'active' }
+  });
+
+  if (!activeBatch) {
+    // Get next batch number
+    const lastBatch = await StockTakeBatch.findOne({
+      where: { stock_take_id: stockTake.id },
+      order: [['batch_number', 'DESC']]
+    });
+    const nextNum = lastBatch ? lastBatch.batch_number + 1 : 1;
+    activeBatch = await StockTakeBatch.create({
+      stock_take_id: stockTake.id,
+      batch_number: nextNum,
+      status: 'active',
+      target_size: 20,
+      scanned_count: 0,
+      started_at: new Date(),
+      created_by: req.user?.id
+    });
+  }
+
+  // Create the scan record with batch reference
   const scan = await StockTakeScan.create({
     stock_take_id: stockTake.id,
     stock_take_item_id: item.id,
     asset_id: asset.id,
     asset_unit_id: unit.id,
     serial_number: sn,
+    stock_take_batch_id: activeBatch.id,
     scanned_by: req.user?.id,
     scanned_at: new Date()
   });
+
+  // Increment batch scanned_count
+  activeBatch.scanned_count += 1;
+
+  // Auto-close batch at target_size and create next batch
+  let newBatchCreated = false;
+  if (activeBatch.scanned_count >= activeBatch.target_size) {
+    activeBatch.status = 'closed';
+    activeBatch.closed_at = new Date();
+    await activeBatch.save();
+
+    // Create next batch
+    const nextNum = activeBatch.batch_number + 1;
+    activeBatch = await StockTakeBatch.create({
+      stock_take_id: stockTake.id,
+      batch_number: nextNum,
+      status: 'active',
+      target_size: 20,
+      scanned_count: 0,
+      started_at: new Date(),
+      created_by: req.user?.id
+    });
+    newBatchCreated = true;
+  } else {
+    await activeBatch.save();
+  }
 
   // Recompute counted_quantity from scan count
   const scanCount = await StockTakeScan.count({
@@ -961,6 +1023,7 @@ exports.addScan = asyncHandler(async (req, res) => {
   // Return enriched data
   const scanData = scan.toJSON();
   scanData.unit = { id: unit.id, serial_number: unit.serial_number, cpu: unit.cpu, memory: unit.memory, storage: unit.storage };
+  scanData.batch_number = newBatchCreated ? activeBatch.batch_number - 1 : activeBatch.batch_number;
 
   const itemData = item.toJSON();
   itemData.asset = { id: asset.id, asset_tag: asset.asset_tag, make: asset.make, model: asset.model, is_serialized: asset.is_serialized };
@@ -968,7 +1031,7 @@ exports.addScan = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: { scan: scanData, item: itemData },
+    data: { scan: scanData, item: itemData, batch: activeBatch.toJSON(), new_batch_created: newBatchCreated },
     message: `Scanned: ${sn} → ${asset.make} ${asset.model}`
   });
 });
@@ -1004,7 +1067,17 @@ exports.removeScan = asyncHandler(async (req, res) => {
   }
 
   const itemId = scan.stock_take_item_id;
+  const batchId = scan.stock_take_batch_id;
   await scan.destroy();
+
+  // Decrement batch scanned_count
+  if (batchId) {
+    const batch = await StockTakeBatch.findByPk(batchId);
+    if (batch) {
+      batch.scanned_count = Math.max(0, batch.scanned_count - 1);
+      await batch.save();
+    }
+  }
 
   // Recompute counted_quantity
   const scanCount = await StockTakeScan.count({
@@ -1054,6 +1127,124 @@ exports.getItemScans = asyncHandler(async (req, res) => {
   });
 
   res.json({ success: true, data: { scans, count: scans.length } });
+});
+
+// ---------------------------------------------------------------------------
+// Batch operations
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /:id/batches
+ * List all batches for a stock take, with scanned_count and status.
+ */
+exports.getBatches = asyncHandler(async (req, res) => {
+  const stockTake = await StockTake.findByPk(req.params.id);
+  if (!stockTake) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Stock take not found' }
+    });
+  }
+
+  const batches = await StockTakeBatch.findAll({
+    where: { stock_take_id: stockTake.id },
+    include: [{ model: User, as: 'creator', attributes: ['id', 'full_name'] }],
+    order: [['batch_number', 'DESC']]
+  });
+
+  res.json({ success: true, data: { batches } });
+});
+
+/**
+ * POST /:id/batches/:batchId/close
+ * Manually close/finish a batch (for partial batches < 20).
+ */
+exports.closeBatch = asyncHandler(async (req, res) => {
+  const { id, batchId } = req.params;
+  const stockTake = await StockTake.findByPk(id);
+  if (!stockTake) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Stock take not found' }
+    });
+  }
+  if (!['in_progress', 'under_review'].includes(stockTake.status)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NOT_COUNTING', message: 'Stock take is not in counting status' }
+    });
+  }
+
+  const batch = await StockTakeBatch.findOne({
+    where: { id: batchId, stock_take_id: id }
+  });
+  if (!batch) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'BATCH_NOT_FOUND', message: 'Batch not found' }
+    });
+  }
+  if (batch.status === 'closed') {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'ALREADY_CLOSED', message: 'Batch is already closed' }
+    });
+  }
+
+  batch.status = 'closed';
+  batch.closed_at = new Date();
+  await batch.save();
+
+  // Create a new active batch
+  const nextNum = batch.batch_number + 1;
+  const newBatch = await StockTakeBatch.create({
+    stock_take_id: id,
+    batch_number: nextNum,
+    status: 'active',
+    target_size: 20,
+    scanned_count: 0,
+    started_at: new Date(),
+    created_by: req.user?.id
+  });
+
+  res.json({
+    success: true,
+    data: { closedBatch: batch.toJSON(), newBatch: newBatch.toJSON() },
+    message: `Batch #${batch.batch_number} closed (${batch.scanned_count} scans). Batch #${nextNum} started.`
+  });
+});
+
+/**
+ * GET /:id/batches/:batchId/scans
+ * List all scans within a specific batch.
+ */
+exports.getBatchScans = asyncHandler(async (req, res) => {
+  const { id, batchId } = req.params;
+
+  const batch = await StockTakeBatch.findOne({
+    where: { id: batchId, stock_take_id: id }
+  });
+  if (!batch) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'BATCH_NOT_FOUND', message: 'Batch not found' }
+    });
+  }
+
+  const scans = await StockTakeScan.findAll({
+    where: { stock_take_batch_id: batchId },
+    include: [
+      { model: AssetUnit, as: 'unit', attributes: ['id', 'serial_number', 'cpu', 'cpu_model', 'memory', 'storage'] },
+      { model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'make', 'model'] },
+      { model: User, as: 'scanner', attributes: ['id', 'full_name'] }
+    ],
+    order: [['scanned_at', 'ASC']]
+  });
+
+  res.json({
+    success: true,
+    data: { batch: batch.toJSON(), scans, count: scans.length }
+  });
 });
 
 module.exports = exports;

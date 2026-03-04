@@ -36,6 +36,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    stock_take_batch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
     scanned_at: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -60,6 +64,7 @@ module.exports = (sequelize, DataTypes) => {
     StockTakeScan.belongsTo(models.Asset, { as: 'asset', foreignKey: 'asset_id' });
     StockTakeScan.belongsTo(models.AssetUnit, { as: 'unit', foreignKey: 'asset_unit_id' });
     StockTakeScan.belongsTo(models.User, { as: 'scanner', foreignKey: 'scanned_by' });
+    StockTakeScan.belongsTo(models.StockTakeBatch, { as: 'batch', foreignKey: 'stock_take_batch_id' });
   };
 
   return StockTakeScan;

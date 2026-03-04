@@ -89,6 +89,7 @@ module.exports = (sequelize, DataTypes) => {
     StockTake.belongsTo(models.User, { as: 'finalizer', foreignKey: 'finalized_by' });
     StockTake.hasMany(models.StockTakeItem, { as: 'items', foreignKey: 'stock_take_id' });
     StockTake.hasMany(models.StockTakeScan, { as: 'scans', foreignKey: 'stock_take_id' });
+    StockTake.hasMany(models.StockTakeBatch, { as: 'batches', foreignKey: 'stock_take_id' });
   };
 
   StockTake.STATUSES = STATUSES;
