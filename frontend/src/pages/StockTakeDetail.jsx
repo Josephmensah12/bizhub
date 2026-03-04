@@ -278,28 +278,24 @@ export default function StockTakeDetail() {
         const { scan, item } = res.data.data
         addToast('success', `Scanned: ${scan.unit?.serial_number || serial} -> ${item.asset?.make} ${item.asset?.model} (${item.scan_count}/${item.expected_quantity})`)
 
-        // Update item in list
-        setItems(prev => prev.map(i => {
-          if (i.id === item.id) {
-            return { ...i, counted_quantity: item.counted_quantity, variance: item.variance, status: item.status, resolution: item.resolution, scan_count: item.scan_count }
-          }
-          return i
-        }))
-
         // If this item is expanded, refresh its scans
         if (expandedItems[item.id]) {
           fetchItemScans(item.id)
         }
 
-        // Scroll to item
-        const el = document.getElementById(`item-row-${item.id}`)
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          el.classList.add('ring-2', 'ring-green-500')
-          setTimeout(() => el.classList.remove('ring-2', 'ring-green-500'), 2000)
-        }
-
+        // Refresh items and progress from server to ensure counts are accurate
+        await fetchItems()
         fetchStockTake()
+
+        // Scroll to item after refresh
+        setTimeout(() => {
+          const el = document.getElementById(`item-row-${item.id}`)
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            el.classList.add('ring-2', 'ring-green-500')
+            setTimeout(() => el.classList.remove('ring-2', 'ring-green-500'), 2000)
+          }
+        }, 100)
       }
     } catch (err) {
       const errCode = err.response?.data?.error?.code
@@ -353,7 +349,7 @@ export default function StockTakeDetail() {
 
   const handleRemoveScan = async (scanId, itemId) => {
     try {
-      const res = await axios.delete(`/api/v1/stock-takes/${id}/scans/${scanId}`)
+      await axios.delete(`/api/v1/stock-takes/${id}/scans/${scanId}`)
       addToast('info', 'Scan removed')
 
       // Update scan list
@@ -362,21 +358,8 @@ export default function StockTakeDetail() {
         [itemId]: (prev[itemId] || []).filter(s => s.id !== scanId)
       }))
 
-      // Update item count
-      const newCount = res.data.data.scan_count
-      setItems(prev => prev.map(i => {
-        if (i.id === itemId) {
-          return {
-            ...i,
-            counted_quantity: newCount > 0 ? newCount : null,
-            variance: newCount > 0 ? newCount - i.expected_quantity : null,
-            status: newCount > 0 ? 'counted' : 'pending',
-            scan_count: newCount
-          }
-        }
-        return i
-      }))
-
+      // Refresh items and progress from server
+      await fetchItems()
       fetchStockTake()
     } catch (err) {
       addToast('error', 'Failed to remove scan')
@@ -550,14 +533,18 @@ export default function StockTakeDetail() {
 
       {/* Stats cards */}
       {progress && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="card text-center">
             <div className="text-2xl font-bold text-gray-900">{progress.total_items}</div>
-            <div className="text-sm text-gray-500">Total Items</div>
+            <div className="text-sm text-gray-500">Total Products</div>
+          </div>
+          <div className="card text-center">
+            <div className="text-2xl font-bold text-indigo-600">{items.reduce((sum, i) => sum + (i.scan_count || 0), 0)}</div>
+            <div className="text-sm text-gray-500">Serials Scanned</div>
           </div>
           <div className="card text-center">
             <div className="text-2xl font-bold text-blue-600">{progress.counted}</div>
-            <div className="text-sm text-gray-500">Counted</div>
+            <div className="text-sm text-gray-500">Products Counted</div>
           </div>
           <div className="card text-center">
             <div className="text-2xl font-bold text-green-600">{progress.matched}</div>
