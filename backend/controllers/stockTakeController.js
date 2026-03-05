@@ -815,12 +815,13 @@ exports.lookup = asyncHandler(async (req, res) => {
     });
   }
 
-  // First try asset by serial_number or asset_tag
+  // First try asset by serial_number or asset_tag (case-insensitive)
+  const codeUpper = code.toUpperCase();
   let asset = await Asset.findOne({
     where: {
       [Op.or]: [
-        { serial_number: code },
-        { asset_tag: code }
+        sequelize.where(sequelize.fn('UPPER', sequelize.col('serial_number')), codeUpper),
+        sequelize.where(sequelize.fn('UPPER', sequelize.col('asset_tag')), codeUpper)
       ],
       deleted_at: null
     }
@@ -828,10 +829,10 @@ exports.lookup = asyncHandler(async (req, res) => {
 
   let unit = null;
 
-  // If not found at asset level, search asset_units by serial_number
+  // If not found at asset level, search asset_units by serial_number (case-insensitive)
   if (!asset) {
     unit = await AssetUnit.findOne({
-      where: { serial_number: code },
+      where: sequelize.where(sequelize.fn('UPPER', sequelize.col('serial_number')), codeUpper),
       include: [{ model: Asset, as: 'product', where: { deleted_at: null } }]
     });
     if (unit) asset = unit.product;
@@ -901,10 +902,14 @@ exports.addScan = asyncHandler(async (req, res) => {
   }
 
   const sn = serial_number.trim();
+  const snUpper = sn.toUpperCase();
 
-  // Check for duplicate scan in this session
+  // Check for duplicate scan in this session (case-insensitive)
   const existing = await StockTakeScan.findOne({
-    where: { stock_take_id: stockTake.id, serial_number: sn }
+    where: {
+      stock_take_id: stockTake.id,
+      [Op.and]: sequelize.where(sequelize.fn('UPPER', sequelize.col('serial_number')), snUpper)
+    }
   });
   if (existing) {
     return res.status(409).json({
@@ -913,17 +918,20 @@ exports.addScan = asyncHandler(async (req, res) => {
     });
   }
 
-  // Find the asset unit
+  // Find the asset unit (case-insensitive)
   const unit = await AssetUnit.findOne({
-    where: { serial_number: sn },
+    where: sequelize.where(sequelize.fn('UPPER', sequelize.col('AssetUnit.serial_number')), snUpper),
     include: [{ model: Asset, as: 'product', where: { deleted_at: null } }]
   });
 
   if (!unit) {
-    // Also try asset-level serial_number or asset_tag
+    // Also try asset-level serial_number or asset_tag (case-insensitive)
     const asset = await Asset.findOne({
       where: {
-        [Op.or]: [{ serial_number: sn }, { asset_tag: sn }],
+        [Op.or]: [
+          sequelize.where(sequelize.fn('UPPER', sequelize.col('serial_number')), snUpper),
+          sequelize.where(sequelize.fn('UPPER', sequelize.col('asset_tag')), snUpper)
+        ],
         deleted_at: null
       }
     });
