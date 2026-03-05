@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -129,6 +129,7 @@ function RevenueBar({ label, value, maxValue }) {
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [metrics, setMetrics] = useState(null)
   const [valuation, setValuation] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -355,16 +356,23 @@ export default function Dashboard() {
             <BarChart
               layout="vertical"
               data={top10Data.map(item => ({
+                id: item.id,
                 name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
                 quantity: Number(item.quantity)
               }))}
               margin={{ top: 0, right: 30, left: 0, bottom: 0 }}
+              style={{ cursor: 'pointer' }}
+              onClick={(state) => {
+                if (state?.activePayload?.[0]?.payload?.id) {
+                  navigate(`/inventory/${state.activePayload[0].payload.id}`)
+                }
+              }}
             >
               <CartesianGrid strokeDasharray="3 3" horizontal={false} />
               <XAxis type="number" allowDecimals={false} />
               <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 13 }} />
               <Tooltip />
-              <Bar dataKey="quantity" fill="#6366f1" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="quantity" fill="#6366f1" radius={[0, 4, 4, 0]} className="cursor-pointer" />
             </BarChart>
           </ResponsiveContainer>
         ) : (
