@@ -240,10 +240,10 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Middle 2-col: Recent Sales + Needs Attention */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Recent Sales */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      {/* Recent Sales + Aging Stock */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Recent Sales — wider */}
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-base font-semibold text-gray-900">Recent Sales</h2>
             <Link to="/sales/invoices" className="text-xs text-primary-600 hover:text-primary-700 font-medium">
@@ -279,53 +279,6 @@ export default function Dashboard() {
             </div>
           ) : (
             <p className="text-sm text-gray-400 py-4 text-center">No recent invoices</p>
-          )}
-        </div>
-
-        {/* Needs Attention */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-5">Needs Attention</h2>
-          <div className="space-y-1">
-            {[
-              { label: 'Diagnostics Pending', count: metrics?.needs_attention?.diagnostics_pending || 0 },
-              { label: 'Wipe Pending', count: metrics?.needs_attention?.wipe_pending || 0 },
-              { label: 'QC Pending', count: metrics?.needs_attention?.qc_pending || 0 },
-              { label: 'Preorders SLA Breach', count: metrics?.needs_attention?.preorders_sla_breach || 0, alert: true },
-              { label: 'Open Repairs', count: metrics?.needs_attention?.repairs_open || 0 },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
-                <span className="text-sm text-gray-600">{item.label}</span>
-                <span className={`text-sm font-semibold ${item.alert && item.count > 0 ? 'text-red-600' : item.count > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
-                  {item.count}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom 2-col: Lead Sources + Aging Stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Lead Sources */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-5">Lead Sources (This Month)</h2>
-          {metrics?.lead_source_breakdown && metrics.lead_source_breakdown.length > 0 ? (
-            <div className="space-y-3">
-              {metrics.lead_source_breakdown.map((source) => (
-                <div key={source.source} className="flex items-center gap-3">
-                  <div className="w-28 text-sm text-gray-600 shrink-0 truncate">{source.source}</div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div
-                      className="bg-primary-500 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${source.percentage}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-semibold text-gray-900 w-8 text-right">{source.count}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400 py-4 text-center">No data</p>
           )}
         </div>
 
