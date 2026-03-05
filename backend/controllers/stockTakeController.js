@@ -838,6 +838,15 @@ exports.lookup = asyncHandler(async (req, res) => {
     if (unit) asset = unit.product;
   }
 
+  // Fallback: search asset_units by barcode (SalesBinder SKU)
+  if (!asset) {
+    unit = await AssetUnit.findOne({
+      where: sequelize.where(sequelize.fn('UPPER', sequelize.col('barcode')), codeUpper),
+      include: [{ model: Asset, as: 'product', where: { deleted_at: null } }]
+    });
+    if (unit) asset = unit.product;
+  }
+
   if (!asset) {
     return res.status(404).json({
       success: false,
@@ -918,11 +927,19 @@ exports.addScan = asyncHandler(async (req, res) => {
     });
   }
 
-  // Find the asset unit (case-insensitive)
-  const unit = await AssetUnit.findOne({
+  // Find the asset unit by serial_number or barcode (case-insensitive)
+  let unit = await AssetUnit.findOne({
     where: sequelize.where(sequelize.fn('UPPER', sequelize.col('AssetUnit.serial_number')), snUpper),
     include: [{ model: Asset, as: 'product', where: { deleted_at: null } }]
   });
+
+  // Fallback: search by barcode column (SalesBinder SKU printed on sticker)
+  if (!unit) {
+    unit = await AssetUnit.findOne({
+      where: sequelize.where(sequelize.fn('UPPER', sequelize.col('AssetUnit.barcode')), snUpper),
+      include: [{ model: Asset, as: 'product', where: { deleted_at: null } }]
+    });
+  }
 
   if (!unit) {
     // Also try asset-level serial_number or asset_tag (case-insensitive)
@@ -1003,13 +1020,24 @@ exports.addScan = asyncHandler(async (req, res) => {
     });
   }
 
-  // Create the scan record with batch reference
+  // Check if this unit was already scanned (by unit ID, not just serial text)
+  const existingUnitScan = await StockTakeScan.findOne({
+    where: { stock_take_id: stockTake.id, asset_unit_id: unit.id }
+  });
+  if (existingUnitScan) {
+    return res.status(409).json({
+      success: false,
+      error: { code: 'DUPLICATE_SCAN', message: `Unit ${unit.serial_number} already scanned in this stock take (scanned via ${existingUnitScan.serial_number})` }
+    });
+  }
+
+  // Create the scan record — store the actual serial_number (not barcode) for consistency
   const scan = await StockTakeScan.create({
     stock_take_id: stockTake.id,
     stock_take_item_id: item.id,
     asset_id: asset.id,
     asset_unit_id: unit.id,
-    serial_number: sn,
+    serial_number: unit.serial_number,
     stock_take_batch_id: activeBatch.id,
     scanned_by: req.user?.id,
     scanned_at: new Date()

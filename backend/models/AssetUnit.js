@@ -99,6 +99,11 @@ module.exports = (sequelize, DataTypes) => {
       },
       comment: 'Set when unit is sold via an invoice line item'
     },
+    barcode: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'SalesBinder SKU/barcode — alternate lookup for stock take scanning'
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
