@@ -86,19 +86,18 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const todayCollected = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.amount_paid) || 0), 0);
 
   // Recent invoices (today) for the dashboard table
-  const recentInvoiceWhere = { ...invoiceWhere };
   const recentInvoices = await sequelize.query(
     `SELECT i.id, i.invoice_number, i.total_amount, i.status, i.invoice_date,
             TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) as customer_name
      FROM invoices i
      LEFT JOIN customers c ON i.customer_id = c.id
      WHERE i.status != 'CANCELLED'
-       AND i.invoice_date >= $1
-       ${role === 'Sales' ? 'AND i.created_by = $2' : ''}
+       AND i.invoice_date = CURRENT_DATE
+       ${role === 'Sales' ? 'AND i.created_by = $1' : ''}
      ORDER BY i.created_at DESC
      LIMIT 10`,
     {
-      bind: role === 'Sales' ? [todayStart, req.user.id] : [todayStart],
+      bind: role === 'Sales' ? [req.user.id] : [],
       type: sequelize.QueryTypes.SELECT
     }
   );
