@@ -450,50 +450,72 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
   const agingBuckets = await sequelize.query(`
     SELECT
       CASE
-        WHEN COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '30 days' THEN '0-30 days'
-        WHEN COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '60 days' THEN '31-60 days'
-        WHEN COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '90 days' THEN '61-90 days'
+        WHEN COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '30 days' THEN '0-30 days'
+        WHEN COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '60 days' THEN '31-60 days'
+        WHEN COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '90 days' THEN '61-90 days'
         ELSE '90+ days'
       END as age_bucket,
       COUNT(*) as item_count,
-      COALESCE(SUM(quantity), 0) as total_units,
-      COALESCE(SUM(price_amount * quantity), 0) as total_retail_value,
-      COALESCE(SUM(cost_amount * quantity), 0) as total_cost_value
-    FROM assets
-    WHERE status = 'In Stock'
-      AND deleted_at IS NULL
+      COALESCE(SUM(a.quantity), 0) as total_units,
+      COALESCE(SUM(
+        CASE WHEN a.is_serialized THEN
+          COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+        ELSE a.price_amount * a.quantity END
+      ), 0) as total_retail_value,
+      COALESCE(SUM(
+        CASE WHEN a.is_serialized THEN
+          COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+        ELSE a.cost_amount * a.quantity END
+      ), 0) as total_cost_value
+    FROM assets a
+    WHERE a.status = 'In Stock'
+      AND a.deleted_at IS NULL
     GROUP BY 1
-    ORDER BY MIN(COALESCE(purchase_date, created_at)) DESC
+    ORDER BY MIN(COALESCE(a.purchase_date, a.created_at)) DESC
   `, { type: QueryTypes.SELECT });
 
-  // Oldest unsold items
+  // Oldest unsold items — use actual unit costs for serialized assets
   const oldestItems = await sequelize.query(`
     SELECT
-      id, asset_tag, make, model, category, asset_type,
-      serial_number, quantity, price_amount, cost_amount,
-      COALESCE(purchase_date, created_at) as stock_date,
-      EXTRACT(DAY FROM NOW() - COALESCE(purchase_date, created_at)) as days_in_stock
-    FROM assets
-    WHERE status = 'In Stock'
-      AND deleted_at IS NULL
-    ORDER BY COALESCE(purchase_date, created_at) ASC
+      a.id, a.asset_tag, a.make, a.model, a.category, a.asset_type,
+      a.serial_number, a.quantity, a.price_amount, a.cost_amount, a.is_serialized,
+      COALESCE(a.purchase_date, a.created_at) as stock_date,
+      EXTRACT(DAY FROM NOW() - COALESCE(a.purchase_date, a.created_at)) as days_in_stock,
+      CASE WHEN a.is_serialized THEN
+        COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+      ELSE a.cost_amount * a.quantity END as total_cost,
+      CASE WHEN a.is_serialized THEN
+        COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+      ELSE a.price_amount * a.quantity END as total_retail
+    FROM assets a
+    WHERE a.status = 'In Stock'
+      AND a.deleted_at IS NULL
+    ORDER BY COALESCE(a.purchase_date, a.created_at) ASC
     LIMIT 20
   `, { type: QueryTypes.SELECT });
 
-  // Category breakdown for in-stock
+  // Category breakdown for in-stock — use actual unit costs for serialized assets
   const categoryBreakdown = await sequelize.query(`
-    SELECT 
-      category,
-      asset_type,
+    SELECT
+      a.category,
+      a.asset_type,
       COUNT(*) as item_count,
-      SUM(quantity) as total_units,
-      COALESCE(SUM(price_amount * quantity), 0) as retail_value,
-      COALESCE(SUM(cost_amount * quantity), 0) as cost_value,
-      AVG(EXTRACT(DAY FROM NOW() - COALESCE(purchase_date, created_at))) as avg_days_in_stock
-    FROM assets
-    WHERE status = 'In Stock'
-      AND deleted_at IS NULL
-    GROUP BY category, asset_type
+      SUM(a.quantity) as total_units,
+      COALESCE(SUM(
+        CASE WHEN a.is_serialized THEN
+          COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+        ELSE a.price_amount * a.quantity END
+      ), 0) as retail_value,
+      COALESCE(SUM(
+        CASE WHEN a.is_serialized THEN
+          COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+        ELSE a.cost_amount * a.quantity END
+      ), 0) as cost_value,
+      AVG(EXTRACT(DAY FROM NOW() - COALESCE(a.purchase_date, a.created_at))) as avg_days_in_stock
+    FROM assets a
+    WHERE a.status = 'In Stock'
+      AND a.deleted_at IS NULL
+    GROUP BY a.category, a.asset_type
     ORDER BY retail_value DESC
   `, { type: QueryTypes.SELECT });
 
@@ -512,6 +534,8 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
         quantity: parseInt(i.quantity),
         price_amount: parseFloat(i.price_amount),
         cost_amount: parseFloat(i.cost_amount),
+        total_cost: parseFloat(i.total_cost),
+        total_retail: parseFloat(i.total_retail),
         days_in_stock: parseInt(i.days_in_stock)
       })),
       category_breakdown: categoryBreakdown.map(c => ({
