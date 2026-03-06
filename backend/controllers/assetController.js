@@ -35,16 +35,23 @@ exports.list = asyncHandler(async (req, res) => {
   const where = {};
 
   if (search) {
-    where[Op.or] = [
+    // Find assets that have units matching the search serial number
+    const [unitMatches] = await sequelize.query(
+      `SELECT DISTINCT asset_id FROM asset_units WHERE serial_number ILIKE $1`,
+      { bind: [`%${search}%`] }
+    );
+    const unitAssetIds = unitMatches.map(r => r.asset_id);
+
+    const orConditions = [
       { asset_tag: { [Op.iLike]: `%${search}%` } },
       { serial_number: { [Op.iLike]: `%${search}%` } },
       { make: { [Op.iLike]: `%${search}%` } },
-      { model: { [Op.iLike]: `%${search}%` } },
-      sequelize.where(
-        sequelize.literal(`(SELECT COUNT(*) FROM asset_units au WHERE au.asset_id = "Asset"."id" AND au.serial_number ILIKE :unitSearch)`),
-        { [Op.gt]: 0 }
-      )
+      { model: { [Op.iLike]: `%${search}%` } }
     ];
+    if (unitAssetIds.length > 0) {
+      orConditions.push({ id: { [Op.in]: unitAssetIds } });
+    }
+    where[Op.or] = orConditions;
   }
 
   // Handle multi-select filters (comma-separated values)
@@ -126,10 +133,6 @@ exports.list = asyncHandler(async (req, res) => {
       ]
     }
   };
-
-  if (search) {
-    queryOpts.replacements = { unitSearch: `%${search}%` };
-  }
 
   const { count, rows } = await Asset.findAndCountAll(queryOpts);
 
