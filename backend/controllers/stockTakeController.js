@@ -4,7 +4,7 @@
  * CRUD + workflow operations for physical inventory counting sessions.
  */
 
-const { StockTake, StockTakeItem, StockTakeScan, StockTakeBatch, Asset, AssetUnit, User, InventoryItemEvent, ActivityLog, sequelize } = require('../models');
+const { StockTake, StockTakeItem, StockTakeScan, StockTakeBatch, StockTakeUnitNote, Asset, AssetUnit, User, InventoryItemEvent, ActivityLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 const asyncHandler = handler => (req, res, next) => {
@@ -764,10 +764,23 @@ exports.export = asyncHandler(async (req, res) => {
     order: [['id', 'ASC']]
   });
 
-  const header = 'Asset Tag,Make,Model,Serial Number,Category,Type,Condition,Count Method,Expected Qty,Counted Qty,Variance,Status,Resolution,Notes,Scanned Serials';
+  // Fetch all unit notes for this stock take
+  const unitNotes = await StockTakeUnitNote.findAll({
+    where: { stock_take_id: stockTake.id },
+    include: [{ model: AssetUnit, as: 'unit', attributes: ['serial_number'] }]
+  });
+  const notesByItem = new Map();
+  for (const n of unitNotes) {
+    const arr = notesByItem.get(n.stock_take_item_id) || [];
+    arr.push(`${n.unit?.serial_number || 'unknown'}: ${n.notes}`);
+    notesByItem.set(n.stock_take_item_id, arr);
+  }
+
+  const header = 'Asset Tag,Make,Model,Serial Number,Category,Type,Condition,Count Method,Expected Qty,Counted Qty,Variance,Status,Resolution,Notes,Scanned Serials,Unit Notes';
   const rows = items.map(i => {
     const a = i.asset || {};
     const scannedSerials = (i.scans || []).map(s => s.serial_number).join('; ');
+    const unitNotesStr = (notesByItem.get(i.id) || []).join('; ');
     return [
       a.asset_tag || '',
       a.make || '',
@@ -783,7 +796,8 @@ exports.export = asyncHandler(async (req, res) => {
       i.status,
       i.resolution || '',
       (i.resolution_notes || '').replace(/"/g, '""'),
-      scannedSerials
+      scannedSerials,
+      unitNotesStr.replace(/"/g, '""')
     ].map(v => `"${v}"`).join(',');
   });
 
@@ -1200,13 +1214,21 @@ exports.getItemScans = asyncHandler(async (req, res) => {
   // Build a set of scanned unit IDs for quick lookup
   const scannedUnitIds = new Set(scans.map(s => s.asset_unit_id));
 
-  // Enrich each unit with scan info
+  // Fetch unit-level notes for this item
+  const unitNotes = await StockTakeUnitNote.findAll({
+    where: { stock_take_item_id: itemId },
+    attributes: ['asset_unit_id', 'notes']
+  });
+  const notesByUnit = new Map(unitNotes.map(n => [n.asset_unit_id, n.notes]));
+
+  // Enrich each unit with scan info and notes
   const units = allUnits.map(u => {
     const json = u.toJSON();
     json.scanned = scannedUnitIds.has(u.id);
     const scan = scans.find(s => s.asset_unit_id === u.id);
     json.scanned_by = scan?.scanner?.full_name || null;
     json.scanned_at = scan?.scanned_at || null;
+    json.notes = notesByUnit.get(u.id) || '';
     return json;
   });
 
@@ -1214,6 +1236,59 @@ exports.getItemScans = asyncHandler(async (req, res) => {
     success: true,
     data: { units, scans, total_units: allUnits.length, scanned_count: scans.length }
   });
+});
+
+/**
+ * PUT /:id/items/:itemId/unit-notes/:unitId
+ * Create or update a note on a specific serial number (asset unit) within a stock take.
+ */
+exports.updateUnitNote = asyncHandler(async (req, res) => {
+  const { id, itemId, unitId } = req.params;
+  const { notes } = req.body;
+
+  const stockTake = await StockTake.findByPk(id);
+  if (!stockTake) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Stock take not found' }
+    });
+  }
+  if (!['in_progress', 'under_review'].includes(stockTake.status)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'NOT_ACTIVE', message: 'Stock take is not in counting or review status' }
+    });
+  }
+
+  const item = await StockTakeItem.findOne({
+    where: { id: itemId, stock_take_id: id }
+  });
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'ITEM_NOT_FOUND', message: 'Stock take item not found' }
+    });
+  }
+
+  const trimmed = (notes || '').trim();
+
+  if (!trimmed) {
+    // Delete note if empty
+    await StockTakeUnitNote.destroy({
+      where: { stock_take_id: id, stock_take_item_id: itemId, asset_unit_id: unitId }
+    });
+    return res.json({ success: true, data: { notes: '' }, message: 'Note removed' });
+  }
+
+  const [unitNote] = await StockTakeUnitNote.upsert({
+    stock_take_id: parseInt(id),
+    stock_take_item_id: parseInt(itemId),
+    asset_unit_id: parseInt(unitId),
+    notes: trimmed,
+    created_by: req.user?.id || null
+  });
+
+  res.json({ success: true, data: { notes: unitNote.notes }, message: 'Note saved' });
 });
 
 // ---------------------------------------------------------------------------

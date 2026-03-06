@@ -398,6 +398,26 @@ export default function StockTakeDetail() {
     }
   }
 
+  const handleUpdateUnitNote = async (itemId, unitId, notes) => {
+    try {
+      await axios.put(`/api/v1/stock-takes/${id}/items/${itemId}/unit-notes/${unitId}`, { notes })
+      // Update local scan data with new note
+      setItemScans(prev => {
+        const data = prev[itemId]
+        if (!data) return prev
+        return {
+          ...prev,
+          [itemId]: {
+            ...data,
+            units: data.units.map(u => u.id === unitId ? { ...u, notes } : u)
+          }
+        }
+      })
+    } catch (err) {
+      addToast('error', 'Failed to save note')
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Batch operations
   // ---------------------------------------------------------------------------
@@ -799,6 +819,7 @@ export default function StockTakeDetail() {
                       onToggleExpand={() => toggleExpand(item.id)}
                       scanData={itemScans[item.id] || null}
                       onRemoveScan={handleRemoveScan}
+                      onUpdateUnitNote={handleUpdateUnitNote}
                       isCounting={isCounting}
                     />
                   ))}
@@ -936,10 +957,43 @@ function BatchRow({ batch, isExpanded, onToggleExpand, scans, isCounting, onRemo
 }
 
 // ---------------------------------------------------------------------------
+// UnitNoteInput — inline note editor for individual serial numbers
+// ---------------------------------------------------------------------------
+
+function UnitNoteInput({ initialValue, onSave }) {
+  const [value, setValue] = useState(initialValue)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { setValue(initialValue) }, [initialValue])
+
+  const handleBlur = () => {
+    if (value !== initialValue) {
+      onSave(value)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
+        placeholder="Add note..."
+        className={`text-xs px-2 py-1 border rounded-md w-36 ${saved ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // ItemRow sub-component with expandable serial scans
 // ---------------------------------------------------------------------------
 
-function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, onUpdateResolution, isExpanded, onToggleExpand, scanData, onRemoveScan, isCounting }) {
+function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, onUpdateResolution, isExpanded, onToggleExpand, scanData, onRemoveScan, onUpdateUnitNote, isCounting }) {
   const [countInput, setCountInput] = useState(item.counted_quantity != null ? String(item.counted_quantity) : '')
   const [resolutionNotes, setResolutionNotes] = useState(item.resolution_notes || '')
   const asset = item.asset || {}
@@ -1125,6 +1179,7 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
                       <th className="text-left py-1 pr-4">Unit Status</th>
                       <th className="text-left py-1 pr-4">Scanned By</th>
                       <th className="text-left py-1 pr-4">Time</th>
+                      {showResolution && <th className="text-left py-1 pr-4">Notes</th>}
                       {isCounting && <th className="text-center py-1">Remove</th>}
                     </tr>
                   </thead>
@@ -1156,6 +1211,14 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
                           </td>
                           <td className="py-1.5 pr-4 text-gray-500">{unit.scanned_by || '-'}</td>
                           <td className="py-1.5 pr-4 text-gray-400">{unit.scanned_at ? new Date(unit.scanned_at).toLocaleTimeString() : '-'}</td>
+                          {showResolution && (
+                            <td className="py-1.5 pr-4">
+                              <UnitNoteInput
+                                initialValue={unit.notes || ''}
+                                onSave={(notes) => onUpdateUnitNote(item.id, unit.id, notes)}
+                              />
+                            </td>
+                          )}
                           {isCounting && (
                             <td className="py-1.5 text-center">
                               {unit.scanned && scan ? (
