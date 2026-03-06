@@ -39,7 +39,11 @@ exports.list = asyncHandler(async (req, res) => {
       { asset_tag: { [Op.iLike]: `%${search}%` } },
       { serial_number: { [Op.iLike]: `%${search}%` } },
       { make: { [Op.iLike]: `%${search}%` } },
-      { model: { [Op.iLike]: `%${search}%` } }
+      { model: { [Op.iLike]: `%${search}%` } },
+      sequelize.where(
+        sequelize.literal(`(SELECT COUNT(*) FROM asset_units au WHERE au.asset_id = "Asset"."id" AND au.serial_number ILIKE :unitSearch)`),
+        { [Op.gt]: 0 }
+      )
     ];
   }
 
@@ -69,7 +73,7 @@ exports.list = asyncHandler(async (req, res) => {
     }
   }
 
-  const { count, rows } = await Asset.findAndCountAll({
+  const queryOpts = {
     where,
     limit: parseInt(limit),
     offset: parseInt(offset),
@@ -121,7 +125,13 @@ exports.list = asyncHandler(async (req, res) => {
         ]
       ]
     }
-  });
+  };
+
+  if (search) {
+    queryOpts.replacements = { unitSearch: `%${search}%` };
+  }
+
+  const { count, rows } = await Asset.findAndCountAll(queryOpts);
 
   res.json({
     success: true,
