@@ -48,9 +48,9 @@ const MetricIcons = {
 }
 
 // ─── Metric Card ─────────────────────────────────────────────
-function MetricCard({ title, value, subtitle, icon, trend, trendUp }) {
+function MetricCard({ title, value, subtitle, icon, trend, trendUp, tooltip }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200 relative group">
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm text-gray-500 mb-1">{title}</p>
@@ -69,6 +69,14 @@ function MetricCard({ title, value, subtitle, icon, trend, trendUp }) {
         </div>
         {icon}
       </div>
+      {tooltip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+          <div className="bg-gray-800 text-white text-xs rounded-lg px-3 py-2 whitespace-pre-line max-w-xs shadow-lg">
+            {tooltip}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -233,6 +241,7 @@ export default function Dashboard() {
           icon={MetricIcons.revenue}
           trend={metrics?.mtd_sales?.percent_change != null ? `${Math.abs(metrics.mtd_sales.percent_change)}%` : null}
           trendUp={metrics?.mtd_sales?.percent_change >= 0}
+          tooltip={metrics?.mtd_sales ? `Month-to-Date (Day 1–${new Date().getDate()})\nCurrent: ${formatCurrency(metrics.mtd_sales.current)}\nPrev month same period: ${formatCurrency(metrics.mtd_sales.previous)}\n% Change: (Current − Previous) / Previous × 100\n= (${formatCurrency(metrics.mtd_sales.current)} − ${formatCurrency(metrics.mtd_sales.previous)}) / ${formatCurrency(metrics.mtd_sales.previous)} × 100\n= ${metrics.mtd_sales.percent_change >= 0 ? '+' : ''}${metrics.mtd_sales.percent_change}%` : null}
         />
         <MetricCard
           title="Active Preorders"
