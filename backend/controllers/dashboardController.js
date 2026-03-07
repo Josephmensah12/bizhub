@@ -85,6 +85,40 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const todayTotalAmount = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.total_amount) || 0), 0);
   const todayCollected = todayInvoices.reduce((sum, inv) => sum + (parseFloat(inv.amount_paid) || 0), 0);
 
+  // --- MTD sales ---
+  const now = new Date();
+  const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const dayOfMonth = now.getDate();
+  const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth);
+  // Add 1 day to make it inclusive of today / same day in prev month
+  const mtdEnd = new Date(now.getFullYear(), now.getMonth(), dayOfMonth + 1);
+  const prevEnd = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth + 1);
+
+  const mtdSalesWhere = {
+    status: { [Op.ne]: 'CANCELLED' },
+    invoice_date: { [Op.gte]: mtdStart, [Op.lt]: mtdEnd }
+  };
+  const prevMtdSalesWhere = {
+    status: { [Op.ne]: 'CANCELLED' },
+    invoice_date: { [Op.gte]: prevMonthStart, [Op.lt]: prevEnd }
+  };
+  if (role === 'Sales') {
+    mtdSalesWhere.created_by = req.user.id;
+    prevMtdSalesWhere.created_by = req.user.id;
+  }
+
+  const [mtdInvoices, prevMtdInvoices] = await Promise.all([
+    Invoice.findAll({ where: mtdSalesWhere, attributes: ['total_amount'], raw: true }),
+    Invoice.findAll({ where: prevMtdSalesWhere, attributes: ['total_amount'], raw: true })
+  ]);
+
+  const mtdTotal = mtdInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const prevMtdTotal = prevMtdInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const mtdPctChange = prevMtdTotal > 0
+    ? ((mtdTotal - prevMtdTotal) / prevMtdTotal) * 100
+    : (mtdTotal > 0 ? 100 : 0);
+
   // Recent invoices (today) for the dashboard table
   const recentInvoices = await sequelize.query(
     `SELECT i.id, i.invoice_number, i.total_amount, i.status, i.invoice_date,
@@ -127,6 +161,12 @@ exports.getMetrics = asyncHandler(async (req, res) => {
       total_amount: parseFloat(todayTotalAmount.toFixed(2)),
       collected: parseFloat(todayCollected.toFixed(2)),
       transaction_count: todayInvoices.length
+    },
+    mtd_sales: {
+      current: parseFloat(mtdTotal.toFixed(2)),
+      previous: parseFloat(prevMtdTotal.toFixed(2)),
+      percent_change: parseFloat(mtdPctChange.toFixed(1)),
+      transaction_count: mtdInvoices.length
     },
     recent_invoices: recentInvoices,
     inventory_on_hand: {

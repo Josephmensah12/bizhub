@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-// https://vitejs.dev/config/
+// Build v1.0.1 - cache bust
 export default defineConfig({
   plugins: [react()],
   server: {

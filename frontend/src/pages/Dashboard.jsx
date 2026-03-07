@@ -227,10 +227,12 @@ export default function Dashboard() {
           icon={MetricIcons.inventory}
         />
         <MetricCard
-          title="Low Stock"
-          value={metrics?.low_stock_alerts?.count || 0}
-          subtitle="Items below threshold"
-          icon={MetricIcons.lowStock}
+          title="MTD Sales"
+          value={formatCurrency(metrics?.mtd_sales?.current)}
+          subtitle={`vs ${formatCurrency(metrics?.mtd_sales?.previous)} last month`}
+          icon={MetricIcons.revenue}
+          trend={metrics?.mtd_sales?.percent_change != null ? `${Math.abs(metrics.mtd_sales.percent_change)}%` : null}
+          trendUp={metrics?.mtd_sales?.percent_change >= 0}
         />
         <MetricCard
           title="Active Preorders"
