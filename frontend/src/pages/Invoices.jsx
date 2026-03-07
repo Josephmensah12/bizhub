@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -96,6 +96,7 @@ function StatusBadge({ status }) {
 
 export default function Invoices() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { permissions } = usePermissions();
   const canSeeCost = permissions?.canSeeCost ?? false;
   const canSeeProfit = permissions?.canSeeProfit ?? false;
@@ -119,11 +120,14 @@ export default function Invoices() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
 
-  // Filters
-  const [datePreset, setDatePreset] = useState('all');
-  const [customDateFrom, setCustomDateFrom] = useState('');
-  const [customDateTo, setCustomDateTo] = useState('');
-  const [statusFilter, setStatusFilter] = useState([]);
+  // Filters — initialise from URL search params if present
+  const [datePreset, setDatePreset] = useState(() => searchParams.get('date') || 'all');
+  const [customDateFrom, setCustomDateFrom] = useState(() => searchParams.get('dateFrom') || '');
+  const [customDateTo, setCustomDateTo] = useState(() => searchParams.get('dateTo') || '');
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const s = searchParams.get('status');
+    return s ? s.split(',') : [];
+  });
 
   // Pagination
   const [pagination, setPagination] = useState({

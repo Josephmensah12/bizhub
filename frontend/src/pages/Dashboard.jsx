@@ -48,9 +48,12 @@ const MetricIcons = {
 }
 
 // ─── Metric Card ─────────────────────────────────────────────
-function MetricCard({ title, value, subtitle, icon, trend, trendUp, tooltip }) {
+function MetricCard({ title, value, subtitle, icon, trend, trendUp, tooltip, onClick }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200 relative group">
+    <div
+      className={`bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200 relative group ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm text-gray-500 mb-1">{title}</p>
@@ -227,12 +230,14 @@ export default function Dashboard() {
           value={formatCurrency(metrics?.today_sales?.total_amount)}
           subtitle={`${metrics?.today_sales?.transaction_count || 0} transactions`}
           icon={MetricIcons.revenue}
+          onClick={() => navigate('/sales/invoices?date=today')}
         />
         <MetricCard
           title="Total Inventory"
           value={metrics?.inventory_on_hand?.total_units || 0}
           subtitle={valuation ? `Valued: ${formatCurrency(valuation.total_valuation)}${valuation.adjustment !== 0 ? ` (${valuation.adjustment > 0 ? '+' : ''}${formatCurrency(valuation.adjustment)} adj.)` : ''}` : `${metrics?.inventory_on_hand?.ready_for_sale || 0} ready for sale`}
           icon={MetricIcons.inventory}
+          onClick={() => navigate('/inventory')}
         />
         <MetricCard
           title="MTD Sales"
@@ -242,12 +247,14 @@ export default function Dashboard() {
           trend={metrics?.mtd_sales?.percent_change != null ? `${Math.abs(metrics.mtd_sales.percent_change)}%` : null}
           trendUp={metrics?.mtd_sales?.percent_change >= 0}
           tooltip={metrics?.mtd_sales ? `Month-to-Date (Day 1–${new Date().getDate()})\nCurrent: ${formatCurrency(metrics.mtd_sales.current)}\nPrev month same period: ${formatCurrency(metrics.mtd_sales.previous)}\nChange: ${metrics.mtd_sales.percent_change >= 0 ? '+' : ''}${metrics.mtd_sales.percent_change}%` : null}
+          onClick={() => navigate('/sales/invoices?date=current-month')}
         />
         <MetricCard
           title="Active Preorders"
           value={metrics?.preorders_summary?.total_active || 0}
           subtitle={`${metrics?.preorders_summary?.overdue || 0} overdue`}
           icon={MetricIcons.preorders}
+          onClick={() => navigate('/sales/invoices?status=UNPAID,PARTIALLY_PAID')}
         />
       </div>
 
