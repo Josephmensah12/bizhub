@@ -241,7 +241,7 @@ export default function Dashboard() {
           icon={MetricIcons.revenue}
           trend={metrics?.mtd_sales?.percent_change != null ? `${Math.abs(metrics.mtd_sales.percent_change)}%` : null}
           trendUp={metrics?.mtd_sales?.percent_change >= 0}
-          tooltip={metrics?.mtd_sales ? `Month-to-Date (Day 1–${new Date().getDate()})\nCurrent: ${formatCurrency(metrics.mtd_sales.current)}\nPrev month same period: ${formatCurrency(metrics.mtd_sales.previous)}\n% Change: (Current − Previous) / Previous × 100\n= (${formatCurrency(metrics.mtd_sales.current)} − ${formatCurrency(metrics.mtd_sales.previous)}) / ${formatCurrency(metrics.mtd_sales.previous)} × 100\n= ${metrics.mtd_sales.percent_change >= 0 ? '+' : ''}${metrics.mtd_sales.percent_change}%` : null}
+          tooltip={metrics?.mtd_sales ? `Month-to-Date (Day 1–${new Date().getDate()})\nCurrent: ${formatCurrency(metrics.mtd_sales.current)}\nPrev month same period: ${formatCurrency(metrics.mtd_sales.previous)}\nChange: ${metrics.mtd_sales.percent_change >= 0 ? '+' : ''}${metrics.mtd_sales.percent_change}%` : null}
         />
         <MetricCard
           title="Active Preorders"
