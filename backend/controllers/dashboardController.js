@@ -46,10 +46,10 @@ exports.getMetrics = asyncHandler(async (req, res) => {
 
   const ageDateExpr = sequelize.literal("COALESCE(purchase_date, created_at)");
 
-  const agingUnder1y = await Asset.count({
+  const agingUnder1y = (await Asset.sum('quantity', {
     where: { status: 'In Stock', [Op.and]: sequelize.where(ageDateExpr, { [Op.gte]: oneYearAgo }) }
-  });
-  const aging1to2y = await Asset.count({
+  })) || 0;
+  const aging1to2y = (await Asset.sum('quantity', {
     where: {
       status: 'In Stock',
       [Op.and]: [
@@ -57,10 +57,10 @@ exports.getMetrics = asyncHandler(async (req, res) => {
         sequelize.where(ageDateExpr, { [Op.lt]: oneYearAgo })
       ]
     }
-  });
-  const agingOver2y = await Asset.count({
+  })) || 0;
+  const agingOver2y = (await Asset.sum('quantity', {
     where: { status: 'In Stock', [Op.and]: sequelize.where(ageDateExpr, { [Op.lt]: twoYearsAgo }) }
-  });
+  })) || 0;
 
   // --- Sales metrics (today) ---
   const role = req.user?.role;
