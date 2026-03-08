@@ -148,9 +148,19 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
   const totalUnits = Array.from(selected.values()).reduce((sum, e) => sum + e.quantity, 0);
 
   const handleDone = () => {
+    // Check for salvage items and warn
+    const salvageItems = Array.from(selected.values()).filter(
+      ({ asset }) => asset.condition?.toLowerCase() === 'salvage'
+    );
+    if (salvageItems.length > 0) {
+      const names = salvageItems.map(({ asset }) => `${asset.make} ${asset.model}`).join(', ');
+      if (!window.confirm(`Warning: The following items are marked as SALVAGE condition and may not be suitable for sale:\n\n${names}\n\nAre you sure you want to add them to this invoice?`)) {
+        return;
+      }
+    }
+
     const items = Array.from(selected.values()).map(({ asset, unit, quantity }) => {
       if (unit) {
-        // Serialized unit — each is qty 1 with unit reference
         return {
           ...asset,
           _selectedQty: 1,
@@ -279,7 +289,12 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
                               {!isSerialized && asset.serial_number && ` • S/N: ${asset.serial_number}`}
                             </div>
                             <div className="text-xs text-gray-400">
-                              {asset.condition} • {asset.category}
+                              {asset.condition?.toLowerCase() === 'salvage' ? (
+                                <span className="text-amber-700 font-semibold bg-amber-100 px-1 rounded">SALVAGE</span>
+                              ) : (
+                                asset.condition
+                              )}
+                              {' • '}{asset.category}
                             </div>
                           </div>
 

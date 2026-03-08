@@ -893,7 +893,8 @@ export default function Inventory() {
                   const isUnavailable = remaining <= 0;
                   const reserved = asset.reserved_quantity != null ? Number(asset.reserved_quantity) : 0;
                   const isPartial = remaining > 0 && reserved > 0;
-                  const rowClasses = `hover:bg-gray-50 ${selectedIds.has(asset.id) ? 'bg-blue-50' : ''} ${isUnavailable ? 'opacity-50' : ''}`;
+                  const isSalvage = asset.condition?.toLowerCase() === 'salvage';
+                  const rowClasses = `hover:bg-gray-50 ${selectedIds.has(asset.id) ? 'bg-blue-50' : ''} ${isUnavailable ? 'opacity-50' : ''} ${isSalvage ? 'bg-amber-50' : ''}`;
 
                   return (
                   <tr key={asset.id} className={rowClasses}>
@@ -920,8 +921,9 @@ export default function Inventory() {
                       {asset.asset_type}
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
-                      <div className="font-medium">{asset.make}</div>
-                      <div className="text-gray-500">{asset.model}</div>
+                      <div className={`font-medium ${isSalvage ? 'text-amber-700' : ''}`}>{asset.make}</div>
+                      <div className={isSalvage ? 'text-amber-600' : 'text-gray-500'}>{asset.model}</div>
+                      {isSalvage && <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">SALVAGE</span>}
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900">
                       {asset.ram_gb && `${asset.ram_gb}GB RAM`}
