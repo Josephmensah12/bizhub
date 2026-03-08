@@ -872,8 +872,8 @@ export default function Inventory() {
                       className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                     />
                   </th>
-                  <SortHeader column="make" label="Make & Model" />
                   <SortHeader column="asset_tag" label="Asset Tag" />
+                  <SortHeader column="make" label="Make & Model" />
                   <SortHeader column="category" label="Category" />
                   <SortHeader column="asset_type" label="Type" />
                   <SortHeader column="ram_gb" label="Specs" />
@@ -906,11 +906,6 @@ export default function Inventory() {
                         className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                       />
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-900">
-                      <div className={`font-medium ${isSalvage ? 'text-amber-700' : ''}`}>{asset.make}</div>
-                      <div className={isSalvage ? 'text-amber-600' : 'text-gray-500'}>{asset.model}</div>
-                      {isSalvage && <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">SALVAGE</span>}
-                    </td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <Link
                         to={`/inventory/${asset.id}`}
@@ -918,6 +913,11 @@ export default function Inventory() {
                       >
                         {asset.asset_tag}
                       </Link>
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-900">
+                      <div className={`font-medium ${isSalvage ? 'text-amber-700' : ''}`}>{asset.make}</div>
+                      <div className={isSalvage ? 'text-amber-600' : 'text-gray-500'}>{asset.model}</div>
+                      {isSalvage && <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">SALVAGE</span>}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
                       {asset.category || '—'}
