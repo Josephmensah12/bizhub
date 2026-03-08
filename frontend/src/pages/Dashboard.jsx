@@ -232,9 +232,7 @@ export default function Dashboard() {
           <p className="text-sm text-gray-500 mt-0.5">{todayStr}</p>
         </div>
         <div className="flex items-center gap-2">
-          {currency === 'USD' && (
-            <span className="text-[10px] text-gray-400">1 USD = {xRate.toFixed(2)} GHS</span>
-          )}
+          <span className="text-[10px] text-gray-400">1 USD = {xRate.toFixed(2)} GHS</span>
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
             <button
               onClick={() => setCurrency('GHS')}

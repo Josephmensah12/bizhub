@@ -42,14 +42,14 @@ function formatDateForInput(date) {
 }
 
 /**
- * Summary Card Component
+ * Summary Card Component — Premium KPI tile
  */
 function SummaryCard({ title, value, count, icon, color = 'blue', onClick, active }) {
   const colorClasses = {
-    blue: 'bg-blue-50 border-blue-200 text-blue-700',
-    green: 'bg-green-50 border-green-200 text-green-700',
-    red: 'bg-red-50 border-red-200 text-red-700',
-    gray: 'bg-gray-50 border-gray-200 text-gray-700'
+    blue: 'bg-blue-50/70 border-blue-200 text-blue-700',
+    green: 'bg-green-50/70 border-green-200 text-green-700',
+    red: 'bg-red-50/70 border-red-200 text-red-700',
+    gray: 'bg-gray-50/70 border-gray-200 text-gray-700'
   };
 
   const activeRing = {
@@ -61,16 +61,16 @@ function SummaryCard({ title, value, count, icon, color = 'blue', onClick, activ
 
   return (
     <div
-      className={`rounded-lg border p-4 ${colorClasses[color]} ${active ? activeRing[color] : ''} ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+      className={`rounded-xl border p-5 ${colorClasses[color]} ${active ? activeRing[color] : ''} ${onClick ? 'cursor-pointer hover:shadow-md transition-all' : ''}`}
       onClick={onClick}
     >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium opacity-80">{title}</span>
-        {icon && <span className="text-xl">{icon}</span>}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-base font-medium opacity-80">{title}</span>
+        {icon && <span className="text-2xl">{icon}</span>}
       </div>
-      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-3xl font-bold tracking-tight">{value}</div>
       {count !== undefined && (
-        <div className="text-xs mt-1 opacity-70">
+        <div className="text-sm mt-1.5 opacity-70">
           {count} transaction{count !== 1 ? 's' : ''}
         </div>
       )}
@@ -94,16 +94,16 @@ function MultiSelectDropdown({ label, options, selected, onChange, onClear }) {
 
   return (
     <div className="relative">
-      <label className="block text-sm font-medium text-gray-700 mb-1">
+      <label className="block text-sm font-medium text-gray-700 mb-1.5">
         {label}
       </label>
       <div
-        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white cursor-pointer flex items-center justify-between min-h-[42px]"
+        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white cursor-pointer flex items-center justify-between min-h-[44px]"
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex-1 flex flex-wrap gap-1">
           {selected.length === 0 ? (
-            <span className="text-gray-400">All</span>
+            <span className="text-gray-400 text-sm">All</span>
           ) : selected.length <= 2 ? (
             selected.map(val => (
               <span
@@ -141,14 +141,14 @@ function MultiSelectDropdown({ label, options, selected, onChange, onClear }) {
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
             {options.length === 0 ? (
               <div className="px-3 py-2 text-sm text-gray-500">No options</div>
             ) : (
               options.map(option => (
                 <label
                   key={option}
-                  className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                  className="flex items-center px-3 py-2.5 hover:bg-gray-50 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -175,7 +175,7 @@ function SortHeader({ column, label, sortBy, sortOrder, onSort }) {
 
   return (
     <th
-      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+      className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
       onClick={() => onSort(column)}
     >
       <div className="flex items-center gap-1">
@@ -198,7 +198,7 @@ function TransactionTypeBadge({ type }) {
   };
 
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[type] || 'bg-gray-100 text-gray-800'}`}>
+    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${styles[type] || 'bg-gray-100 text-gray-800'}`}>
       {type}
     </span>
   );
@@ -375,17 +375,17 @@ export default function Payments() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="w-full max-w-[1600px] mx-auto px-4 md:px-6 xl:px-8">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
-        <p className="text-gray-600 mt-1">
+      <div className="mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Payments</h1>
+        <p className="text-base text-gray-500 mt-1">
           View all payment transactions across invoices
         </p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 xl:gap-5 mb-8">
         <SummaryCard
           title="Total Payments"
           value={formatCurrency(aggregates.totalPayments, 'GHS')}
@@ -421,18 +421,18 @@ export default function Payments() {
         />
         <SummaryCard
           title="Date Range"
-          value={dateRange.from ? `${formatDate(dateRange.from)} - ${formatDate(dateRange.to)}` : '—'}
+          value={dateRange.from ? `${formatDate(dateRange.from)} – ${formatDate(dateRange.to)}` : '—'}
           icon="📅"
           color="gray"
         />
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Filters Toolbar */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-12 gap-4 xl:gap-5">
           {/* Date From */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="xl:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               From Date
             </label>
             <input
@@ -440,13 +440,13 @@ export default function Payments() {
               value={filters.dateFrom}
               max={formatDateForInput(new Date())}
               onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           {/* Date To */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="xl:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               To Date
             </label>
             <input
@@ -454,31 +454,35 @@ export default function Payments() {
               value={filters.dateTo}
               max={formatDateForInput(new Date())}
               onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           {/* Transaction Type */}
-          <MultiSelectDropdown
-            label="Transaction Type"
-            options={transactionTypes}
-            selected={filters.transactionType}
-            onChange={(val) => handleFilterChange('transactionType', val)}
-            onClear={() => handleFilterChange('transactionType', [])}
-          />
+          <div className="xl:col-span-2">
+            <MultiSelectDropdown
+              label="Transaction Type"
+              options={transactionTypes}
+              selected={filters.transactionType}
+              onChange={(val) => handleFilterChange('transactionType', val)}
+              onClear={() => handleFilterChange('transactionType', [])}
+            />
+          </div>
 
           {/* Payment Method */}
-          <MultiSelectDropdown
-            label="Payment Method"
-            options={paymentMethods}
-            selected={filters.paymentMethod}
-            onChange={(val) => handleFilterChange('paymentMethod', val)}
-            onClear={() => handleFilterChange('paymentMethod', [])}
-          />
+          <div className="xl:col-span-2">
+            <MultiSelectDropdown
+              label="Payment Method"
+              options={paymentMethods}
+              selected={filters.paymentMethod}
+              onChange={(val) => handleFilterChange('paymentMethod', val)}
+              onClear={() => handleFilterChange('paymentMethod', [])}
+            />
+          </div>
 
           {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="xl:col-span-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Search
             </label>
             <input
@@ -486,27 +490,27 @@ export default function Payments() {
               value={filters.search}
               onChange={(e) => handleFilterChange('search', e.target.value)}
               placeholder="Invoice # or customer..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           {/* Include Voided */}
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 cursor-pointer">
+          <div className="xl:col-span-1 flex items-end pb-1">
+            <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap">
               <input
                 type="checkbox"
                 checked={filters.includeVoided}
                 onChange={(e) => handleFilterChange('includeVoided', e.target.checked)}
                 className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
               />
-              <span className="text-sm text-gray-700">Include Voided</span>
+              <span className="text-sm text-gray-700">Voided</span>
             </label>
           </div>
         </div>
 
         {/* Date Presets */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className="text-sm text-gray-500 self-center mr-2">Quick:</span>
+        <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2 items-center">
+          <span className="text-sm text-gray-500 mr-1">Quick:</span>
           {[
             { key: 'today', label: 'Today' },
             { key: 'yesterday', label: 'Yesterday' },
@@ -518,7 +522,7 @@ export default function Payments() {
             <button
               key={preset.key}
               onClick={() => setDatePreset(preset.key)}
-              className="px-3 py-1 text-xs font-medium rounded-full border border-gray-300 hover:bg-gray-100 text-gray-700"
+              className="px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 hover:bg-gray-50 hover:border-gray-300 text-gray-600 transition-colors"
             >
               {preset.label}
             </button>
@@ -528,26 +532,26 @@ export default function Payments() {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-red-700 text-base">
           {error}
         </div>
       )}
 
       {/* Transactions Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-12 text-center text-gray-400 text-base">
             Loading transactions...
           </div>
         ) : transactions.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-12 text-center text-gray-400 text-base">
             No transactions found for the selected filters.
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50/80">
                   <tr>
                     <SortHeader
                       column="payment_date"
@@ -563,10 +567,10 @@ export default function Payments() {
                       sortOrder={sortOrder}
                       onSort={handleSort}
                     />
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Invoice
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Customer
                     </th>
                     <SortHeader
@@ -583,34 +587,34 @@ export default function Payments() {
                       sortOrder={sortOrder}
                       onSort={handleSort}
                     />
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Reference
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Received By
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-gray-100">
                   {transactions.map(tx => (
                     <tr
                       key={tx.id}
-                      className={`hover:bg-gray-50 ${tx.voided_at ? 'bg-red-50 opacity-60' : ''}`}
+                      className={`hover:bg-gray-50/50 transition-colors ${tx.voided_at ? 'bg-red-50/50 opacity-60' : ''}`}
                     >
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-sm text-gray-900 whitespace-nowrap">
                         {formatDate(tx.payment_date)}
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-sm whitespace-nowrap">
                         <TransactionTypeBadge type={tx.transaction_type} />
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-sm whitespace-nowrap">
                         {tx.invoiceId ? (
                           <Link
                             to={`/sales/invoices/${tx.invoiceId}`}
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
                           >
                             {tx.invoiceNumber}
                           </Link>
@@ -618,7 +622,7 @@ export default function Payments() {
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-sm text-gray-900 whitespace-nowrap">
                         {tx.customerId ? (
                           <Link
                             to={`/customers/${tx.customerId}`}
@@ -630,26 +634,26 @@ export default function Payments() {
                           <span className="text-gray-400">{tx.customerName || '—'}</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-sm text-gray-700 whitespace-nowrap">
                         {tx.paymentMethodDisplay || tx.payment_method || '—'}
                       </td>
-                      <td className={`px-4 py-3 text-sm font-medium whitespace-nowrap ${tx.transaction_type === 'REFUND' ? 'text-red-600' : 'text-green-600'}`}>
+                      <td className={`px-5 py-3.5 text-sm font-semibold whitespace-nowrap tabular-nums ${tx.transaction_type === 'REFUND' ? 'text-red-600' : 'text-green-600'}`}>
                         {tx.transaction_type === 'REFUND' ? '-' : ''}
                         {formatCurrency(tx.amount, tx.invoice?.currency || 'GHS')}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap max-w-[150px] truncate" title={tx.reference_number}>
+                      <td className="px-5 py-3.5 text-sm text-gray-500 whitespace-nowrap max-w-[180px] truncate" title={tx.reference_number}>
                         {tx.reference_number || '—'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-sm text-gray-500 whitespace-nowrap">
                         {tx.receivedBy?.full_name || '—'}
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      <td className="px-5 py-3.5 text-sm whitespace-nowrap">
                         {tx.voided_at ? (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800" title={`Voided by ${tx.voidedBy?.full_name || 'Unknown'}`}>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800" title={`Voided by ${tx.voidedBy?.full_name || 'Unknown'}`}>
                             VOIDED
                           </span>
                         ) : (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
                             Active
                           </span>
                         )}
@@ -662,7 +666,7 @@ export default function Payments() {
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
-              <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+              <div className="px-5 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="text-sm text-gray-500">
                   Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
                   {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
@@ -672,17 +676,17 @@ export default function Payments() {
                   <button
                     onClick={() => handlePageChange(pagination.page - 1)}
                     disabled={pagination.page <= 1}
-                    className="px-3 py-1 text-sm font-medium rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Previous
                   </button>
-                  <span className="px-3 py-1 text-sm text-gray-700">
+                  <span className="px-4 py-2 text-sm text-gray-700">
                     Page {pagination.page} of {pagination.totalPages}
                   </span>
                   <button
                     onClick={() => handlePageChange(pagination.page + 1)}
                     disabled={pagination.page >= pagination.totalPages}
-                    className="px-3 py-1 text-sm font-medium rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Next
                   </button>
