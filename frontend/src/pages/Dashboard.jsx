@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 
 function formatCurrency(amount, currency = 'GHS', rate = 1) {
   if (amount == null) return `${currency} 0`
@@ -386,7 +386,7 @@ export default function Dashboard() {
                 name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
                 quantity: Number(item.quantity)
               }))}
-              margin={{ top: 0, right: 20, left: 0, bottom: 0 }}
+              margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
               barCategoryGap="20%"
               style={{ cursor: 'pointer' }}
               onClick={(state) => {
@@ -399,7 +399,9 @@ export default function Dashboard() {
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
-              <Bar dataKey="quantity" fill="#6366f1" radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={20} />
+              <Bar dataKey="quantity" fill="#6366f1" radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={20}>
+                <LabelList dataKey="quantity" position="right" style={{ fontSize: 11, fill: '#6b7280', fontWeight: 600 }} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         ) : (
