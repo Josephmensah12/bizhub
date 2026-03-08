@@ -96,8 +96,8 @@ export default function StockTakes() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Stock Takes</h1>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Stock Takes</h1>
         <button
           onClick={() => { setForm({ name: '', scope: 'full', scope_filter: { category: '', asset_type: '' }, blind_count: false, notes: '' }); setCreateError(null); setShowCreate(true) }}
           className="btn btn-primary"
@@ -192,7 +192,7 @@ export default function StockTakes() {
       {/* Create Modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-3 sm:mx-4">
             <form onSubmit={handleCreate} className="p-6">
               <h2 className="text-lg font-semibold mb-4">New Stock Take</h2>
               {createError && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded text-sm">{createError}</div>}

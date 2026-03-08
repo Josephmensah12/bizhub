@@ -242,7 +242,7 @@ export default function ReturnModal({ invoice, onClose, onReturnProcessed }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-3 sm:mx-4 max-h-[85vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className={`px-6 py-4 border-b ${returnType === 'EXCHANGE' ? 'bg-purple-50' : 'bg-orange-50'}`}>
           <h2 className="text-lg font-semibold">{getStepTitle()}</h2>
@@ -570,7 +570,7 @@ export default function ReturnModal({ invoice, onClose, onReturnProcessed }) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t bg-gray-50 flex justify-between">
+        <div className="px-4 sm:px-6 py-4 pb-6 sm:pb-4 border-t bg-gray-50 flex justify-between">
           <button
             type="button"
             onClick={() => step > 1 ? setStep(step - 1) : onClose()}

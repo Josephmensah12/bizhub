@@ -53,7 +53,7 @@ export default function CustomerPickerModal({ open, onClose, onSelect, onCreateN
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative w-full h-full sm:h-auto sm:max-h-[85vh] sm:max-w-lg bg-white sm:rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-[calc(100%-1.5rem)] h-[calc(100%-3rem)] rounded-xl sm:w-full sm:h-auto sm:max-h-[85vh] sm:max-w-lg bg-white sm:rounded-xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
           <h2 className="text-lg font-semibold text-gray-900">Select Customer</h2>

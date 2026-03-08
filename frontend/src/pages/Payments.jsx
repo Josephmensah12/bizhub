@@ -385,7 +385,7 @@ export default function Payments() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <SummaryCard
           title="Total Payments"
           value={formatCurrency(aggregates.totalPayments, 'GHS')}
@@ -429,7 +429,7 @@ export default function Payments() {
 
       {/* Filters */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {/* Date From */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

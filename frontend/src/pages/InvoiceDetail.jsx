@@ -122,7 +122,7 @@ function TransactionModal({ invoice, transactionType = 'PAYMENT', onClose, onTra
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-3 sm:mx-4">
         <div className={`px-6 py-4 border-b ${isRefund ? 'bg-orange-50' : ''}`}>
           <h2 className="text-lg font-semibold">{isRefund ? 'Return/Refund' : 'Receive Payment'}</h2>
           <p className="text-sm text-gray-500">
@@ -293,7 +293,7 @@ function VoidModal({ transaction, invoice, onClose, onVoided }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-3 sm:mx-4">
         <div className="px-6 py-4 border-b bg-red-50">
           <h2 className="text-lg font-semibold text-red-800">Void {typeLabel}</h2>
           <p className="text-sm text-red-600">
@@ -376,7 +376,7 @@ function CancelInvoiceModal({ invoice, onClose, onCancelled }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-3 sm:mx-4">
         <div className="px-6 py-4 border-b bg-red-50">
           <h2 className="text-lg font-semibold text-red-800">Cancel Invoice</h2>
           <p className="text-sm text-red-600">
@@ -476,7 +476,7 @@ function VoidItemModal({ item, invoice, onClose, onVoided }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-3 sm:mx-4">
         <div className="px-6 py-4 border-b bg-red-50">
           <h2 className="text-lg font-semibold text-red-800">Void Item</h2>
           <p className="text-sm text-red-600">

@@ -163,9 +163,9 @@ export default function RecycleBin() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Recycle Bin</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Recycle Bin</h1>
           <p className="text-gray-600 mt-1">Deleted items can be restored or permanently removed</p>
         </div>
         <Link

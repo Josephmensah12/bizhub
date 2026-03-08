@@ -212,15 +212,15 @@ export default function Invoices() {
   return (
     <div>
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Invoices</h1>
         <Link to="/sales/invoices/new" className="btn btn-primary">
           + Create Invoice
         </Link>
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mb-6">
         {/* Total Revenue - Always visible */}
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">Total Revenue</div>

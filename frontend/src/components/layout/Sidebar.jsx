@@ -105,6 +105,11 @@ const Icons = {
       <path d="M8 3v10M3 8h10" />
     </svg>
   ),
+  Close: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 5l10 10M15 5L5 15" />
+    </svg>
+  ),
 }
 
 const iconMap = {
@@ -173,7 +178,7 @@ const navGroups = [
   },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen = false, onMobileClose }) {
   const location = useLocation()
   const { user, logout } = useAuth()
   const userRole = user?.role
@@ -198,160 +203,332 @@ export default function Sidebar() {
     ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '?'
 
-  return (
-    <SidebarContext.Provider value={{ collapsed }}>
-      <div
-        className={`flex flex-col bg-navy-900 transition-all duration-200 ease-in-out ${collapsed ? 'w-[48px]' : 'w-64'}`}
-        style={{ minHeight: '100vh' }}
-      >
-        {/* Logo + collapse toggle */}
-        <div className={`flex items-center ${collapsed ? 'justify-center py-4' : 'justify-between px-5 py-4'} border-b border-white/10`}>
-          {collapsed ? (
-            <button onClick={() => setCollapsed(false)} className="text-white font-bold text-lg hover:text-primary-400 transition-colors" title="Expand">B</button>
-          ) : (
-            <>
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-wide">BIZHUB</h1>
-                <p className="text-xs text-gray-400 mt-0.5">Payless4Tech</p>
-              </div>
-              <button onClick={() => setCollapsed(true)} className="text-gray-400 hover:text-white transition-colors" title="Collapse">
-                {Icons.Collapse}
-              </button>
-            </>
-          )}
-        </div>
+  // Close mobile drawer on nav link click
+  const handleMobileNavClick = () => {
+    if (onMobileClose) onMobileClose()
+  }
 
-        {/* Navigation */}
-        <nav className="flex-1 py-1">
-          {navGroups.map((group) => {
-            const visibleItems = group.items.filter(item => !userRole || item.roles.includes(userRole))
-            if (visibleItems.length === 0) return null
-            return (
-              <div key={group.label}>
-                {/* Group label */}
-                {!collapsed && (
-                  <div className="px-5 pt-3 pb-0.5">
-                    <span className="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">{group.label}</span>
-                  </div>
-                )}
-                {collapsed && <div className="h-2" />}
+  const sidebarContent = (
+    <div
+      className={`flex flex-col bg-navy-900 min-h-screen transition-all duration-200 ease-in-out ${
+        collapsed ? 'w-[48px]' : 'w-64'
+      }`}
+    >
+      {/* Logo + collapse/close toggle */}
+      <div className={`flex items-center ${collapsed ? 'justify-center py-4' : 'justify-between px-5 py-4'} border-b border-white/10`}>
+        {collapsed ? (
+          <button onClick={() => setCollapsed(false)} className="text-white font-bold text-lg hover:text-primary-400 transition-colors" title="Expand">B</button>
+        ) : (
+          <>
+            <div>
+              <h1 className="text-xl font-bold text-white tracking-wide">BIZHUB</h1>
+              <p className="text-xs text-gray-400 mt-0.5">Payless4Tech</p>
+            </div>
+            {/* Show close button on mobile, collapse button on desktop */}
+            <button
+              onClick={() => {
+                if (onMobileClose && window.innerWidth < 768) {
+                  onMobileClose()
+                } else {
+                  setCollapsed(true)
+                }
+              }}
+              className="text-gray-400 hover:text-white transition-colors"
+              title="Collapse"
+            >
+              <span className="hidden md:block">{Icons.Collapse}</span>
+              <span className="md:hidden">{Icons.Close}</span>
+            </button>
+          </>
+        )}
+      </div>
 
-                {visibleItems.map((item) => {
-                  if (item.submenu) {
-                    // Submenu parent
-                    const subActive = isSubmenuActive(item.submenu)
-                    return (
-                      <div key={item.name}>
-                        <button
-                          onClick={() => !collapsed && toggleSubmenu(item.name)}
-                          title={collapsed ? item.name : undefined}
-                          className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'justify-between px-4'} py-2 mx-auto transition-colors rounded-lg ${collapsed ? 'mx-1' : 'mx-2'} ${
-                            subActive
-                              ? 'bg-primary-600/20 text-white'
-                              : 'text-gray-400 hover:bg-navy-700 hover:text-white'
-                          }`}
-                        >
-                          <div className={`flex items-center ${collapsed ? '' : 'gap-3'}`}>
-                            <span className="shrink-0">{iconMap[item.name] || Icons.Settings}</span>
-                            {!collapsed && <span className="text-sm">{item.name}</span>}
-                          </div>
-                          {!collapsed && (
-                            <span className={`transition-transform duration-200 ${expandedMenus.includes(item.name) ? 'rotate-180' : ''}`}>
-                              {Icons.Chevron}
-                            </span>
-                          )}
-                        </button>
-                        {!collapsed && expandedMenus.includes(item.name) && (
-                          <div className="ml-5">
-                            {item.submenu.map(sub => (
-                              <NavLink
-                                key={sub.path}
-                                to={sub.path}
-                                className={({ isActive: active }) =>
-                                  `flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors mx-2 ${
-                                    active
-                                      ? 'text-white bg-primary-600/20'
-                                      : 'text-gray-400 hover:text-white hover:bg-navy-700'
-                                  }`
-                                }
-                              >
-                                <span className="w-1 h-1 rounded-full bg-current" />
-                                <span>{sub.name}</span>
-                              </NavLink>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  }
+      {/* Navigation */}
+      <nav className="flex-1 py-1 overflow-y-auto">
+        {navGroups.map((group) => {
+          const visibleItems = group.items.filter(item => !userRole || item.roles.includes(userRole))
+          if (visibleItems.length === 0) return null
+          return (
+            <div key={group.label}>
+              {/* Group label */}
+              {!collapsed && (
+                <div className="px-5 pt-3 pb-0.5">
+                  <span className="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">{group.label}</span>
+                </div>
+              )}
+              {collapsed && <div className="h-2" />}
 
-                  // Regular item
-                  const active = isActive(item)
+              {visibleItems.map((item) => {
+                if (item.submenu) {
+                  // Submenu parent
+                  const subActive = isSubmenuActive(item.submenu)
                   return (
-                    <NavLink
-                      key={item.name}
-                      to={item.path}
-                      end={item.path === '/'}
-                      title={collapsed ? item.name : undefined}
-                      className={() =>
-                        `flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg transition-colors ${collapsed ? 'mx-1' : 'mx-2'} relative ${
-                          active
+                    <div key={item.name}>
+                      <button
+                        onClick={() => !collapsed && toggleSubmenu(item.name)}
+                        title={collapsed ? item.name : undefined}
+                        className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'justify-between px-4'} py-2 mx-auto transition-colors rounded-lg ${collapsed ? 'mx-1' : 'mx-2'} ${
+                          subActive
                             ? 'bg-primary-600/20 text-white'
                             : 'text-gray-400 hover:bg-navy-700 hover:text-white'
-                        }`
-                      }
-                    >
-                      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary-500 rounded-r" />}
-                      <span className="shrink-0">{iconMap[item.name] || Icons.Dashboard}</span>
-                      {!collapsed && <span className="text-sm">{item.name}</span>}
-                      {!collapsed && item.addPath && (
-                        <NavLink
-                          to={item.addPath}
-                          onClick={e => e.stopPropagation()}
-                          className="ml-auto p-1 text-gray-500 hover:text-white rounded transition-colors"
-                          title={`New ${item.name.slice(0, -1) || item.name}`}
-                        >
-                          {Icons.Plus}
-                        </NavLink>
+                        }`}
+                      >
+                        <div className={`flex items-center ${collapsed ? '' : 'gap-3'}`}>
+                          <span className="shrink-0">{iconMap[item.name] || Icons.Settings}</span>
+                          {!collapsed && <span className="text-sm">{item.name}</span>}
+                        </div>
+                        {!collapsed && (
+                          <span className={`transition-transform duration-200 ${expandedMenus.includes(item.name) ? 'rotate-180' : ''}`}>
+                            {Icons.Chevron}
+                          </span>
+                        )}
+                      </button>
+                      {!collapsed && expandedMenus.includes(item.name) && (
+                        <div className="ml-5">
+                          {item.submenu.map(sub => (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              onClick={handleMobileNavClick}
+                              className={({ isActive: active }) =>
+                                `flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors mx-2 ${
+                                  active
+                                    ? 'text-white bg-primary-600/20'
+                                    : 'text-gray-400 hover:text-white hover:bg-navy-700'
+                                }`
+                              }
+                            >
+                              <span className="w-1 h-1 rounded-full bg-current" />
+                              <span>{sub.name}</span>
+                            </NavLink>
+                          ))}
+                        </div>
                       )}
-                    </NavLink>
+                    </div>
                   )
-                })}
-              </div>
-            )
-          })}
-        </nav>
+                }
 
-        {/* User footer */}
-        <div className={`border-t border-white/10 ${collapsed ? 'py-3 flex justify-center' : 'p-4'}`}>
-          {collapsed ? (
+                // Regular item
+                const active = isActive(item)
+                return (
+                  <NavLink
+                    key={item.name}
+                    to={item.path}
+                    end={item.path === '/'}
+                    title={collapsed ? item.name : undefined}
+                    onClick={handleMobileNavClick}
+                    className={() =>
+                      `flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg transition-colors ${collapsed ? 'mx-1' : 'mx-2'} relative ${
+                        active
+                          ? 'bg-primary-600/20 text-white'
+                          : 'text-gray-400 hover:bg-navy-700 hover:text-white'
+                      }`
+                    }
+                  >
+                    {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary-500 rounded-r" />}
+                    <span className="shrink-0">{iconMap[item.name] || Icons.Dashboard}</span>
+                    {!collapsed && <span className="text-sm">{item.name}</span>}
+                    {!collapsed && item.addPath && (
+                      <NavLink
+                        to={item.addPath}
+                        onClick={e => { e.stopPropagation(); handleMobileNavClick() }}
+                        className="ml-auto p-1 text-gray-500 hover:text-white rounded transition-colors"
+                        title={`New ${item.name.slice(0, -1) || item.name}`}
+                      >
+                        {Icons.Plus}
+                      </NavLink>
+                    )}
+                  </NavLink>
+                )
+              })}
+            </div>
+          )
+        })}
+      </nav>
+
+      {/* User footer */}
+      <div className={`border-t border-white/10 ${collapsed ? 'py-3 flex justify-center' : 'p-4'}`}>
+        {collapsed ? (
+          <button
+            onClick={() => { logout(); window.location.href = '/login' }}
+            className="w-8 h-8 rounded-full bg-primary-600/30 flex items-center justify-center text-white text-xs font-bold"
+            title={`${user?.full_name} - Logout`}
+          >
+            {initials}
+          </button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary-600/30 flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
+              <p className="text-xs text-gray-400">{user?.role}</p>
+            </div>
             <button
               onClick={() => { logout(); window.location.href = '/login' }}
-              className="w-8 h-8 rounded-full bg-primary-600/30 flex items-center justify-center text-white text-xs font-bold"
-              title={`${user?.full_name} - Logout`}
+              className="text-gray-400 hover:text-white transition-colors shrink-0"
+              title="Logout"
             >
-              {initials}
+              {Icons.Logout}
             </button>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary-600/30 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                {initials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
-                <p className="text-xs text-gray-400">{user?.role}</p>
-              </div>
-              <button
-                onClick={() => { logout(); window.location.href = '/login' }}
-                className="text-gray-400 hover:text-white transition-colors shrink-0"
-                title="Logout"
-              >
-                {Icons.Logout}
-              </button>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
+    </div>
+  )
+
+  return (
+    <SidebarContext.Provider value={{ collapsed }}>
+      {/* Desktop sidebar: always visible, supports collapse */}
+      <div className="hidden md:block">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile sidebar: overlay drawer with backdrop */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 transition-opacity"
+            onClick={onMobileClose}
+            aria-hidden="true"
+          />
+          {/* Drawer */}
+          <div className="relative z-50 w-64 flex-shrink-0">
+            {/* Force expanded state on mobile drawer */}
+            <div className="flex flex-col bg-navy-900 min-h-screen w-64">
+              {/* Logo + close */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                <div>
+                  <h1 className="text-xl font-bold text-white tracking-wide">BIZHUB</h1>
+                  <p className="text-xs text-gray-400 mt-0.5">Payless4Tech</p>
+                </div>
+                <button
+                  onClick={onMobileClose}
+                  className="text-gray-400 hover:text-white transition-colors"
+                  title="Close"
+                >
+                  {Icons.Close}
+                </button>
+              </div>
+
+              {/* Navigation */}
+              <nav className="flex-1 py-1 overflow-y-auto">
+                {navGroups.map((group) => {
+                  const visibleItems = group.items.filter(item => !userRole || item.roles.includes(userRole))
+                  if (visibleItems.length === 0) return null
+                  return (
+                    <div key={group.label}>
+                      <div className="px-5 pt-3 pb-0.5">
+                        <span className="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">{group.label}</span>
+                      </div>
+
+                      {visibleItems.map((item) => {
+                        if (item.submenu) {
+                          const subActive = isSubmenuActive(item.submenu)
+                          return (
+                            <div key={item.name}>
+                              <button
+                                onClick={() => toggleSubmenu(item.name)}
+                                className={`w-full flex items-center justify-between px-4 py-2 mx-2 transition-colors rounded-lg ${
+                                  subActive
+                                    ? 'bg-primary-600/20 text-white'
+                                    : 'text-gray-400 hover:bg-navy-700 hover:text-white'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="shrink-0">{iconMap[item.name] || Icons.Settings}</span>
+                                  <span className="text-sm">{item.name}</span>
+                                </div>
+                                <span className={`transition-transform duration-200 ${expandedMenus.includes(item.name) ? 'rotate-180' : ''}`}>
+                                  {Icons.Chevron}
+                                </span>
+                              </button>
+                              {expandedMenus.includes(item.name) && (
+                                <div className="ml-5">
+                                  {item.submenu.map(sub => (
+                                    <NavLink
+                                      key={sub.path}
+                                      to={sub.path}
+                                      onClick={handleMobileNavClick}
+                                      className={({ isActive: active }) =>
+                                        `flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors mx-2 ${
+                                          active
+                                            ? 'text-white bg-primary-600/20'
+                                            : 'text-gray-400 hover:text-white hover:bg-navy-700'
+                                        }`
+                                      }
+                                    >
+                                      <span className="w-1 h-1 rounded-full bg-current" />
+                                      <span>{sub.name}</span>
+                                    </NavLink>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        }
+
+                        const active = isActive(item)
+                        return (
+                          <NavLink
+                            key={item.name}
+                            to={item.path}
+                            end={item.path === '/'}
+                            onClick={handleMobileNavClick}
+                            className={() =>
+                              `flex items-center gap-3 px-4 py-2 rounded-lg transition-colors mx-2 relative ${
+                                active
+                                  ? 'bg-primary-600/20 text-white'
+                                  : 'text-gray-400 hover:bg-navy-700 hover:text-white'
+                              }`
+                            }
+                          >
+                            {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary-500 rounded-r" />}
+                            <span className="shrink-0">{iconMap[item.name] || Icons.Dashboard}</span>
+                            <span className="text-sm">{item.name}</span>
+                            {item.addPath && (
+                              <NavLink
+                                to={item.addPath}
+                                onClick={e => { e.stopPropagation(); handleMobileNavClick() }}
+                                className="ml-auto p-1 text-gray-500 hover:text-white rounded transition-colors"
+                                title={`New ${item.name.slice(0, -1) || item.name}`}
+                              >
+                                {Icons.Plus}
+                              </NavLink>
+                            )}
+                          </NavLink>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </nav>
+
+              {/* User footer */}
+              <div className="border-t border-white/10 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary-600/30 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    {initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
+                    <p className="text-xs text-gray-400">{user?.role}</p>
+                  </div>
+                  <button
+                    onClick={() => { logout(); window.location.href = '/login' }}
+                    className="text-gray-400 hover:text-white transition-colors shrink-0"
+                    title="Logout"
+                  >
+                    {Icons.Logout}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </SidebarContext.Provider>
   )
 }

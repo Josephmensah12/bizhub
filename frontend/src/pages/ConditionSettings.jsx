@@ -197,9 +197,9 @@ export default function ConditionSettings() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Condition Statuses</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Condition Statuses</h1>
           <p className="text-sm text-gray-500 mt-1">Configure asset conditions and their valuation rules</p>
         </div>
         {!showAdd && (

@@ -188,7 +188,7 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
 
-      <div className="relative w-full h-full sm:h-auto sm:max-h-[85vh] sm:max-w-2xl bg-white sm:rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-[calc(100%-1.5rem)] h-[calc(100%-3rem)] rounded-xl sm:w-full sm:h-auto sm:max-h-[85vh] sm:max-w-2xl bg-white sm:rounded-xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-3">

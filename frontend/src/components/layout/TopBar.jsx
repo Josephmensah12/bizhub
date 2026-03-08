@@ -54,7 +54,7 @@ function getPageTitle(pathname) {
   return 'Dashboard'
 }
 
-export default function TopBar() {
+export default function TopBar({ onMenuToggle }) {
   const { user } = useAuth()
   const location = useLocation()
   const breadcrumbs = getBreadcrumbs(location.pathname)
@@ -65,7 +65,18 @@ export default function TopBar() {
     : '?'
 
   return (
-    <header className="bg-white border-b border-gray-200 h-16 flex items-center px-8 shrink-0">
+    <header className="bg-white border-b border-gray-200 h-16 flex items-center px-4 sm:px-6 lg:px-8 shrink-0">
+      {/* Mobile hamburger */}
+      <button
+        onClick={onMenuToggle}
+        className="md:hidden p-2 -ml-2 mr-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+        aria-label="Toggle menu"
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 5h14M3 10h14M3 15h14" />
+        </svg>
+      </button>
+
       {/* Left: Page title + breadcrumbs */}
       <div className="flex-1 min-w-0">
         <h2 className="text-lg font-semibold text-gray-900 truncate">{pageTitle}</h2>
