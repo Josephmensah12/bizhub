@@ -161,7 +161,7 @@ export default function Dashboard() {
         ])
         if (metricsRes.status === 'fulfilled') setMetrics(metricsRes.value.data.data)
         if (valRes.status === 'fulfilled') setValuation(valRes.value.data.data)
-        if (rateRes.status === 'fulfilled') setXRate(rateRes.value.data.data.rate || 1)
+        if (rateRes.status === 'fulfilled') setXRate((rateRes.value.data.data.rate || 1) + 1.0)
         if (metricsRes.status === 'rejected') {
           setError(metricsRes.reason?.response?.data?.error?.message || 'Failed to load metrics')
         }
