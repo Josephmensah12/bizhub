@@ -223,8 +223,8 @@ export default function Dashboard() {
         <p className="text-sm text-gray-500 mt-0.5">{todayStr}</p>
       </div>
 
-      {/* 4 Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      {/* Metric Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <MetricCard
           title="Today's Revenue"
           value={formatCurrency(metrics?.today_sales?.total_amount)}
@@ -239,26 +239,51 @@ export default function Dashboard() {
           icon={MetricIcons.inventory}
           onClick={() => navigate('/inventory')}
         />
-        <MetricCard
-          title="MTD Sales"
-          value={formatCurrency(metrics?.mtd_sales?.current)}
-          subtitle={`vs ${formatCurrency(metrics?.mtd_sales?.previous)} last month`}
-          icon={MetricIcons.revenue}
-          trend={metrics?.mtd_sales?.percent_change != null ? `${Math.abs(metrics.mtd_sales.percent_change)}%` : null}
-          trendUp={metrics?.mtd_sales?.percent_change >= 0}
-          tooltip={metrics?.mtd_sales ? `Month-to-Date (Day 1–${new Date().getDate()})\nCurrent: ${formatCurrency(metrics.mtd_sales.current)}\nPrev month same period: ${formatCurrency(metrics.mtd_sales.previous)}\nChange: ${metrics.mtd_sales.percent_change >= 0 ? '+' : ''}${metrics.mtd_sales.percent_change}%` : null}
+        {/* Consolidated MTD + YoY card */}
+        <div
+          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200 cursor-pointer"
           onClick={() => navigate('/sales/invoices?date=current-month')}
-        />
-        <MetricCard
-          title="YoY Sales"
-          value={formatCurrency(metrics?.yoy_sales?.current)}
-          subtitle={`vs ${formatCurrency(metrics?.yoy_sales?.previous)} last year`}
-          icon={MetricIcons.revenue}
-          trend={metrics?.yoy_sales?.percent_change != null ? `${Math.abs(metrics.yoy_sales.percent_change)}%` : null}
-          trendUp={metrics?.yoy_sales?.percent_change >= 0}
-          tooltip={metrics?.yoy_sales ? `Year-over-Year (Day 1–${new Date().getDate()})\nThis year: ${formatCurrency(metrics.yoy_sales.current)}\nLast year same period: ${formatCurrency(metrics.yoy_sales.previous)}\nChange: ${metrics.yoy_sales.percent_change >= 0 ? '+' : ''}${metrics.yoy_sales.percent_change}%` : null}
-          onClick={() => navigate('/sales/invoices?date=current-month')}
-        />
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-sm text-gray-500 mb-1">MTD Sales</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(metrics?.mtd_sales?.current)}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{metrics?.mtd_sales?.transaction_count || 0} transactions · Day 1–{new Date().getDate()}</p>
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">vs Last Month</p>
+                  <div className="flex items-center gap-1.5">
+                    {metrics?.mtd_sales?.percent_change != null && (
+                      <span className={`inline-flex items-center text-xs font-semibold ${metrics.mtd_sales.percent_change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={metrics.mtd_sales.percent_change >= 0 ? '' : 'rotate-180'}>
+                          <path d="M6 9V3M3 5l3-3 3 3" />
+                        </svg>
+                        {Math.abs(metrics.mtd_sales.percent_change)}%
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400 truncate">{formatCurrency(metrics?.mtd_sales?.previous)}</span>
+                  </div>
+                </div>
+                <div className="w-px h-8 bg-gray-200" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">vs Last Year</p>
+                  <div className="flex items-center gap-1.5">
+                    {metrics?.yoy_sales?.percent_change != null && (
+                      <span className={`inline-flex items-center text-xs font-semibold ${metrics.yoy_sales.percent_change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={metrics.yoy_sales.percent_change >= 0 ? '' : 'rotate-180'}>
+                          <path d="M6 9V3M3 5l3-3 3 3" />
+                        </svg>
+                        {Math.abs(metrics.yoy_sales.percent_change)}%
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400 truncate">{formatCurrency(metrics?.yoy_sales?.previous)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {MetricIcons.revenue}
+          </div>
+        </div>
       </div>
 
       {/* Recent Sales + Aging Stock */}
