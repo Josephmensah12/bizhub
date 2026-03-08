@@ -4,9 +4,10 @@ import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
-function formatCurrency(amount) {
-  if (amount == null) return 'GHS 0'
-  return `GHS ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+function formatCurrency(amount, currency = 'GHS', rate = 1) {
+  if (amount == null) return `${currency} 0`
+  const converted = currency === 'USD' ? Number(amount) / rate : Number(amount)
+  return `${currency} ${converted.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 // ─── Icon components for metric cards ────────────────────────
@@ -147,16 +148,20 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [agingFilter, setAgingFilter] = useState(null)
   const [filteredTop10, setFilteredTop10] = useState(null)
+  const [currency, setCurrency] = useState('GHS')
+  const [xRate, setXRate] = useState(1) // GHS per USD
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [metricsRes, valRes] = await Promise.allSettled([
+        const [metricsRes, valRes, rateRes] = await Promise.allSettled([
           axios.get('/api/v1/dashboard/metrics'),
-          axios.get('/api/v1/reports/inventory-valuation')
+          axios.get('/api/v1/reports/inventory-valuation'),
+          axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS')
         ])
         if (metricsRes.status === 'fulfilled') setMetrics(metricsRes.value.data.data)
         if (valRes.status === 'fulfilled') setValuation(valRes.value.data.data)
+        if (rateRes.status === 'fulfilled') setXRate(rateRes.value.data.data.rate || 1)
         if (metricsRes.status === 'rejected') {
           setError(metricsRes.reason?.response?.data?.error?.message || 'Failed to load metrics')
         }
@@ -215,19 +220,43 @@ export default function Dashboard() {
   const top10Data = filteredTop10 ?? metrics?.top_by_quantity
   const top10Label = agingFilter ? `Top 10 Items — ${AGING_BUCKETS.find(b => b.key === agingFilter)?.label}` : 'Top 10 Items by Quantity'
 
+  // Shorthand: format any GHS amount in the active display currency
+  const fc = (amount) => formatCurrency(amount, currency, xRate)
+
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Greeting */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">{greeting}, {firstName}</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{todayStr}</p>
+      {/* Greeting + Currency Toggle */}
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{greeting}, {firstName}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{todayStr}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {currency === 'USD' && (
+            <span className="text-[10px] text-gray-400">1 USD = {xRate.toFixed(2)} GHS</span>
+          )}
+          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setCurrency('GHS')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${currency === 'GHS' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              GHS
+            </button>
+            <button
+              onClick={() => setCurrency('USD')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${currency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              USD
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <MetricCard
           title="Today's Revenue"
-          value={formatCurrency(metrics?.today_sales?.total_amount)}
+          value={fc(metrics?.today_sales?.total_amount)}
           subtitle={`${metrics?.today_sales?.transaction_count || 0} transactions`}
           icon={MetricIcons.revenue}
           onClick={() => navigate('/sales/invoices?date=today')}
@@ -235,7 +264,7 @@ export default function Dashboard() {
         <MetricCard
           title="Total Inventory"
           value={metrics?.inventory_on_hand?.total_units || 0}
-          subtitle={valuation ? `Valued: ${formatCurrency(valuation.total_valuation)}${valuation.adjustment !== 0 ? ` (${valuation.adjustment > 0 ? '+' : ''}${formatCurrency(valuation.adjustment)} adj.)` : ''}` : `${metrics?.inventory_on_hand?.ready_for_sale || 0} ready for sale`}
+          subtitle={valuation ? `Valued: ${fc(valuation.total_valuation)}${valuation.adjustment !== 0 ? ` (${valuation.adjustment > 0 ? '+' : ''}${fc(valuation.adjustment)} adj.)` : ''}` : `${metrics?.inventory_on_hand?.ready_for_sale || 0} ready for sale`}
           icon={MetricIcons.inventory}
           onClick={() => navigate('/inventory')}
         />
@@ -247,7 +276,7 @@ export default function Dashboard() {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <p className="text-sm text-gray-500 mb-1">MTD Sales</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(metrics?.mtd_sales?.current)}</p>
+              <p className="text-2xl font-bold text-gray-900">{fc(metrics?.mtd_sales?.current)}</p>
               <p className="text-xs text-gray-400 mt-0.5">{metrics?.mtd_sales?.transaction_count || 0} transactions · Day 1–{new Date().getDate()}</p>
               <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
                 <div className="flex-1 min-w-0">
@@ -261,7 +290,7 @@ export default function Dashboard() {
                         {Math.abs(metrics.mtd_sales.percent_change)}%
                       </span>
                     )}
-                    <span className="text-xs text-gray-400 truncate">{formatCurrency(metrics?.mtd_sales?.previous)}</span>
+                    <span className="text-xs text-gray-400 truncate">{fc(metrics?.mtd_sales?.previous)}</span>
                   </div>
                 </div>
                 <div className="w-px h-8 bg-gray-200" />
@@ -276,7 +305,7 @@ export default function Dashboard() {
                         {Math.abs(metrics.yoy_sales.percent_change)}%
                       </span>
                     )}
-                    <span className="text-xs text-gray-400 truncate">{formatCurrency(metrics?.yoy_sales?.previous)}</span>
+                    <span className="text-xs text-gray-400 truncate">{fc(metrics?.yoy_sales?.previous)}</span>
                   </div>
                 </div>
               </div>
@@ -316,7 +345,7 @@ export default function Dashboard() {
                         </Link>
                       </td>
                       <td className="py-2.5 pr-3 text-gray-700">{inv.customer_name || 'Walk-in'}</td>
-                      <td className="py-2.5 pr-3 text-right font-medium text-gray-900">{formatCurrency(inv.total_amount)}</td>
+                      <td className="py-2.5 pr-3 text-right font-medium text-gray-900">{fc(inv.total_amount)}</td>
                       <td className="py-2.5"><StatusBadge status={inv.status} /></td>
                     </tr>
                   ))}
