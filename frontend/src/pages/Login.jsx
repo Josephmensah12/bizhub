@@ -34,16 +34,14 @@ export default function Login() {
         <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary-600/10 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-primary-500/10 rounded-full blur-3xl" />
 
-        <div className="relative z-10 text-center">
-          <h1 className="text-5xl font-bold text-white tracking-wider mb-3">BIZHUB</h1>
-          <div className="w-16 h-1 bg-primary-500 mx-auto rounded-full mb-6" />
+        <div className="relative z-10 text-center flex flex-col items-center">
+          <img src="/payless-flag.jpeg" alt="Payless4Tech" className="w-48 h-48 object-contain rounded-2xl mb-6" />
+          <p className="text-gray-400 text-sm tracking-wide">powered by</p>
+          <h1 className="text-4xl font-bold text-white tracking-wider mt-1">BIZHUB</h1>
+          <div className="w-16 h-1 bg-primary-500 mx-auto rounded-full mt-4 mb-6" />
           <p className="text-gray-400 text-lg max-w-sm">
             Complete business management for inventory, sales, and customer relationships.
           </p>
-        </div>
-
-        <div className="absolute bottom-8 text-center">
-          <p className="text-gray-600 text-sm">Powered by Payless4Tech</p>
         </div>
       </div>
 
@@ -51,9 +49,10 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
-          <div className="lg:hidden text-center mb-8">
-            <h1 className="text-3xl font-bold text-navy-900 tracking-wider">BIZHUB</h1>
-            <p className="text-sm text-gray-400 mt-1">Payless4Tech</p>
+          <div className="lg:hidden text-center mb-8 flex flex-col items-center">
+            <img src="/payless-flag.jpeg" alt="Payless4Tech" className="w-20 h-20 object-contain rounded-xl mb-3" />
+            <p className="text-xs text-gray-400">powered by</p>
+            <h1 className="text-3xl font-bold text-navy-900 tracking-wider mt-0.5">BIZHUB</h1>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
