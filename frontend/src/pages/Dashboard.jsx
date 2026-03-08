@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell } from 'recharts'
 
 function formatCurrency(amount, currency = 'GHS', rate = 1) {
   if (amount == null) return `${currency} 0`
@@ -355,15 +355,72 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Aging Stock */}
+        {/* Aging Stock Donut */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Aging Stock</h2>
-          <p className="text-xs text-gray-400 mb-4">Click a bucket to filter Top 10</p>
-          <div className="space-y-2">
-            {AGING_BUCKETS.map(b => (
-              <AgingBar key={b.key} label={b.label} count={agingData[b.key] || 0} maxCount={agingMax} color={b.color} alert={b.alert} active={agingFilter === b.key} onClick={() => handleAgingClick(b.key)} />
-            ))}
-          </div>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">Aging Stock</h2>
+          <p className="text-xs text-gray-400 mb-4">Click a segment to filter Top 10</p>
+          {(() => {
+            const DONUT_COLORS = { under_1y: '#22c55e', '1_to_2y': '#eab308', over_2y: '#ef4444' }
+            const donutData = AGING_BUCKETS.map(b => ({ key: b.key, name: b.label, value: agingData[b.key] || 0 })).filter(d => d.value > 0)
+            const totalAging = donutData.reduce((s, d) => s + d.value, 0)
+            if (totalAging === 0) return <p className="text-sm text-gray-400 text-center py-8">No aging data</p>
+            return (
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <ResponsiveContainer width={180} height={180}>
+                    <PieChart>
+                      <Pie
+                        data={donutData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        dataKey="value"
+                        stroke="none"
+                        cursor="pointer"
+                        onClick={(_, idx) => handleAgingClick(donutData[idx].key)}
+                      >
+                        {donutData.map((d, i) => (
+                          <Cell
+                            key={d.key}
+                            fill={DONUT_COLORS[d.key]}
+                            opacity={agingFilter && agingFilter !== d.key ? 0.3 : 1}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value, name) => [`${value} items`, name]}
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-gray-900">{totalAging}</p>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">items</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-4 mt-3">
+                  {AGING_BUCKETS.map(b => {
+                    const count = agingData[b.key] || 0
+                    if (count === 0) return null
+                    return (
+                      <button
+                        key={b.key}
+                        onClick={() => handleAgingClick(b.key)}
+                        className={`flex items-center gap-1.5 text-xs transition-opacity ${agingFilter && agingFilter !== b.key ? 'opacity-40' : ''}`}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: DONUT_COLORS[b.key] }} />
+                        <span className="text-gray-600">{b.label}</span>
+                        <span className="font-semibold text-gray-900">{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       </div>
 
