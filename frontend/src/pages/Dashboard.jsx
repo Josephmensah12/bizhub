@@ -388,10 +388,6 @@ export default function Dashboard() {
                           />
                         ))}
                       </Pie>
-                      <Tooltip
-                        formatter={(value, name) => [`${value} items`, name]}
-                        contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                      />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
