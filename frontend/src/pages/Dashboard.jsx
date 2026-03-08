@@ -250,11 +250,14 @@ export default function Dashboard() {
           onClick={() => navigate('/sales/invoices?date=current-month')}
         />
         <MetricCard
-          title="Active Preorders"
-          value={metrics?.preorders_summary?.total_active || 0}
-          subtitle={`${metrics?.preorders_summary?.overdue || 0} overdue`}
-          icon={MetricIcons.preorders}
-          onClick={() => navigate('/sales/invoices?status=UNPAID,PARTIALLY_PAID')}
+          title="YoY Sales"
+          value={formatCurrency(metrics?.yoy_sales?.current)}
+          subtitle={`vs ${formatCurrency(metrics?.yoy_sales?.previous)} last year`}
+          icon={MetricIcons.revenue}
+          trend={metrics?.yoy_sales?.percent_change != null ? `${Math.abs(metrics.yoy_sales.percent_change)}%` : null}
+          trendUp={metrics?.yoy_sales?.percent_change >= 0}
+          tooltip={metrics?.yoy_sales ? `Year-over-Year (Day 1–${new Date().getDate()})\nThis year: ${formatCurrency(metrics.yoy_sales.current)}\nLast year same period: ${formatCurrency(metrics.yoy_sales.previous)}\nChange: ${metrics.yoy_sales.percent_change >= 0 ? '+' : ''}${metrics.yoy_sales.percent_change}%` : null}
+          onClick={() => navigate('/sales/invoices?date=current-month')}
         />
       </div>
 

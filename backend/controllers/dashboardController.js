@@ -119,6 +119,24 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     ? ((mtdTotal - prevMtdTotal) / prevMtdTotal) * 100
     : (mtdTotal > 0 ? 100 : 0);
 
+  // --- YoY (Year-over-Year) same period comparison ---
+  const yoyStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+  const yoyEnd = new Date(now.getFullYear() - 1, now.getMonth(), dayOfMonth + 1);
+
+  const yoySalesWhere = {
+    status: { [Op.ne]: 'CANCELLED' },
+    invoice_date: { [Op.gte]: yoyStart, [Op.lt]: yoyEnd }
+  };
+  if (role === 'Sales') {
+    yoySalesWhere.created_by = req.user.id;
+  }
+
+  const yoyInvoices = await Invoice.findAll({ where: yoySalesWhere, attributes: ['total_amount'], raw: true });
+  const yoyTotal = yoyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
+  const yoyPctChange = yoyTotal > 0
+    ? ((mtdTotal - yoyTotal) / yoyTotal) * 100
+    : (mtdTotal > 0 ? 100 : 0);
+
   // Recent invoices (today) for the dashboard table
   const recentInvoices = await sequelize.query(
     `SELECT i.id, i.invoice_number, i.total_amount, i.status, i.invoice_date,
@@ -167,6 +185,11 @@ exports.getMetrics = asyncHandler(async (req, res) => {
       previous: parseFloat(prevMtdTotal.toFixed(2)),
       percent_change: parseFloat(mtdPctChange.toFixed(1)),
       transaction_count: mtdInvoices.length
+    },
+    yoy_sales: {
+      current: parseFloat(mtdTotal.toFixed(2)),
+      previous: parseFloat(yoyTotal.toFixed(2)),
+      percent_change: parseFloat(yoyPctChange.toFixed(1))
     },
     recent_invoices: recentInvoices,
     inventory_on_hand: {
