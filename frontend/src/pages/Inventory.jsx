@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { usePermissions } from '../hooks/usePermissions';
@@ -894,10 +894,12 @@ export default function Inventory() {
                   const reserved = asset.reserved_quantity != null ? Number(asset.reserved_quantity) : 0;
                   const isPartial = remaining > 0 && reserved > 0;
                   const isSalvage = asset.condition?.toLowerCase() === 'salvage';
-                  const rowClasses = `hover:bg-gray-50 ${selectedIds.has(asset.id) ? 'bg-blue-50' : ''} ${isUnavailable ? 'opacity-50' : ''} ${isSalvage ? 'bg-amber-50' : ''}`;
+                  const hasMatchedUnits = asset.matchedUnits && asset.matchedUnits.length > 0;
+                  const rowClasses = `hover:bg-gray-50 ${selectedIds.has(asset.id) ? 'bg-blue-50' : ''} ${isUnavailable ? 'opacity-50' : ''} ${isSalvage ? 'bg-amber-50' : ''} ${hasMatchedUnits ? 'border-l-2 border-l-blue-400' : ''}`;
 
                   return (
-                  <tr key={asset.id} className={rowClasses}>
+                  <React.Fragment key={asset.id}>
+                  <tr className={rowClasses}>
                     <td className="px-4 py-4 text-center">
                       <input
                         type="checkbox"
@@ -933,7 +935,7 @@ export default function Inventory() {
                       {asset.screen_size_inches && `${asset.screen_size_inches}"`}
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-500 font-mono">
-                      {asset.serial_number || '—'}
+                      {asset.serial_number || (hasMatchedUnits ? `${asset.matchedUnits.length} unit match${asset.matchedUnits.length > 1 ? 'es' : ''}` : '—')}
                     </td>
                     <td className="px-4 py-4 text-center text-sm text-gray-900">
                       <div className="flex flex-col items-center gap-0.5">
@@ -1003,6 +1005,35 @@ export default function Inventory() {
                       </div>
                     </td>
                   </tr>
+                  {/* Matched unit sub-rows */}
+                  {hasMatchedUnits && asset.matchedUnits.map((unit) => {
+                    const unitStatusBadge =
+                      unit.status === 'Available' ? 'bg-green-100 text-green-800' :
+                      unit.status === 'Sold' ? 'bg-gray-200 text-gray-600' :
+                      unit.status === 'Reserved' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-purple-100 text-purple-800';
+                    return (
+                      <tr key={`unit-${unit.id}`} className="bg-blue-50/60 border-l-2 border-l-blue-400">
+                        <td className="px-4 py-2"></td>
+                        <td className="px-4 py-2"></td>
+                        <td className="px-4 py-2 text-xs text-gray-500" colSpan={4}>
+                          <span className="inline-flex items-center gap-2">
+                            <span className="text-blue-500">└</span>
+                            <span className="font-mono font-semibold text-blue-700 bg-yellow-100 px-1.5 py-0.5 rounded">
+                              {unit.serial_number}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="px-4 py-2" colSpan={2}>
+                          <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${unitStatusBadge}`}>
+                            {unit.status}
+                          </span>
+                        </td>
+                        <td colSpan={4}></td>
+                      </tr>
+                    );
+                  })}
+                  </React.Fragment>
                   );
                 })}
               </tbody>

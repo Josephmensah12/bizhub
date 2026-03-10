@@ -34,13 +34,22 @@ exports.list = asyncHandler(async (req, res) => {
   // Build where clause
   const where = {};
 
+  // Track which unit SNs matched the search (for frontend highlighting)
+  let matchedUnitsByAsset = {};
+
   if (search) {
     // Find assets that have units matching the search serial number
     const [unitMatches] = await sequelize.query(
-      `SELECT DISTINCT asset_id FROM asset_units WHERE serial_number ILIKE $1`,
+      `SELECT asset_id, id, serial_number, status FROM asset_units WHERE serial_number ILIKE $1`,
       { bind: [`%${search}%`] }
     );
-    const unitAssetIds = unitMatches.map(r => r.asset_id);
+    const unitAssetIds = [...new Set(unitMatches.map(r => r.asset_id))];
+
+    // Build a map of asset_id -> matched units for the response
+    for (const u of unitMatches) {
+      if (!matchedUnitsByAsset[u.asset_id]) matchedUnitsByAsset[u.asset_id] = [];
+      matchedUnitsByAsset[u.asset_id].push({ id: u.id, serial_number: u.serial_number, status: u.status });
+    }
 
     const orConditions = [
       { asset_tag: { [Op.iLike]: `%${search}%` } },
@@ -136,10 +145,18 @@ exports.list = asyncHandler(async (req, res) => {
 
   const { count, rows } = await Asset.findAndCountAll(queryOpts);
 
+  const assetsData = rows.map(a => {
+    const asset = sanitizeAssetForRole(a, req.user?.role);
+    if (matchedUnitsByAsset[a.id]) {
+      asset.matchedUnits = matchedUnitsByAsset[a.id];
+    }
+    return asset;
+  });
+
   res.json({
     success: true,
     data: {
-      assets: rows.map(a => sanitizeAssetForRole(a, req.user?.role)),
+      assets: assetsData,
       pagination: {
         total: count,
         page: parseInt(page),
