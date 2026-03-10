@@ -165,10 +165,12 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     agingWhere = `AND COALESCE(purchase_date, created_at) < NOW() - INTERVAL '2 years'`;
   }
   const topByQuantity = await Asset.sequelize.query(
-    `SELECT id, asset_tag, make, model, quantity
-     FROM assets
-     WHERE deleted_at IS NULL AND status = 'In Stock' ${agingWhere}
-     ORDER BY quantity DESC
+    `SELECT a.id, a.asset_tag, a.make, a.model, a.quantity,
+            a.condition, cs.color as condition_color
+     FROM assets a
+     LEFT JOIN condition_statuses cs ON a.condition_status_id = cs.id
+     WHERE a.deleted_at IS NULL AND a.status = 'In Stock' ${agingWhere}
+     ORDER BY a.quantity DESC
      LIMIT 10`,
     { type: Asset.sequelize.QueryTypes.SELECT }
   );

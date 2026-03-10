@@ -431,13 +431,16 @@ export default function Dashboard() {
           )}
         </div>
         {top10Data && top10Data.length > 0 ? (
+          <>
           <ResponsiveContainer width="100%" height={Math.max(top10Data.length * 36, 180)}>
             <BarChart
               layout="vertical"
               data={top10Data.map(item => ({
                 id: item.id,
                 name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
-                quantity: Number(item.quantity)
+                quantity: Number(item.quantity),
+                condition: item.condition || 'Unknown',
+                conditionColor: item.condition_color || '#6b7280'
               }))}
               margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
               barCategoryGap="20%"
@@ -451,12 +454,36 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
-              <Bar dataKey="quantity" fill="rgba(99,102,241,0.2)" stroke="#6366f1" strokeWidth={1.5} radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={22}>
-                <LabelList dataKey="quantity" position="right" style={{ fontSize: 11, fill: '#6366f1', fontWeight: 700 }} />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                formatter={(value, name, props) => [`${value} units`, props.payload.condition]}
+              />
+              <Bar dataKey="quantity" radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={22}>
+                {top10Data.map((item, index) => {
+                  const color = item.condition_color || '#6b7280'
+                  return (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={color + '33'}
+                      stroke={color}
+                      strokeWidth={1.5}
+                    />
+                  )
+                })}
+                <LabelList dataKey="quantity" position="right" style={{ fontSize: 11, fontWeight: 700 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          {/* Condition legend */}
+          <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100">
+            {[...new Map(top10Data.filter(i => i.condition_color).map(i => [i.condition, i.condition_color])).entries()].map(([name, color]) => (
+              <div key={name} className="flex items-center gap-1.5 text-xs text-gray-600">
+                <span className="w-3 h-3 rounded-sm border" style={{ backgroundColor: color + '33', borderColor: color }} />
+                {name}
+              </div>
+            ))}
+          </div>
+          </>
         ) : (
           <p className="text-sm text-gray-400 py-4 text-center">{agingFilter ? 'No items in this age range' : 'No inventory data'}</p>
         )}
