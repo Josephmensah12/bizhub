@@ -34,22 +34,18 @@ exports.list = asyncHandler(async (req, res) => {
   // Build where clause
   const where = {};
 
-  // Track which unit SNs matched the search (for frontend highlighting)
-  let matchedUnitsByAsset = {};
+  // Track which unit IDs matched the search (for frontend highlighting)
+  let matchedUnitIds = new Set();
+  let unitAssetIds = [];
 
   if (search) {
     // Find assets that have units matching the search serial number
     const [unitMatches] = await sequelize.query(
-      `SELECT asset_id, id, serial_number, status FROM asset_units WHERE serial_number ILIKE $1`,
+      `SELECT DISTINCT asset_id, id FROM asset_units WHERE serial_number ILIKE $1`,
       { bind: [`%${search}%`] }
     );
-    const unitAssetIds = [...new Set(unitMatches.map(r => r.asset_id))];
-
-    // Build a map of asset_id -> matched units for the response
-    for (const u of unitMatches) {
-      if (!matchedUnitsByAsset[u.asset_id]) matchedUnitsByAsset[u.asset_id] = [];
-      matchedUnitsByAsset[u.asset_id].push({ id: u.id, serial_number: u.serial_number, status: u.status });
-    }
+    unitAssetIds = [...new Set(unitMatches.map(r => r.asset_id))];
+    for (const u of unitMatches) matchedUnitIds.add(u.id);
 
     const orConditions = [
       { asset_tag: { [Op.iLike]: `%${search}%` } },
@@ -145,10 +141,32 @@ exports.list = asyncHandler(async (req, res) => {
 
   const { count, rows } = await Asset.findAndCountAll(queryOpts);
 
+  // For assets matched via unit SN, fetch ALL their units so frontend can show full hierarchy
+  let allUnitsByAsset = {};
+  if (unitAssetIds.length > 0) {
+    const matchedIds = unitAssetIds.filter(id => rows.some(r => r.id === id));
+    if (matchedIds.length > 0) {
+      const [allUnits] = await sequelize.query(
+        `SELECT id, asset_id, serial_number, status FROM asset_units
+         WHERE asset_id IN (:ids) ORDER BY serial_number`,
+        { replacements: { ids: matchedIds } }
+      );
+      for (const u of allUnits) {
+        if (!allUnitsByAsset[u.asset_id]) allUnitsByAsset[u.asset_id] = [];
+        allUnitsByAsset[u.asset_id].push({
+          id: u.id,
+          serial_number: u.serial_number,
+          status: u.status,
+          matched: matchedUnitIds.has(u.id)
+        });
+      }
+    }
+  }
+
   const assetsData = rows.map(a => {
     const asset = sanitizeAssetForRole(a, req.user?.role);
-    if (matchedUnitsByAsset[a.id]) {
-      asset.matchedUnits = matchedUnitsByAsset[a.id];
+    if (allUnitsByAsset[a.id]) {
+      asset.units = allUnitsByAsset[a.id];
     }
     return asset;
   });
