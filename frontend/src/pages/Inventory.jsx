@@ -934,8 +934,16 @@ export default function Inventory() {
                       {(asset.ram_gb || asset.storage_gb) && asset.screen_size_inches && ', '}
                       {asset.screen_size_inches && `${asset.screen_size_inches}"`}
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-500 font-mono">
-                      {asset.serial_number || (hasUnits ? `${asset.units.length} units` : '—')}
+                    <td className="px-4 py-4 text-sm font-mono">
+                      {asset.serial_number || (hasUnits
+                        ? (() => {
+                            const matched = asset.units.filter(u => u.matched);
+                            return matched.length > 0
+                              ? <span className="text-blue-700 font-semibold">{matched.map(u => u.serial_number).join(', ')}</span>
+                              : <span className="text-gray-500">{asset.units.length} units</span>;
+                          })()
+                        : <span className="text-gray-500">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-center text-sm text-gray-900">
                       <div className="flex flex-col items-center gap-0.5">
