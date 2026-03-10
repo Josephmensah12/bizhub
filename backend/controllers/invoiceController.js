@@ -2214,7 +2214,7 @@ exports.getAvailableAssets = asyncHandler(async (req, res) => {
   const replacements = {};
 
   if (search) {
-    searchClause = `AND (a.asset_tag ILIKE :search OR a.serial_number ILIKE :search OR a.make ILIKE :search OR a.model ILIKE :search)`;
+    searchClause = `AND (a.asset_tag ILIKE :search OR a.serial_number ILIKE :search OR a.make ILIKE :search OR a.model ILIKE :search OR a.id IN (SELECT au2.asset_id FROM asset_units au2 WHERE au2.serial_number ILIKE :search))`;
     replacements.search = `%${search}%`;
   }
 
