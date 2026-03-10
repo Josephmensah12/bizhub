@@ -103,7 +103,13 @@ class InvoicePdfService {
         // Company Logo (left side)
         let logoLoaded = false;
         if (companyProfile?.logo_url && companyProfile.logo_storage_key) {
-          const logoPath = path.join(__dirname, '..', 'uploads', 'logos', companyProfile.logo_storage_key);
+          const logoDir = path.join(__dirname, '..', 'uploads', 'logos');
+          const logoPath = path.join(logoDir, companyProfile.logo_storage_key);
+          // Restore from DB if file missing (Railway ephemeral filesystem)
+          if (!fs.existsSync(logoPath) && companyProfile.logo_data) {
+            if (!fs.existsSync(logoDir)) fs.mkdirSync(logoDir, { recursive: true });
+            fs.writeFileSync(logoPath, Buffer.from(companyProfile.logo_data, 'base64'));
+          }
           if (fs.existsSync(logoPath)) {
             try {
               doc.image(logoPath, leftCol, yPos, { width: 120 });

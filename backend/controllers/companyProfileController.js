@@ -253,11 +253,16 @@ exports.uploadLogo = [
       }
     }
 
+    // Read file and store as base64 in DB for persistence across deploys
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const logoBase64 = fileBuffer.toString('base64');
+
     // Update profile with new logo
     await profile.update({
       logo_storage_key: req.file.filename,
       logo_mime_type: req.file.mimetype,
       logo_url: `/api/v1/company-profile/logo/${req.file.filename}`,
+      logo_data: logoBase64,
       updated_by_user_id: req.user?.id || null
     });
 
@@ -283,6 +288,19 @@ exports.serveLogo = asyncHandler(async (req, res) => {
   const sanitizedFilename = path.basename(filename);
   const logoPath = path.join(logosDir, sanitizedFilename);
 
+  // Get the profile to check mime type and for DB fallback
+  const profile = await CompanyProfile.findOne({
+    where: { logo_storage_key: sanitizedFilename }
+  });
+
+  // If file missing on disk, restore from DB (handles Railway ephemeral filesystem)
+  if (!fs.existsSync(logoPath) && profile?.logo_data) {
+    if (!fs.existsSync(logosDir)) {
+      fs.mkdirSync(logosDir, { recursive: true });
+    }
+    fs.writeFileSync(logoPath, Buffer.from(profile.logo_data, 'base64'));
+  }
+
   if (!fs.existsSync(logoPath)) {
     return res.status(404).json({
       success: false,
@@ -292,11 +310,6 @@ exports.serveLogo = asyncHandler(async (req, res) => {
       }
     });
   }
-
-  // Get the profile to check mime type
-  const profile = await CompanyProfile.findOne({
-    where: { logo_storage_key: sanitizedFilename }
-  });
 
   const mimeType = profile?.logo_mime_type || 'image/png';
 
@@ -333,6 +346,7 @@ exports.deleteLogo = asyncHandler(async (req, res) => {
     logo_storage_key: null,
     logo_mime_type: null,
     logo_url: null,
+    logo_data: null,
     updated_by_user_id: req.user?.id || null
   });
 
