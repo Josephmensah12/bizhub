@@ -82,7 +82,7 @@ class InvoicePdfService {
           size: 'A4',
           margin: 50,
           info: {
-            Title: `Invoice ${invoice.invoice_number}`,
+            Title: `${invoice.status === 'PAID' ? 'Receipt' : 'Invoice'} ${invoice.invoice_number}`,
             Author: companyProfile?.company_name || 'BizHub',
             Subject: 'Invoice',
             Creator: 'BizHub Invoice System'
@@ -187,8 +187,9 @@ class InvoicePdfService {
         doc.moveTo(leftCol, yPos).lineTo(leftCol + pageWidth, yPos).stroke('#cccccc');
         yPos += 20;
 
+        const docTitle = invoice.status === 'PAID' ? 'RECEIPT' : 'INVOICE';
         doc.fontSize(24).font('Helvetica-Bold').fillColor('#333333');
-        doc.text('INVOICE', leftCol, yPos);
+        doc.text(docTitle, leftCol, yPos);
 
         // Status badge
         const statusColors = {
