@@ -80,7 +80,7 @@ class InvoicePdfService {
 
         const doc = new PDFDocument({
           size: 'A4',
-          margin: 50,
+          margin: 40,
           info: {
             Title: `${invoice.status === 'PAID' ? 'Receipt' : 'Invoice'} ${invoice.invoice_number}`,
             Author: companyProfile?.company_name || 'BizHub',
@@ -93,11 +93,11 @@ class InvoicePdfService {
         doc.pipe(writeStream);
 
         // Page dimensions
-        const pageWidth = doc.page.width - 100; // 50 margin each side
-        const leftCol = 50;
-        const rightCol = doc.page.width - 250;
+        const pageWidth = doc.page.width - 80; // 40 margin each side
+        const leftCol = 40;
+        const rightCol = doc.page.width - 230;
 
-        let yPos = 50;
+        let yPos = 40;
 
         // ============== HEADER ==============
         // Company Logo (left side)
@@ -105,26 +105,24 @@ class InvoicePdfService {
         if (companyProfile?.logo_url && companyProfile.logo_storage_key) {
           const logoDir = path.join(__dirname, '..', 'uploads', 'logos');
           const logoPath = path.join(logoDir, companyProfile.logo_storage_key);
-          // Restore from DB if file missing (Railway ephemeral filesystem)
           if (!fs.existsSync(logoPath) && companyProfile.logo_data) {
             if (!fs.existsSync(logoDir)) fs.mkdirSync(logoDir, { recursive: true });
             fs.writeFileSync(logoPath, Buffer.from(companyProfile.logo_data, 'base64'));
           }
           if (fs.existsSync(logoPath)) {
             try {
-              doc.image(logoPath, leftCol, yPos, { width: 120 });
+              doc.image(logoPath, leftCol, yPos, { width: 90 });
               logoLoaded = true;
             } catch (err) {
               console.error('Error loading logo:', err.message);
             }
           }
         }
-        // Fallback to bundled company logo
         if (!logoLoaded) {
           const fallbackLogo = path.join(__dirname, '..', 'assets', 'company-logo.jpeg');
           if (fs.existsSync(fallbackLogo)) {
             try {
-              doc.image(fallbackLogo, leftCol, yPos, { width: 120 });
+              doc.image(fallbackLogo, leftCol, yPos, { width: 90 });
             } catch (err) {
               console.error('Error loading fallback logo:', err.message);
             }
@@ -132,63 +130,37 @@ class InvoicePdfService {
         }
 
         // Company Info (right side)
-        doc.fontSize(16).font('Helvetica-Bold');
+        doc.fontSize(13).font('Helvetica-Bold');
         doc.text(companyProfile?.company_name || 'Company Name', rightCol, yPos, { width: 200, align: 'right' });
 
-        yPos += 22;
-        doc.fontSize(9).font('Helvetica').fillColor('#666666');
+        yPos += 18;
+        doc.fontSize(8).font('Helvetica').fillColor('#666666');
 
-        if (companyProfile?.tagline) {
-          doc.text(companyProfile.tagline, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
-        }
-
-        if (companyProfile?.address_line_1) {
-          doc.text(companyProfile.address_line_1, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
-        }
-
-        if (companyProfile?.address_line_2) {
-          doc.text(companyProfile.address_line_2, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
-        }
-
+        const companyLines = [];
+        if (companyProfile?.tagline) companyLines.push(companyProfile.tagline);
+        if (companyProfile?.address_line_1) companyLines.push(companyProfile.address_line_1);
+        if (companyProfile?.address_line_2) companyLines.push(companyProfile.address_line_2);
         const cityLine = [companyProfile?.city, companyProfile?.region_state, companyProfile?.country].filter(Boolean).join(', ');
-        if (cityLine) {
-          doc.text(cityLine, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
+        if (cityLine) companyLines.push(cityLine);
+        if (companyProfile?.phone) companyLines.push(`Tel: ${companyProfile.phone}`);
+        if (companyProfile?.email) companyLines.push(companyProfile.email);
+        if (companyProfile?.website) companyLines.push(companyProfile.website);
+        if (companyProfile?.tax_id_or_tin) companyLines.push(`TIN: ${companyProfile.tax_id_or_tin}`);
+
+        for (const line of companyLines) {
+          doc.text(line, rightCol, yPos, { width: 200, align: 'right' });
+          yPos += 11;
         }
 
-        if (companyProfile?.phone) {
-          doc.text(`Tel: ${companyProfile.phone}`, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
-        }
-
-        if (companyProfile?.email) {
-          doc.text(companyProfile.email, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
-        }
-
-        if (companyProfile?.website) {
-          doc.text(companyProfile.website, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
-        }
-
-        if (companyProfile?.tax_id_or_tin) {
-          doc.text(`TIN: ${companyProfile.tax_id_or_tin}`, rightCol, yPos, { width: 200, align: 'right' });
-          yPos += 12;
-        }
-
-        // Reset position after header
-        yPos = Math.max(yPos, 150);
+        yPos = Math.max(yPos, 120);
 
         // ============== INVOICE TITLE ==============
         doc.fillColor('#000000');
         doc.moveTo(leftCol, yPos).lineTo(leftCol + pageWidth, yPos).stroke('#cccccc');
-        yPos += 20;
+        yPos += 12;
 
         const docTitle = invoice.status === 'PAID' ? 'RECEIPT' : 'INVOICE';
-        doc.fontSize(24).font('Helvetica-Bold').fillColor('#333333');
+        doc.fontSize(18).font('Helvetica-Bold').fillColor('#333333');
         doc.text(docTitle, leftCol, yPos);
 
         // Status badge
@@ -201,31 +173,30 @@ class InvoicePdfService {
         const statusColor = statusColors[invoice.status] || '#666666';
         const statusText = this.getStatusDisplay(invoice.status);
 
-        doc.fontSize(10).font('Helvetica-Bold').fillColor(statusColor);
-        doc.text(statusText.toUpperCase(), leftCol + 120, yPos + 8);
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(statusColor);
+        doc.text(statusText.toUpperCase(), leftCol + 95, yPos + 5);
 
-        yPos += 40;
+        yPos += 28;
 
         // ============== INVOICE DETAILS ==============
-        // Left: Invoice info
-        doc.fontSize(10).font('Helvetica-Bold').fillColor('#333333');
+        const detailsYStart = yPos;
+        doc.fontSize(9).font('Helvetica-Bold').fillColor('#333333');
         doc.text('Invoice Number:', leftCol, yPos);
-        doc.font('Helvetica').text(invoice.invoice_number, leftCol + 100, yPos);
+        doc.font('Helvetica').text(invoice.invoice_number, leftCol + 90, yPos);
 
-        yPos += 16;
+        yPos += 13;
         doc.font('Helvetica-Bold').text('Date:', leftCol, yPos);
-        doc.font('Helvetica').text(this.formatDate(invoice.invoice_date), leftCol + 100, yPos);
+        doc.font('Helvetica').text(this.formatDate(invoice.invoice_date), leftCol + 90, yPos);
 
-        yPos += 16;
+        yPos += 13;
         doc.font('Helvetica-Bold').text('Currency:', leftCol, yPos);
-        doc.font('Helvetica').text(invoice.currency, leftCol + 100, yPos);
+        doc.font('Helvetica').text(invoice.currency, leftCol + 90, yPos);
 
         // Right: Customer info
-        const custYStart = yPos - 32;
-        doc.fontSize(10).font('Helvetica-Bold').fillColor('#333333');
-        doc.text('Bill To:', rightCol, custYStart);
-
-        let custY = custYStart + 16;
+        let custY = detailsYStart;
+        doc.fontSize(9).font('Helvetica-Bold').fillColor('#333333');
+        doc.text('Bill To:', rightCol, custY);
+        custY += 13;
         doc.font('Helvetica');
 
         if (invoice.customer) {
@@ -235,68 +206,64 @@ class InvoicePdfService {
               : invoice.customer.company_name || 'Customer');
 
           doc.font('Helvetica-Bold').text(customerName, rightCol, custY, { width: 200 });
-          custY += 14;
+          custY += 12;
           doc.font('Helvetica');
 
           if (invoice.customer.company_name && invoice.customer.first_name) {
             doc.text(invoice.customer.company_name, rightCol, custY, { width: 200 });
-            custY += 12;
+            custY += 11;
           }
-
           if (invoice.customer.phone_e164) {
             doc.text(invoice.customer.phone_e164, rightCol, custY, { width: 200 });
-            custY += 12;
+            custY += 11;
           }
-
           if (invoice.customer.email) {
             doc.text(invoice.customer.email, rightCol, custY, { width: 200 });
-            custY += 12;
+            custY += 11;
           }
-
           if (invoice.customer.address) {
             doc.text(invoice.customer.address, rightCol, custY, { width: 200 });
-            custY += 12;
+            custY += 11;
           }
         } else {
           doc.text('—', rightCol, custY);
         }
 
-        yPos = Math.max(yPos + 30, custY + 10);
+        yPos = Math.max(yPos + 20, custY + 8);
 
         // ============== LINE ITEMS TABLE ==============
         doc.moveTo(leftCol, yPos).lineTo(leftCol + pageWidth, yPos).stroke('#cccccc');
-        yPos += 10;
+        yPos += 8;
 
         // Table header
         const colWidths = {
-          desc: 250,
-          qty: 50,
-          price: 90,
-          total: 90
+          desc: 260,
+          qty: 45,
+          price: 95,
+          total: pageWidth - 260 - 45 - 95
         };
 
-        doc.fontSize(9).font('Helvetica-Bold').fillColor('#666666');
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#666666');
         doc.text('DESCRIPTION', leftCol, yPos);
         doc.text('QTY', leftCol + colWidths.desc, yPos, { width: colWidths.qty, align: 'center' });
         doc.text('UNIT PRICE', leftCol + colWidths.desc + colWidths.qty, yPos, { width: colWidths.price, align: 'right' });
         doc.text('TOTAL', leftCol + colWidths.desc + colWidths.qty + colWidths.price, yPos, { width: colWidths.total, align: 'right' });
 
-        yPos += 16;
+        yPos += 13;
         doc.moveTo(leftCol, yPos).lineTo(leftCol + pageWidth, yPos).stroke('#eeeeee');
-        yPos += 8;
+        yPos += 5;
 
         // Table rows
         doc.font('Helvetica').fillColor('#333333');
 
         const items = (invoice.items || []).filter(item => !item.voided_at);
         for (const item of items) {
-          // Check if we need a new page
-          if (yPos > doc.page.height - 200) {
+          if (yPos > doc.page.height - 100) {
             doc.addPage();
-            yPos = 50;
+            yPos = 40;
           }
 
-          // Description
+          const rowY = yPos;
           let desc = item.description || 'Item';
           if (item.asset) {
             const assetInfo = [];
@@ -304,57 +271,51 @@ class InvoicePdfService {
             if (item.asset.model) assetInfo.push(item.asset.model);
             if (assetInfo.length > 0) desc = assetInfo.join(' ');
 
-            // Add asset tag and serial on next line
             const subInfo = [];
             if (item.asset.asset_tag) subInfo.push(item.asset.asset_tag);
             if (item.asset.serial_number) subInfo.push(`S/N: ${item.asset.serial_number}`);
 
-            doc.fontSize(10).text(desc, leftCol, yPos, { width: colWidths.desc - 10 });
+            doc.fontSize(9).text(desc, leftCol, yPos, { width: colWidths.desc - 10 });
 
             if (subInfo.length > 0) {
-              yPos += 14;
-              doc.fontSize(8).fillColor('#888888');
-              doc.text(subInfo.join(' • '), leftCol, yPos, { width: colWidths.desc - 10 });
-              doc.fillColor('#333333').fontSize(10);
+              yPos += 11;
+              doc.fontSize(7).fillColor('#888888');
+              doc.text(subInfo.join(' · '), leftCol, yPos, { width: colWidths.desc - 10 });
+              doc.fillColor('#333333').fontSize(9);
             }
           } else {
-            doc.fontSize(10).text(desc, leftCol, yPos, { width: colWidths.desc - 10 });
+            doc.fontSize(9).text(desc, leftCol, yPos, { width: colWidths.desc - 10 });
           }
 
-          // Qty, Price, Total (at the same Y as first description line)
-          const rowY = yPos - (item.asset && (item.asset.asset_tag || item.asset.serial_number) ? 14 : 0);
+          doc.fontSize(9);
           doc.text(item.quantity?.toString() || '1', leftCol + colWidths.desc, rowY, { width: colWidths.qty, align: 'center' });
           doc.text(this.formatCurrency(item.unit_price_amount, invoice.currency), leftCol + colWidths.desc + colWidths.qty, rowY, { width: colWidths.price, align: 'right' });
           doc.text(this.formatCurrency(item.line_total_amount, invoice.currency), leftCol + colWidths.desc + colWidths.qty + colWidths.price, rowY, { width: colWidths.total, align: 'right' });
 
-          yPos += 20;
+          yPos += 14;
           doc.moveTo(leftCol, yPos).lineTo(leftCol + pageWidth, yPos).stroke('#f5f5f5');
-          yPos += 8;
+          yPos += 5;
         }
 
         // ============== TOTALS ==============
-        yPos += 10;
+        yPos += 6;
         const totalsX = leftCol + colWidths.desc + colWidths.qty;
-        const totalsWidth = colWidths.price + colWidths.total;
 
-        // Subtotal
-        doc.fontSize(10).font('Helvetica');
+        doc.fontSize(9).font('Helvetica');
         doc.text('Subtotal:', totalsX, yPos, { width: colWidths.price, align: 'right' });
         doc.text(this.formatCurrency(invoice.total_amount, invoice.currency), totalsX + colWidths.price, yPos, { width: colWidths.total, align: 'right' });
 
-        yPos += 18;
+        yPos += 14;
 
-        // Amount Paid
         if (invoice.amount_paid > 0) {
           doc.fillColor('#10b981');
           doc.text('Amount Paid:', totalsX, yPos, { width: colWidths.price, align: 'right' });
           doc.text(`-${this.formatCurrency(invoice.amount_paid, invoice.currency)}`, totalsX + colWidths.price, yPos, { width: colWidths.total, align: 'right' });
-          yPos += 18;
+          yPos += 14;
           doc.fillColor('#333333');
         }
 
-        // Balance Due
-        doc.font('Helvetica-Bold').fontSize(12);
+        doc.font('Helvetica-Bold').fontSize(10);
         if (invoice.balance_due > 0) {
           doc.fillColor('#dc2626');
         }
@@ -364,29 +325,29 @@ class InvoicePdfService {
 
         // ============== PAYMENT HISTORY ==============
         if (invoice.payments && invoice.payments.length > 0) {
-          yPos += 40;
+          yPos += 24;
 
-          // Check if we need a new page
-          if (yPos > doc.page.height - 150) {
+          if (yPos > doc.page.height - 80) {
             doc.addPage();
-            yPos = 50;
+            yPos = 40;
           }
 
-          doc.fontSize(12).font('Helvetica-Bold');
+          doc.fontSize(10).font('Helvetica-Bold');
           doc.text('Payment History', leftCol, yPos);
-          yPos += 20;
+          yPos += 15;
 
-          doc.fontSize(9).font('Helvetica').fillColor('#666666');
+          doc.fontSize(8).font('Helvetica').fillColor('#666666');
           doc.text('DATE', leftCol, yPos);
           doc.text('METHOD', leftCol + 100, yPos);
           doc.text('AMOUNT', leftCol + 200, yPos, { width: 100, align: 'right' });
 
-          yPos += 14;
+          yPos += 12;
           doc.moveTo(leftCol, yPos).lineTo(leftCol + 300, yPos).stroke('#eeeeee');
-          yPos += 8;
+          yPos += 5;
 
           doc.fillColor('#333333');
           for (const payment of invoice.payments) {
+            doc.fontSize(8);
             doc.text(this.formatDate(payment.payment_date), leftCol, yPos);
 
             const methodDisplay = payment.payment_method === 'Other' && payment.payment_method_other_text
@@ -398,29 +359,36 @@ class InvoicePdfService {
             doc.text(this.formatCurrency(payment.amount, payment.currency), leftCol + 200, yPos, { width: 100, align: 'right' });
             doc.fillColor('#333333');
 
-            yPos += 16;
+            yPos += 13;
           }
         }
 
         // ============== FOOTER ==============
-        // Position footer at bottom of page
-        const footerY = doc.page.height - 80;
+        yPos += 20;
+        if (yPos < doc.page.height - 60) {
+          // Footer on same page
+          doc.moveTo(leftCol, yPos).lineTo(leftCol + pageWidth, yPos).stroke('#cccccc');
 
-        doc.moveTo(leftCol, footerY).lineTo(leftCol + pageWidth, footerY).stroke('#cccccc');
+          if (companyProfile?.notes_footer) {
+            doc.fontSize(8).font('Helvetica').fillColor('#666666');
+            doc.text(companyProfile.notes_footer, leftCol, yPos + 10, { width: pageWidth, align: 'center' });
+          }
 
-        if (companyProfile?.notes_footer) {
-          doc.fontSize(9).font('Helvetica').fillColor('#666666');
-          doc.text(companyProfile.notes_footer, leftCol, footerY + 15, {
-            width: pageWidth,
-            align: 'center'
-          });
+          doc.fontSize(7).fillColor('#999999');
+          doc.text(`Generated on ${new Date().toLocaleDateString('en-US')}`, leftCol, yPos + 28, { width: pageWidth, align: 'center' });
+        } else {
+          // Footer at bottom of last page
+          const footerY = doc.page.height - 55;
+          doc.moveTo(leftCol, footerY).lineTo(leftCol + pageWidth, footerY).stroke('#cccccc');
+
+          if (companyProfile?.notes_footer) {
+            doc.fontSize(8).font('Helvetica').fillColor('#666666');
+            doc.text(companyProfile.notes_footer, leftCol, footerY + 10, { width: pageWidth, align: 'center' });
+          }
+
+          doc.fontSize(7).fillColor('#999999');
+          doc.text(`Generated on ${new Date().toLocaleDateString('en-US')}`, leftCol, footerY + 28, { width: pageWidth, align: 'center' });
         }
-
-        doc.fontSize(8).fillColor('#999999');
-        doc.text(`Generated on ${new Date().toLocaleDateString('en-US')}`, leftCol, footerY + 40, {
-          width: pageWidth,
-          align: 'center'
-        });
 
         // PAID stamp watermark on all pages
         if (invoice.status === 'PAID') {
