@@ -452,8 +452,8 @@ export default function Dashboard() {
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
-              <Bar dataKey="quantity" fill="#6366f1" radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={20}>
-                <LabelList dataKey="quantity" position="right" style={{ fontSize: 11, fill: '#6b7280', fontWeight: 600 }} />
+              <Bar dataKey="quantity" fill="rgba(99,102,241,0.2)" stroke="#6366f1" strokeWidth={1.5} radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={22}>
+                <LabelList dataKey="quantity" position="right" style={{ fontSize: 11, fill: '#6366f1', fontWeight: 700 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
