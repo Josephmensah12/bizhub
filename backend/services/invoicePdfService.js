@@ -415,6 +415,22 @@ class InvoicePdfService {
           align: 'center'
         });
 
+        // PAID stamp watermark on all pages
+        if (invoice.status === 'PAID') {
+          const pages = doc.bufferedPageRange();
+          for (let i = pages.start; i < pages.start + pages.count; i++) {
+            doc.switchToPage(i);
+            doc.save();
+            const cx = doc.page.width / 2;
+            const cy = doc.page.height / 2;
+            doc.translate(cx, cy);
+            doc.rotate(-35, { origin: [0, 0] });
+            doc.fontSize(120).font('Helvetica-Bold').fillColor('#10b981').opacity(0.12);
+            doc.text('PAID', -150, -50, { width: 300, align: 'center' });
+            doc.restore();
+          }
+        }
+
         // Finalize PDF
         doc.end();
 
