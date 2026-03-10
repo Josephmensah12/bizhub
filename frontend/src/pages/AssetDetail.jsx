@@ -1,12 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import {
-  formatWithEquivalent,
-  calculateProfitAndMarkup,
-  formatProfit,
-  formatMarkup
-} from '../services/currencyConversion';
 import { usePermissions } from '../hooks/usePermissions';
 
 export default function AssetDetail() {
@@ -85,51 +79,40 @@ export default function AssetDetail() {
     async function calculatePricingData() {
       if (!asset) return;
 
-      // Cost with USD equivalent using purchase exchange rate
-      if (asset.cost_amount && asset.cost_currency) {
-        const ghsFormatted = `GHS ${parseFloat(asset.cost_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        if (asset.purchase_exchange_rate && asset.purchase_exchange_rate > 0) {
-          const usdCost = parseFloat(asset.cost_amount) / asset.purchase_exchange_rate;
-          const usdFormatted = `$${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-          setCostDisplay(`${ghsFormatted} (≈ ${usdFormatted} @ ${asset.purchase_exchange_rate})`);
-        } else {
-          const formatted = await formatWithEquivalent(
-            asset.cost_amount,
-            asset.cost_currency,
-            asset.price_currency || 'GHS'
-          );
-          setCostDisplay(formatted);
-        }
+      const fmtGHS = (v) => `₵${parseFloat(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const fmtUSD = (v) => `$${parseFloat(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const rate = asset.purchase_exchange_rate && asset.purchase_exchange_rate > 0 ? asset.purchase_exchange_rate : null;
+
+      // Cost
+      if (asset.cost_amount) {
+        const cost = parseFloat(asset.cost_amount);
+        setCostDisplay(rate ? `${fmtGHS(cost)}  ·  ${fmtUSD(cost / rate)}` : fmtGHS(cost));
       } else {
         setCostDisplay('—');
       }
 
-      // Selling Price with cost currency equivalent
-      if (asset.price_amount && asset.price_currency) {
-        const formatted = await formatWithEquivalent(
-          asset.price_amount,
-          asset.price_currency,
-          asset.cost_currency || 'USD'
-        );
-        setPriceDisplay(formatted);
+      // Selling Price
+      if (asset.price_amount) {
+        const price = parseFloat(asset.price_amount);
+        setPriceDisplay(rate ? `${fmtGHS(price)}  ·  ${fmtUSD(price / rate)}` : fmtGHS(price));
       } else {
         setPriceDisplay('—');
       }
 
-      // Calculate profit and markup
-      const result = await calculateProfitAndMarkup(
-        parseFloat(asset.cost_amount),
-        asset.cost_currency,
-        parseFloat(asset.price_amount),
-        asset.price_currency
-      );
-
-      if (result.error) {
+      // Profit and markup (GHS-based)
+      const cost = parseFloat(asset.cost_amount) || 0;
+      const price = parseFloat(asset.price_amount) || 0;
+      if (cost > 0 && price > 0) {
+        const profitGHS = price - cost;
+        const markup = ((profitGHS / cost) * 100).toFixed(1);
+        const profitStr = rate
+          ? `${fmtGHS(profitGHS)}  ·  ${fmtUSD(profitGHS / rate)}`
+          : fmtGHS(profitGHS);
+        setProfitDisplay(profitStr);
+        setMarkupDisplay(`${markup}%`);
+      } else {
         setProfitDisplay('—');
         setMarkupDisplay('—');
-      } else {
-        setProfitDisplay(formatProfit(result.profit));
-        setMarkupDisplay(formatMarkup(result.markup));
       }
     }
 
@@ -755,18 +738,17 @@ export default function AssetDetail() {
                         <td className="py-2 pr-3 text-gray-700">{unit.cpu || '—'}</td>
                         <td className="py-2 pr-3 text-gray-700">{unit.memory ? `${unit.memory >= 1024 ? (unit.memory / 1024) + 'GB' : unit.memory + 'MB'}` : '—'}</td>
                         <td className="py-2 pr-3 text-gray-700">{unit.storage ? `${unit.storage >= 1000 ? (unit.storage / 1000) + 'TB' : unit.storage + 'GB'}` : '—'}</td>
-                        <td className="py-2 pr-3">{unit.effective_price != null ? parseFloat(unit.effective_price).toFixed(2) : '—'}</td>
+                        <td className="py-2 pr-3">{unit.effective_price != null ? (() => {
+                            const r = unit.purchase_exchange_rate || asset?.purchase_exchange_rate;
+                            const p = parseFloat(unit.effective_price);
+                            return r ? `₵${p.toFixed(0)} · $${(p / r).toFixed(0)}` : `₵${p.toFixed(2)}`;
+                          })() : '—'}</td>
                         {canSeeCost && <td className="py-2 pr-3">
-                          {unit.effective_cost != null ? (
-                            <>
-                              {parseFloat(unit.effective_cost).toFixed(2)}
-                              {(unit.purchase_exchange_rate || asset?.purchase_exchange_rate) ? (
-                                <span className="text-[10px] text-gray-400 ml-1">
-                                  (${(parseFloat(unit.effective_cost) / (unit.purchase_exchange_rate || asset.purchase_exchange_rate)).toFixed(2)})
-                                </span>
-                              ) : null}
-                            </>
-                          ) : '—'}
+                          {unit.effective_cost != null ? (() => {
+                            const r = unit.purchase_exchange_rate || asset?.purchase_exchange_rate;
+                            const c = parseFloat(unit.effective_cost);
+                            return r ? `₵${c.toFixed(0)} · $${(c / r).toFixed(0)}` : `₵${c.toFixed(2)}`;
+                          })() : '—'}
                         </td>}
                         <td className="py-2 pr-3">
                           {unit.conditionStatus ? (
