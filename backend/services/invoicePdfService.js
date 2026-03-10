@@ -101,13 +101,26 @@ class InvoicePdfService {
 
         // ============== HEADER ==============
         // Company Logo (left side)
+        let logoLoaded = false;
         if (companyProfile?.logo_url && companyProfile.logo_storage_key) {
           const logoPath = path.join(__dirname, '..', 'uploads', 'logos', companyProfile.logo_storage_key);
           if (fs.existsSync(logoPath)) {
             try {
               doc.image(logoPath, leftCol, yPos, { width: 120 });
+              logoLoaded = true;
             } catch (err) {
               console.error('Error loading logo:', err.message);
+            }
+          }
+        }
+        // Fallback to bundled company logo
+        if (!logoLoaded) {
+          const fallbackLogo = path.join(__dirname, '..', 'assets', 'company-logo.jpeg');
+          if (fs.existsSync(fallbackLogo)) {
+            try {
+              doc.image(fallbackLogo, leftCol, yPos, { width: 120 });
+            } catch (err) {
+              console.error('Error loading fallback logo:', err.message);
             }
           }
         }
