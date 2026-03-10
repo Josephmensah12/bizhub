@@ -52,6 +52,29 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
       });
 
       setAssets(available);
+
+      // Auto-expand serialized assets that have matched units from SN search
+      if (query) {
+        const autoExpand = new Set();
+        const autoUnits = {};
+        for (const a of available) {
+          if (a.is_serialized && a.matchedUnits && a.matchedUnits.length > 0) {
+            autoExpand.add(a.id);
+            autoUnits[a.id] = a.matchedUnits.map(u => ({
+              ...u,
+              effective_price: u.price_amount || a.price_amount,
+              effective_cost: u.cost_amount || a.cost_amount
+            }));
+          }
+        }
+        if (autoExpand.size > 0) {
+          setExpandedAssets(autoExpand);
+          setUnitsByAsset(prev => ({ ...prev, ...autoUnits }));
+        }
+      } else {
+        setExpandedAssets(new Set());
+        setUnitsByAsset({});
+      }
     } catch (err) {
       console.error('Asset fetch error:', err);
     } finally {
@@ -74,8 +97,8 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
     debouncedSearch(val);
   };
 
-  const fetchUnitsForAsset = async (assetId) => {
-    if (unitsByAsset[assetId]) return; // already loaded
+  const fetchUnitsForAsset = async (assetId, forceRefresh = false) => {
+    if (unitsByAsset[assetId] && !forceRefresh) return; // already loaded
     setUnitsLoading(prev => new Set(prev).add(assetId));
     try {
       const res = await axios.get(`/api/v1/assets/${assetId}/units`, { params: { status: 'Available', limit: 200 } });
@@ -99,7 +122,8 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
         next.delete(asset.id);
       } else {
         next.add(asset.id);
-        fetchUnitsForAsset(asset.id);
+        // If we have search-matched units, reload all units on manual expand
+        fetchUnitsForAsset(asset.id, !!asset.matchedUnits);
       }
       return next;
     });

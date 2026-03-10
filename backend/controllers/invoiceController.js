@@ -2268,6 +2268,38 @@ exports.getAvailableAssets = asyncHandler(async (req, res) => {
     }
   );
 
+  // When search matched unit SNs, attach the matched units to each serialized asset
+  if (search) {
+    const serializedIds = assets.filter(a => a.is_serialized).map(a => a.id);
+    if (serializedIds.length > 0) {
+      const [matchedUnits] = await sequelize.query(
+        `SELECT au.id, au.asset_id, au.serial_number, au.status,
+                au.cpu, au.memory, au.storage,
+                au.cost_amount, au.price_amount,
+                cs.id as condition_id, cs.name as condition_name, cs.color as condition_color
+         FROM asset_units au
+         LEFT JOIN condition_statuses cs ON au.condition_status_id = cs.id
+         WHERE au.asset_id IN (:ids) AND au.serial_number ILIKE :search AND au.status = 'Available'`,
+        { replacements: { ids: serializedIds, search: `%${search}%` } }
+      );
+      const unitsByAssetId = {};
+      for (const u of matchedUnits) {
+        if (!unitsByAssetId[u.asset_id]) unitsByAssetId[u.asset_id] = [];
+        unitsByAssetId[u.asset_id].push({
+          id: u.id, serial_number: u.serial_number, status: u.status,
+          cpu: u.cpu, memory: u.memory, storage: u.storage,
+          cost_amount: u.cost_amount, price_amount: u.price_amount,
+          conditionStatus: u.condition_id ? { id: u.condition_id, name: u.condition_name, color: u.condition_color } : null
+        });
+      }
+      for (const asset of assets) {
+        if (unitsByAssetId[asset.id]) {
+          asset.matchedUnits = unitsByAssetId[asset.id];
+        }
+      }
+    }
+  }
+
   res.json({
     success: true,
     data: { assets }
