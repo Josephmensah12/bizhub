@@ -85,14 +85,21 @@ export default function AssetDetail() {
     async function calculatePricingData() {
       if (!asset) return;
 
-      // Cost with GHS equivalent (show in selling currency)
+      // Cost with USD equivalent using purchase exchange rate
       if (asset.cost_amount && asset.cost_currency) {
-        const formatted = await formatWithEquivalent(
-          asset.cost_amount,
-          asset.cost_currency,
-          asset.price_currency || 'GHS'
-        );
-        setCostDisplay(formatted);
+        const ghsFormatted = `GHS ${parseFloat(asset.cost_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        if (asset.purchase_exchange_rate && asset.purchase_exchange_rate > 0) {
+          const usdCost = parseFloat(asset.cost_amount) / asset.purchase_exchange_rate;
+          const usdFormatted = `$${usdCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          setCostDisplay(`${ghsFormatted} (≈ ${usdFormatted} @ ${asset.purchase_exchange_rate})`);
+        } else {
+          const formatted = await formatWithEquivalent(
+            asset.cost_amount,
+            asset.cost_currency,
+            asset.price_currency || 'GHS'
+          );
+          setCostDisplay(formatted);
+        }
       } else {
         setCostDisplay('—');
       }
@@ -749,7 +756,18 @@ export default function AssetDetail() {
                         <td className="py-2 pr-3 text-gray-700">{unit.memory ? `${unit.memory >= 1024 ? (unit.memory / 1024) + 'GB' : unit.memory + 'MB'}` : '—'}</td>
                         <td className="py-2 pr-3 text-gray-700">{unit.storage ? `${unit.storage >= 1000 ? (unit.storage / 1000) + 'TB' : unit.storage + 'GB'}` : '—'}</td>
                         <td className="py-2 pr-3">{unit.effective_price != null ? parseFloat(unit.effective_price).toFixed(2) : '—'}</td>
-                        {canSeeCost && <td className="py-2 pr-3">{unit.effective_cost != null ? parseFloat(unit.effective_cost).toFixed(2) : '—'}</td>}
+                        {canSeeCost && <td className="py-2 pr-3">
+                          {unit.effective_cost != null ? (
+                            <>
+                              {parseFloat(unit.effective_cost).toFixed(2)}
+                              {(unit.purchase_exchange_rate || asset?.purchase_exchange_rate) ? (
+                                <span className="text-[10px] text-gray-400 ml-1">
+                                  (${(parseFloat(unit.effective_cost) / (unit.purchase_exchange_rate || asset.purchase_exchange_rate)).toFixed(2)})
+                                </span>
+                              ) : null}
+                            </>
+                          ) : '—'}
+                        </td>}
                         <td className="py-2 pr-3">
                           {unit.conditionStatus ? (
                             <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full" style={{ backgroundColor: unit.conditionStatus.color + '20', color: unit.conditionStatus.color }}>
