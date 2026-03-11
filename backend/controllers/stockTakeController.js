@@ -598,20 +598,7 @@ exports.finalize = asyncHandler(async (req, res) => {
     });
   }
 
-  // All discrepancies must have a resolution
-  const unresolved = await StockTakeItem.count({
-    where: {
-      stock_take_id: stockTake.id,
-      variance: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: 0 }] },
-      resolution: null
-    }
-  });
-  if (unresolved > 0) {
-    return res.status(400).json({
-      success: false,
-      error: { code: 'UNRESOLVED', message: `${unresolved} discrepancies have not been resolved` }
-    });
-  }
+  // Note: unresolved variances are allowed — they will be skipped during adjustment
 
   // Apply adjustments in a transaction
   const transaction = await sequelize.transaction();
@@ -627,8 +614,8 @@ exports.finalize = asyncHandler(async (req, res) => {
     for (const item of items) {
       if (!item.asset || item.variance === 0 || item.variance == null) continue;
 
-      // Skip adjustments for miscounts
-      if (item.resolution === 'miscount') continue;
+      // Skip adjustments for miscounts or unresolved variances
+      if (item.resolution === 'miscount' || !item.resolution) continue;
 
       // Adjust asset quantity
       item.asset.quantity = item.counted_quantity;
