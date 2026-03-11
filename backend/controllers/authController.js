@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const db = require('../models');
+const { Op } = require('sequelize');
 const { buildPermissions } = require('../middleware/permissions');
 
 const User = db.User;
@@ -61,8 +62,10 @@ exports.login = asyncHandler(async (req, res, next) => {
     failedAttempts.delete(username);
   }
 
-  // Find user — return same error for not-found and wrong-password to prevent enumeration
-  const user = await User.findOne({ where: { username } });
+  // Find user by username or email — return same error for not-found and wrong-password to prevent enumeration
+  const user = await User.findOne({
+    where: { [Op.or]: [{ username }, { email: username.toLowerCase() }] }
+  });
 
   if (!user || !user.is_active) {
     // Track failed attempt

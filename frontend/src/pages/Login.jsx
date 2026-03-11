@@ -70,7 +70,7 @@ export default function Login() {
 
               <div>
                 <label htmlFor="username" className="label">
-                  Username
+                  Username or Email
                 </label>
                 <input
                   id="username"
@@ -78,7 +78,7 @@ export default function Login() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="input"
-                  placeholder="Enter your username"
+                  placeholder="Enter your username or email"
                   required
                   autoFocus
                 />
