@@ -237,6 +237,20 @@ exports.start = asyncHandler(async (req, res) => {
     });
   }
 
+  // For serialized assets, compute expected quantity excluding Sold units
+  const serializedIds = assets.filter(a => a.is_serialized).map(a => a.id);
+  let unitCountMap = {};
+  if (serializedIds.length > 0) {
+    const [rows] = await sequelize.query(
+      `SELECT asset_id, COUNT(*) AS cnt
+         FROM asset_units
+        WHERE asset_id IN (:ids) AND status != 'Sold'
+        GROUP BY asset_id`,
+      { replacements: { ids: serializedIds } }
+    );
+    rows.forEach(r => { unitCountMap[r.asset_id] = parseInt(r.cnt, 10); });
+  }
+
   const transaction = await sequelize.transaction();
   try {
     // Create items in bulk — set count_method based on is_serialized
@@ -244,7 +258,7 @@ exports.start = asyncHandler(async (req, res) => {
       stock_take_id: stockTake.id,
       asset_id: a.id,
       count_method: a.is_serialized ? 'serial' : 'quantity',
-      expected_quantity: a.quantity || 0,
+      expected_quantity: a.is_serialized ? (unitCountMap[a.id] || 0) : (a.quantity || 0),
       status: 'pending'
     }));
 
