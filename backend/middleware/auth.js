@@ -72,7 +72,7 @@ const requireRole = (allowedRoles) => {
 /**
  * Middleware to optionally authenticate (attach user if token present, but don't fail if missing)
  */
-const optionalAuth = (req, res, next) => {
+const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -80,11 +80,16 @@ const optionalAuth = (req, res, next) => {
       const token = authHeader.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      req.user = {
-        id: decoded.userId,
-        username: decoded.username,
-        role: decoded.role
-      };
+      // Use DB role (not stale JWT role) for consistency with authenticate
+      const { User } = require('../models');
+      const dbUser = await User.findByPk(decoded.userId, { attributes: ['id', 'is_active', 'role'] });
+      if (dbUser && dbUser.is_active) {
+        req.user = {
+          id: decoded.userId,
+          username: decoded.username,
+          role: dbUser.role
+        };
+      }
     }
 
     next();

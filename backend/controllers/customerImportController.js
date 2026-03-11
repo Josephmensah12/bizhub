@@ -236,7 +236,9 @@ exports.validateImport = asyncHandler(async (req, res) => {
     });
   }
 
-  const filePath = path.join('uploads', fileId);
+  // Sanitize fileId to prevent path traversal
+  const safeFileId = path.basename(fileId);
+  const filePath = path.join('uploads', safeFileId);
   if (!fs.existsSync(filePath)) {
     return res.status(400).json({
       success: false,
@@ -345,7 +347,9 @@ exports.commitImport = asyncHandler(async (req, res) => {
     });
   }
 
-  const filePath = path.join('uploads', fileId);
+  // Sanitize fileId to prevent path traversal
+  const safeFileId2 = path.basename(fileId);
+  const filePath = path.join('uploads', safeFileId2);
   if (!fs.existsSync(filePath)) {
     return res.status(400).json({
       success: false,

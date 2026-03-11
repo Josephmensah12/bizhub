@@ -47,9 +47,9 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Body parser middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parser middleware (with size limits)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Logging middleware (only in development)
 if (process.env.NODE_ENV === 'development') {
@@ -68,28 +68,6 @@ app.get('/health', (req, res) => {
     version: API_VERSION,
     timestamp: new Date().toISOString()
   });
-});
-
-// Diagnostic endpoint — check database tables and columns
-app.get(`${API_BASE}/debug/schema`, async (req, res) => {
-  try {
-    const [tables] = await require('./models').sequelize.query(
-      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
-    );
-    const [userCols] = await require('./models').sequelize.query(
-      "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users' ORDER BY ordinal_position"
-    );
-    const [invoiceCols] = await require('./models').sequelize.query(
-      "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'invoices' ORDER BY ordinal_position"
-    );
-    res.json({
-      tables: tables.map(t => t.table_name),
-      userColumns: userCols.map(c => c.column_name),
-      invoiceColumns: invoiceCols.map(c => c.column_name)
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
 });
 
 // API Routes

@@ -199,11 +199,6 @@ exports.previewFile = [
 exports.validateImport = asyncHandler(async (req, res) => {
   const { fileId, mapping, constantValues = {} } = req.body;
 
-  // Debug logging
-  console.log('=== VALIDATE REQUEST ===');
-  console.log('Mapping:', JSON.stringify(mapping, null, 2));
-  console.log('Constant Values:', JSON.stringify(constantValues, null, 2));
-
   if (!fileId || !mapping) {
     return res.status(400).json({
       success: false,
@@ -214,7 +209,9 @@ exports.validateImport = asyncHandler(async (req, res) => {
     });
   }
 
-  const filePath = path.join('uploads', fileId);
+  // Sanitize fileId to prevent path traversal
+  const safeFileId = path.basename(fileId);
+  const filePath = path.join('uploads', safeFileId);
 
   if (!fs.existsSync(filePath)) {
     return res.status(400).json({
@@ -492,7 +489,9 @@ exports.commitImport = asyncHandler(async (req, res) => {
     });
   }
 
-  const filePath = path.join('uploads', fileId);
+  // Sanitize fileId to prevent path traversal
+  const safeFileId = path.basename(fileId);
+  const filePath = path.join('uploads', safeFileId);
 
   if (!fs.existsSync(filePath)) {
     return res.status(400).json({

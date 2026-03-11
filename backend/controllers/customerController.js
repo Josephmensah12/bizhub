@@ -27,9 +27,13 @@ exports.list = asyncHandler(async (req, res) => {
     tags,
     missingPhone,
     missingEmail,
-    sortBy = 'created_at',
-    sortOrder = 'DESC'
+    sortBy: rawSortBy = 'created_at',
+    sortOrder: rawSortOrder = 'DESC'
   } = req.query;
+
+  const ALLOWED_SORT = ['created_at', 'updated_at', 'first_name', 'last_name', 'company_name', 'email'];
+  const sortBy = ALLOWED_SORT.includes(rawSortBy) ? rawSortBy : 'created_at';
+  const sortOrder = rawSortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
   const offset = (page - 1) * limit;
 

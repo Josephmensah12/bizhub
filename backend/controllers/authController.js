@@ -1,10 +1,16 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const db = require('../models');
 const { buildPermissions } = require('../middleware/permissions');
 
 const User = db.User;
+
+// In-memory failed login tracker (per username)
+const failedAttempts = new Map();
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 /**
  * Generate JWT token
@@ -39,26 +45,44 @@ exports.login = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // Find user
-  const user = await User.findOne({ where: { username } });
-
-  if (!user) {
-    throw new AppError('Invalid username or password', 401, 'INVALID_CREDENTIALS');
+  // Check account lockout
+  const attempts = failedAttempts.get(username);
+  if (attempts && attempts.count >= MAX_FAILED_ATTEMPTS) {
+    const elapsed = Date.now() - attempts.lastAttempt;
+    if (elapsed < LOCKOUT_DURATION_MS) {
+      const minutesLeft = Math.ceil((LOCKOUT_DURATION_MS - elapsed) / 60000);
+      throw new AppError(
+        `Account temporarily locked. Try again in ${minutesLeft} minute(s).`,
+        429,
+        'ACCOUNT_LOCKED'
+      );
+    }
+    // Lockout expired, reset
+    failedAttempts.delete(username);
   }
 
-  if (!user.is_active) {
-    return res.status(403).json({
-      success: false,
-      error: { code: 'ACCOUNT_DISABLED', message: 'Your account has been deactivated. Contact an administrator.' }
-    });
+  // Find user — return same error for not-found and wrong-password to prevent enumeration
+  const user = await User.findOne({ where: { username } });
+
+  if (!user || !user.is_active) {
+    // Track failed attempt
+    const prev = failedAttempts.get(username) || { count: 0, lastAttempt: 0 };
+    failedAttempts.set(username, { count: prev.count + 1, lastAttempt: Date.now() });
+    throw new AppError('Invalid username or password', 401, 'INVALID_CREDENTIALS');
   }
 
   // Verify password
   const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
   if (!isPasswordValid) {
+    // Track failed attempt
+    const prev = failedAttempts.get(username) || { count: 0, lastAttempt: 0 };
+    failedAttempts.set(username, { count: prev.count + 1, lastAttempt: Date.now() });
     throw new AppError('Invalid username or password', 401, 'INVALID_CREDENTIALS');
   }
+
+  // Successful login — clear failed attempts
+  failedAttempts.delete(username);
 
   // Update last login
   await user.update({ last_login: new Date() });

@@ -15,8 +15,12 @@ const { sendPreorderStatusEmail } = require('../services/emailService');
 // ─── List ────────────────────────────────────────────────────
 exports.list = asyncHandler(async (req, res) => {
   const {
-    status, search, page = 1, limit = 50, sortBy = 'created_at', sortOrder = 'DESC'
+    status, search, page = 1, limit = 50, sortBy: rawSortBy = 'created_at', sortOrder: rawSortOrder = 'DESC'
   } = req.query;
+
+  const ALLOWED_SORT = ['created_at', 'updated_at', 'status', 'customer_name', 'tracking_code'];
+  const sortBy = ALLOWED_SORT.includes(rawSortBy) ? rawSortBy : 'created_at';
+  const sortOrder = rawSortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
   const where = {};
 

@@ -96,10 +96,10 @@ exports.create = asyncHandler(async (req, res) => {
     });
   }
 
-  if (password.length < 6) {
+  if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
     return res.status(400).json({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 6 characters' }
+      error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters with uppercase, lowercase, and a number' }
     });
   }
 
@@ -115,7 +115,7 @@ exports.create = asyncHandler(async (req, res) => {
     });
   }
 
-  const password_hash = await bcrypt.hash(password, 10);
+  const password_hash = await bcrypt.hash(password, 12);
   const discountValue = max_discount_percent !== undefined
     ? max_discount_percent
     : defaultMaxDiscount(role);
@@ -285,14 +285,14 @@ exports.resetPassword = asyncHandler(async (req, res) => {
   }
 
   const { new_password } = req.body;
-  if (!new_password || new_password.length < 6) {
+  if (!new_password || new_password.length < 8 || !/[A-Z]/.test(new_password) || !/[a-z]/.test(new_password) || !/[0-9]/.test(new_password)) {
     return res.status(400).json({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'new_password is required and must be at least 6 characters' }
+      error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters with uppercase, lowercase, and a number' }
     });
   }
 
-  user.password_hash = await bcrypt.hash(new_password, 10);
+  user.password_hash = await bcrypt.hash(new_password, 12);
   await user.save();
 
   await ActivityLog.log({
@@ -327,10 +327,10 @@ exports.changeOwnPassword = asyncHandler(async (req, res) => {
     });
   }
 
-  if (new_password.length < 6) {
+  if (new_password.length < 8 || !/[A-Z]/.test(new_password) || !/[a-z]/.test(new_password) || !/[0-9]/.test(new_password)) {
     return res.status(400).json({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'New password must be at least 6 characters' }
+      error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 8 characters with uppercase, lowercase, and a number' }
     });
   }
 
@@ -342,7 +342,7 @@ exports.changeOwnPassword = asyncHandler(async (req, res) => {
     });
   }
 
-  user.password_hash = await bcrypt.hash(new_password, 10);
+  user.password_hash = await bcrypt.hash(new_password, 12);
   await user.save();
 
   res.json({ success: true, message: 'Password changed successfully' });

@@ -1,8 +1,10 @@
 const cors = require('cors');
+const crypto = require('crypto');
 
 /**
  * Storefront API key authentication middleware.
  * Validates x-api-key header or Authorization: Bearer <key> against STOREFRONT_API_KEY env var.
+ * Uses timing-safe comparison to prevent timing attacks.
  */
 function storefrontAuth(req, res, next) {
   const apiKey = req.headers['x-api-key']
@@ -19,7 +21,8 @@ function storefrontAuth(req, res, next) {
     });
   }
 
-  if (!apiKey || apiKey !== expectedKey) {
+  if (!apiKey || apiKey.length !== expectedKey.length ||
+      !crypto.timingSafeEqual(Buffer.from(apiKey), Buffer.from(expectedKey))) {
     return res.status(401).json({
       success: false,
       error: { code: 'UNAUTHORIZED', message: 'Invalid or missing API key' }

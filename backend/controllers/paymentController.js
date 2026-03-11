@@ -25,10 +25,14 @@ exports.list = asyncHandler(async (req, res) => {
     search,
     page = 1,
     limit = 50,
-    sortBy = 'payment_date',
-    sortOrder = 'DESC',
+    sortBy: rawSortBy = 'payment_date',
+    sortOrder: rawSortOrder = 'DESC',
     includeVoided = 'false'
   } = req.query;
+
+  const ALLOWED_SORT = ['payment_date', 'created_at', 'amount', 'payment_method', 'transaction_type'];
+  const sortBy = ALLOWED_SORT.includes(rawSortBy) ? rawSortBy : 'payment_date';
+  const sortOrder = rawSortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
   // Default to current month
   const now = new Date();

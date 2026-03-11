@@ -105,9 +105,13 @@ exports.list = asyncHandler(async (req, res) => {
     search,
     page = 1,
     limit = 50,
-    sortBy = 'invoice_date',
-    sortOrder = 'DESC'
+    sortBy: rawSortBy = 'invoice_date',
+    sortOrder: rawSortOrder = 'DESC'
   } = req.query;
+
+  const ALLOWED_SORT = ['invoice_date', 'created_at', 'updated_at', 'invoice_number', 'status', 'total_amount', 'amount_due'];
+  const sortBy = ALLOWED_SORT.includes(rawSortBy) ? rawSortBy : 'invoice_date';
+  const sortOrder = rawSortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
   // Build where clause
   const where = {};

@@ -21,9 +21,13 @@ exports.list = asyncHandler(async (req, res) => {
     page = 1,
     limit = 20,
     status,
-    sortBy = 'created_at',
-    sortOrder = 'DESC'
+    sortBy: rawSortBy = 'created_at',
+    sortOrder: rawSortOrder = 'DESC'
   } = req.query;
+
+  const ALLOWED_SORT = ['created_at', 'updated_at', 'status', 'source_filename'];
+  const sortBy = ALLOWED_SORT.includes(rawSortBy) ? rawSortBy : 'created_at';
+  const sortOrder = rawSortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
   const offset = (page - 1) * limit;
 
