@@ -33,6 +33,9 @@ const assetUnitRoutes = require('./routes/assetUnitRoutes');
 
 const app = express();
 
+// Trust proxy (Railway/Heroku run behind reverse proxies)
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 
