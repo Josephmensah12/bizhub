@@ -30,7 +30,7 @@ exports.list = asyncHandler(async (req, res) => {
     sortOrder: rawSortOrder = 'DESC'
   } = req.query;
 
-  const ALLOWED_SORT = ['created_at', 'updated_at', 'asset_tag', 'make', 'model', 'category', 'asset_type', 'status', 'quantity', 'cost_amount', 'price_amount'];
+  const ALLOWED_SORT = ['created_at', 'updated_at', 'asset_tag', 'make', 'model', 'category', 'asset_type', 'status', 'quantity', 'cost_amount', 'price_amount', 'repair_state', 'repair_updated_at'];
   const sortBy = ALLOWED_SORT.includes(rawSortBy) ? rawSortBy : 'created_at';
   const sortOrder = rawSortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
