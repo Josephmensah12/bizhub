@@ -398,10 +398,9 @@ export default function StockTakeDetail() {
     }
   }
 
-  const handleUpdateUnitNote = async (itemId, unitId, notes) => {
+  const handleUpdateUnitNote = async (itemId, unitId, { reason, notes } = {}) => {
     try {
-      await axios.put(`/api/v1/stock-takes/${id}/items/${itemId}/unit-notes/${unitId}`, { notes })
-      // Update local scan data with new note
+      await axios.put(`/api/v1/stock-takes/${id}/items/${itemId}/unit-notes/${unitId}`, { reason, notes })
       setItemScans(prev => {
         const data = prev[itemId]
         if (!data) return prev
@@ -409,7 +408,7 @@ export default function StockTakeDetail() {
           ...prev,
           [itemId]: {
             ...data,
-            units: data.units.map(u => u.id === unitId ? { ...u, notes } : u)
+            units: data.units.map(u => u.id === unitId ? { ...u, reason: reason || '', notes: notes || '' } : u)
           }
         }
       })
@@ -990,6 +989,58 @@ function UnitNoteInput({ initialValue, onSave }) {
 }
 
 // ---------------------------------------------------------------------------
+// UnscannedReasonInput — reason dropdown + notes for unscanned serial numbers
+// ---------------------------------------------------------------------------
+
+const UNSCANNED_REASONS = [
+  { value: '', label: 'Select reason...' },
+  { value: 'sold_not_invoiced', label: 'Sold (not invoiced)' },
+  { value: 'in_repair', label: 'In repair' },
+  { value: 'on_loan', label: 'On loan' },
+  { value: 'lost_stolen', label: 'Lost / Stolen' },
+  { value: 'damaged', label: 'Damaged' },
+  { value: 'relocated', label: 'Relocated' },
+  { value: 'other', label: 'Other' },
+]
+
+function UnscannedReasonInput({ initialReason, initialNotes, onSave }) {
+  const [reason, setReason] = useState(initialReason || '')
+  const [notes, setNotes] = useState(initialNotes || '')
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { setReason(initialReason || ''); setNotes(initialNotes || '') }, [initialReason, initialNotes])
+
+  const save = (newReason, newNotes) => {
+    onSave({ reason: newReason, notes: newNotes })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1500)
+  }
+
+  return (
+    <div className={`flex items-center gap-1.5 ${saved ? 'ring-1 ring-green-400 rounded-md' : ''}`}>
+      <select
+        value={reason}
+        onChange={(e) => { setReason(e.target.value); save(e.target.value, notes) }}
+        className={`text-xs px-1.5 py-1 border rounded-md ${!reason ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-300'}`}
+      >
+        {UNSCANNED_REASONS.map(r => (
+          <option key={r.value} value={r.value}>{r.label}</option>
+        ))}
+      </select>
+      <input
+        type="text"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        onBlur={() => { if (notes !== (initialNotes || '')) save(reason, notes) }}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
+        placeholder="Details..."
+        className="text-xs px-2 py-1 border border-gray-300 rounded-md w-28"
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // ItemRow sub-component with expandable serial scans
 // ---------------------------------------------------------------------------
 
@@ -1036,7 +1087,7 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
   // Determine column count for expanded row
   let colSpan = 8 // expand btn + tag + item + category + counted + variance + status
   if (!blindCount) colSpan++
-  if (showResolution) colSpan++
+  if (showResolution || isCounting) colSpan++
 
   return (
     <>
@@ -1179,7 +1230,7 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
                       <th className="text-left py-1 pr-4">Unit Status</th>
                       <th className="text-left py-1 pr-4">Scanned By</th>
                       <th className="text-left py-1 pr-4">Time</th>
-                      {showResolution && <th className="text-left py-1 pr-4">Notes</th>}
+                      {(showResolution || isCounting) && <th className="text-left py-1 pr-4">Reason / Notes</th>}
                       {isCounting && <th className="text-center py-1">Remove</th>}
                     </tr>
                   </thead>
@@ -1211,12 +1262,20 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
                           </td>
                           <td className="py-1.5 pr-4 text-gray-500">{unit.scanned_by || '-'}</td>
                           <td className="py-1.5 pr-4 text-gray-400">{unit.scanned_at ? new Date(unit.scanned_at).toLocaleTimeString() : '-'}</td>
-                          {showResolution && (
+                          {(showResolution || isCounting) && (
                             <td className="py-1.5 pr-4">
-                              <UnitNoteInput
-                                initialValue={unit.notes || ''}
-                                onSave={(notes) => onUpdateUnitNote(item.id, unit.id, notes)}
-                              />
+                              {!unit.scanned ? (
+                                <UnscannedReasonInput
+                                  initialReason={unit.reason || ''}
+                                  initialNotes={unit.notes || ''}
+                                  onSave={({ reason, notes }) => onUpdateUnitNote(item.id, unit.id, { reason, notes })}
+                                />
+                              ) : (
+                                <UnitNoteInput
+                                  initialValue={unit.notes || ''}
+                                  onSave={(notes) => onUpdateUnitNote(item.id, unit.id, { notes })}
+                                />
+                              )}
                             </td>
                           )}
                           {isCounting && (

@@ -24,9 +24,13 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    reason: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
     notes: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: true
     },
     created_by: {
       type: DataTypes.INTEGER,

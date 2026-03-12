@@ -773,7 +773,9 @@ exports.export = asyncHandler(async (req, res) => {
   const notesByItem = new Map();
   for (const n of unitNotes) {
     const arr = notesByItem.get(n.stock_take_item_id) || [];
-    arr.push(`${n.unit?.serial_number || 'unknown'}: ${n.notes}`);
+    const reasonLabel = n.reason ? `[${n.reason}]` : '';
+    const noteText = n.notes || '';
+    arr.push(`${n.unit?.serial_number || 'unknown'}: ${reasonLabel}${reasonLabel && noteText ? ' ' : ''}${noteText}`);
     notesByItem.set(n.stock_take_item_id, arr);
   }
 
@@ -1218,9 +1220,9 @@ exports.getItemScans = asyncHandler(async (req, res) => {
   // Fetch unit-level notes for this item
   const unitNotes = await StockTakeUnitNote.findAll({
     where: { stock_take_item_id: itemId },
-    attributes: ['asset_unit_id', 'notes']
+    attributes: ['asset_unit_id', 'reason', 'notes']
   });
-  const notesByUnit = new Map(unitNotes.map(n => [n.asset_unit_id, n.notes]));
+  const notesByUnit = new Map(unitNotes.map(n => [n.asset_unit_id, { reason: n.reason, notes: n.notes }]));
 
   // Enrich each unit with scan info and notes
   const units = allUnits.map(u => {
@@ -1229,7 +1231,9 @@ exports.getItemScans = asyncHandler(async (req, res) => {
     const scan = scans.find(s => s.asset_unit_id === u.id);
     json.scanned_by = scan?.scanner?.full_name || null;
     json.scanned_at = scan?.scanned_at || null;
-    json.notes = notesByUnit.get(u.id) || '';
+    const noteData = notesByUnit.get(u.id);
+    json.reason = noteData?.reason || '';
+    json.notes = noteData?.notes || '';
     return json;
   });
 
@@ -1245,7 +1249,9 @@ exports.getItemScans = asyncHandler(async (req, res) => {
  */
 exports.updateUnitNote = asyncHandler(async (req, res) => {
   const { id, itemId, unitId } = req.params;
-  const { notes } = req.body;
+  const { reason, notes } = req.body;
+
+  const VALID_REASONS = ['sold_not_invoiced', 'in_repair', 'on_loan', 'lost_stolen', 'damaged', 'relocated', 'other'];
 
   const stockTake = await StockTake.findByPk(id);
   if (!stockTake) {
@@ -1271,25 +1277,34 @@ exports.updateUnitNote = asyncHandler(async (req, res) => {
     });
   }
 
-  const trimmed = (notes || '').trim();
+  if (reason && !VALID_REASONS.includes(reason)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_REASON', message: `Invalid reason. Valid: ${VALID_REASONS.join(', ')}` }
+    });
+  }
 
-  if (!trimmed) {
-    // Delete note if empty
+  const trimmedNotes = (notes || '').trim();
+  const trimmedReason = (reason || '').trim() || null;
+
+  if (!trimmedNotes && !trimmedReason) {
+    // Delete note if both empty
     await StockTakeUnitNote.destroy({
       where: { stock_take_id: id, stock_take_item_id: itemId, asset_unit_id: unitId }
     });
-    return res.json({ success: true, data: { notes: '' }, message: 'Note removed' });
+    return res.json({ success: true, data: { reason: '', notes: '' }, message: 'Note removed' });
   }
 
   const [unitNote] = await StockTakeUnitNote.upsert({
     stock_take_id: parseInt(id),
     stock_take_item_id: parseInt(itemId),
     asset_unit_id: parseInt(unitId),
-    notes: trimmed,
+    reason: trimmedReason,
+    notes: trimmedNotes || null,
     created_by: req.user?.id || null
   });
 
-  res.json({ success: true, data: { notes: unitNote.notes }, message: 'Note saved' });
+  res.json({ success: true, data: { reason: unitNote.reason || '', notes: unitNote.notes || '' }, message: 'Note saved' });
 });
 
 // ---------------------------------------------------------------------------
