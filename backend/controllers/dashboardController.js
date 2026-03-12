@@ -3,6 +3,7 @@ const { Asset, Invoice } = db;
 const sequelize = db.sequelize;
 const { Op } = require('sequelize');
 const { canSeeCost } = require('../middleware/permissions');
+const { getHistoricalFxRate, getExchangeRate } = require('../services/exchangeRateService');
 
 // Async handler wrapper
 const asyncHandler = handler => (req, res, next) => {
@@ -71,14 +72,13 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     status: { [Op.ne]: 'CANCELLED' },
     invoice_date: { [Op.gte]: todayStart }
   };
-  // Sales users see only their own invoices
   if (role === 'Sales') {
     invoiceWhere.created_by = req.user.id;
   }
 
   const todayInvoices = await Invoice.findAll({
     where: invoiceWhere,
-    attributes: ['total_amount', 'amount_paid'],
+    attributes: ['total_amount', 'amount_paid', 'invoice_date'],
     raw: true
   });
 
@@ -91,7 +91,6 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const dayOfMonth = now.getDate();
   const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth);
-  // Add 1 day to make it inclusive of today / same day in prev month
   const mtdEnd = new Date(now.getFullYear(), now.getMonth(), dayOfMonth + 1);
   const prevEnd = new Date(now.getFullYear(), now.getMonth() - 1, dayOfMonth + 1);
 
@@ -109,8 +108,8 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   }
 
   const [mtdInvoices, prevMtdInvoices] = await Promise.all([
-    Invoice.findAll({ where: mtdSalesWhere, attributes: ['total_amount'], raw: true }),
-    Invoice.findAll({ where: prevMtdSalesWhere, attributes: ['total_amount'], raw: true })
+    Invoice.findAll({ where: mtdSalesWhere, attributes: ['total_amount', 'invoice_date'], raw: true }),
+    Invoice.findAll({ where: prevMtdSalesWhere, attributes: ['total_amount', 'invoice_date'], raw: true })
   ]);
 
   const mtdTotal = mtdInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
@@ -131,11 +130,49 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     yoySalesWhere.created_by = req.user.id;
   }
 
-  const yoyInvoices = await Invoice.findAll({ where: yoySalesWhere, attributes: ['total_amount'], raw: true });
+  const yoyInvoices = await Invoice.findAll({ where: yoySalesWhere, attributes: ['total_amount', 'invoice_date'], raw: true });
   const yoyTotal = yoyInvoices.reduce((s, i) => s + (parseFloat(i.total_amount) || 0), 0);
   const yoyPctChange = yoyTotal > 0
     ? ((mtdTotal - yoyTotal) / yoyTotal) * 100
     : (mtdTotal > 0 ? 100 : 0);
+
+  // --- Compute USD totals using per-invoice historical FX rates ---
+  async function sumInUsd(invoices) {
+    let total = 0;
+    for (const inv of invoices) {
+      const amt = parseFloat(inv.total_amount) || 0;
+      if (amt === 0) continue;
+      const dateStr = inv.invoice_date ? new Date(inv.invoice_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const rate = await getHistoricalFxRate(dateStr, 'USD', 'GHS');
+      total += rate ? amt / rate : 0;
+    }
+    return total;
+  }
+
+  const [todayUsd, todayCollectedUsd, mtdUsd, prevMtdUsd, yoyUsd] = await Promise.all([
+    sumInUsd(todayInvoices),
+    (async () => {
+      let total = 0;
+      for (const inv of todayInvoices) {
+        const amt = parseFloat(inv.amount_paid) || 0;
+        if (amt === 0) continue;
+        const dateStr = inv.invoice_date ? new Date(inv.invoice_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        const rate = await getHistoricalFxRate(dateStr, 'USD', 'GHS');
+        total += rate ? amt / rate : 0;
+      }
+      return total;
+    })(),
+    sumInUsd(mtdInvoices),
+    sumInUsd(prevMtdInvoices),
+    sumInUsd(yoyInvoices)
+  ]);
+
+  const mtdPctChangeUsd = prevMtdUsd > 0
+    ? ((mtdUsd - prevMtdUsd) / prevMtdUsd) * 100
+    : (mtdUsd > 0 ? 100 : 0);
+  const yoyPctChangeUsd = yoyUsd > 0
+    ? ((mtdUsd - yoyUsd) / yoyUsd) * 100
+    : (mtdUsd > 0 ? 100 : 0);
 
   // Recent invoices (today) for the dashboard table
   const recentInvoices = await sequelize.query(
@@ -177,19 +214,27 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const data = {
     today_sales: {
       total_amount: parseFloat(todayTotalAmount.toFixed(2)),
+      total_amount_usd: parseFloat(todayUsd.toFixed(2)),
       collected: parseFloat(todayCollected.toFixed(2)),
+      collected_usd: parseFloat(todayCollectedUsd.toFixed(2)),
       transaction_count: todayInvoices.length
     },
     mtd_sales: {
       current: parseFloat(mtdTotal.toFixed(2)),
+      current_usd: parseFloat(mtdUsd.toFixed(2)),
       previous: parseFloat(prevMtdTotal.toFixed(2)),
+      previous_usd: parseFloat(prevMtdUsd.toFixed(2)),
       percent_change: parseFloat(mtdPctChange.toFixed(1)),
+      percent_change_usd: parseFloat(mtdPctChangeUsd.toFixed(1)),
       transaction_count: mtdInvoices.length
     },
     yoy_sales: {
       current: parseFloat(mtdTotal.toFixed(2)),
+      current_usd: parseFloat(mtdUsd.toFixed(2)),
       previous: parseFloat(yoyTotal.toFixed(2)),
-      percent_change: parseFloat(yoyPctChange.toFixed(1))
+      previous_usd: parseFloat(yoyUsd.toFixed(2)),
+      percent_change: parseFloat(yoyPctChange.toFixed(1)),
+      percent_change_usd: parseFloat(yoyPctChangeUsd.toFixed(1))
     },
     recent_invoices: recentInvoices,
     inventory_on_hand: {
@@ -235,6 +280,17 @@ exports.getMetrics = asyncHandler(async (req, res) => {
  * Category → asset_type hierarchy with unit counts for treemap
  */
 exports.getCategoryBreakdown = asyncHandler(async (req, res) => {
+  // Optional aging filter
+  const { aging } = req.query;
+  let agingWhere = '';
+  if (aging === 'under_1y') {
+    agingWhere = `AND COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '1 year'`;
+  } else if (aging === '1_to_2y') {
+    agingWhere = `AND COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '2 years' AND COALESCE(a.purchase_date, a.created_at) < NOW() - INTERVAL '1 year'`;
+  } else if (aging === 'over_2y') {
+    agingWhere = `AND COALESCE(a.purchase_date, a.created_at) < NOW() - INTERVAL '2 years'`;
+  }
+
   const rows = await sequelize.query(
     `SELECT a.category, a.asset_type,
             COUNT(*) AS product_count,
@@ -245,6 +301,7 @@ exports.getCategoryBreakdown = asyncHandler(async (req, res) => {
             ), 0) AS unit_count
      FROM assets a
      WHERE a.deleted_at IS NULL AND a.status IN ('In Stock','Processing','Reserved')
+     ${agingWhere}
      GROUP BY a.category, a.asset_type
      ORDER BY a.category, unit_count DESC`,
     { type: sequelize.QueryTypes.SELECT }

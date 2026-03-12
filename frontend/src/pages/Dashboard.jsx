@@ -10,6 +10,12 @@ function formatCurrency(amount, currency = 'GHS', rate = 1) {
   return `${currency} ${converted.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
+// Format a pre-computed amount (no conversion needed)
+function formatAmount(amount, currency = 'GHS') {
+  if (amount == null) return `${currency} 0`
+  return `${currency} ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+}
+
 // ─── Icon components for metric cards ────────────────────────
 const MetricIcons = {
   revenue: (
@@ -242,19 +248,33 @@ export default function Dashboard() {
     setAgingFilter(next)
     if (next) {
       try {
-        const res = await axios.get(`/api/v1/dashboard/metrics?aging=${next}`)
-        setFilteredTop10(res.data.data.top_by_quantity)
+        const [metricsRes, catRes] = await Promise.all([
+          axios.get(`/api/v1/dashboard/metrics?aging=${next}`),
+          axios.get(`/api/v1/dashboard/category-breakdown?aging=${next}`)
+        ])
+        setFilteredTop10(metricsRes.data.data.top_by_quantity)
+        setCategoryData(catRes.data.data)
       } catch { setFilteredTop10(null) }
     } else {
       setFilteredTop10(null)
+      // Restore unfiltered category data
+      try {
+        const catRes = await axios.get('/api/v1/dashboard/category-breakdown')
+        setCategoryData(catRes.data.data)
+      } catch {}
     }
   }
 
   const top10Data = filteredTop10 ?? metrics?.top_by_quantity
   const top10Label = agingFilter ? `Top 10 Items — ${AGING_BUCKETS.find(b => b.key === agingFilter)?.label}` : 'Top 10 Items by Quantity'
 
-  // Shorthand: format any GHS amount in the active display currency
+  // Shorthand: format any GHS amount in the active display currency (for non-sales values)
   const fc = (amount) => formatCurrency(amount, currency, xRate)
+  // Format sales amount using server-computed USD (historical rates)
+  const fSales = (ghsAmount, usdAmount) => {
+    if (currency === 'USD' && usdAmount != null) return formatAmount(usdAmount, 'USD')
+    return formatAmount(ghsAmount, 'GHS')
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -287,9 +307,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <MetricCard
           title="Today's Revenue"
-          value={fc(metrics?.today_sales?.total_amount)}
+          value={fSales(metrics?.today_sales?.total_amount, metrics?.today_sales?.total_amount_usd)}
           subtitle={`${metrics?.today_sales?.transaction_count || 0} transactions`}
           icon={MetricIcons.revenue}
+          tooltip={currency === 'USD' ? 'USD values use historical exchange rates from transaction dates' : undefined}
           onClick={() => navigate('/sales/invoices?date=today')}
         />
         <MetricCard
@@ -301,48 +322,64 @@ export default function Dashboard() {
         />
         {/* Consolidated MTD + YoY card */}
         <div
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200 cursor-pointer"
+          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all duration-200 cursor-pointer relative group"
           onClick={() => navigate('/sales/invoices?date=current-month')}
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <p className="text-sm text-gray-500 mb-1">MTD Sales</p>
-              <p className="text-2xl font-bold text-gray-900">{fc(metrics?.mtd_sales?.current)}</p>
+              <p className="text-2xl font-bold text-gray-900">{fSales(metrics?.mtd_sales?.current, metrics?.mtd_sales?.current_usd)}</p>
               <p className="text-xs text-gray-400 mt-0.5">{metrics?.mtd_sales?.transaction_count || 0} transactions · Day 1–{new Date().getDate()}</p>
               <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">vs Last Month</p>
                   <div className="flex items-center gap-1.5">
-                    {metrics?.mtd_sales?.percent_change != null && (
-                      <span className={`inline-flex items-center text-xs font-semibold ${metrics.mtd_sales.percent_change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={metrics.mtd_sales.percent_change >= 0 ? '' : 'rotate-180'}>
-                          <path d="M6 9V3M3 5l3-3 3 3" />
-                        </svg>
-                        {Math.abs(metrics.mtd_sales.percent_change)}%
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400 truncate">{fc(metrics?.mtd_sales?.previous)}</span>
+                    {(() => {
+                      const pct = currency === 'USD' ? metrics?.mtd_sales?.percent_change_usd : metrics?.mtd_sales?.percent_change
+                      if (pct == null) return null
+                      return (
+                        <span className={`inline-flex items-center text-xs font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={pct >= 0 ? '' : 'rotate-180'}>
+                            <path d="M6 9V3M3 5l3-3 3 3" />
+                          </svg>
+                          {Math.abs(pct)}%
+                        </span>
+                      )
+                    })()}
+                    <span className="text-xs text-gray-400 truncate">{fSales(metrics?.mtd_sales?.previous, metrics?.mtd_sales?.previous_usd)}</span>
                   </div>
                 </div>
                 <div className="w-px h-8 bg-gray-200" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">vs Last Year</p>
                   <div className="flex items-center gap-1.5">
-                    {metrics?.yoy_sales?.percent_change != null && (
-                      <span className={`inline-flex items-center text-xs font-semibold ${metrics.yoy_sales.percent_change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={metrics.yoy_sales.percent_change >= 0 ? '' : 'rotate-180'}>
-                          <path d="M6 9V3M3 5l3-3 3 3" />
-                        </svg>
-                        {Math.abs(metrics.yoy_sales.percent_change)}%
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400 truncate">{fc(metrics?.yoy_sales?.previous)}</span>
+                    {(() => {
+                      const pct = currency === 'USD' ? metrics?.yoy_sales?.percent_change_usd : metrics?.yoy_sales?.percent_change
+                      if (pct == null) return null
+                      return (
+                        <span className={`inline-flex items-center text-xs font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={pct >= 0 ? '' : 'rotate-180'}>
+                            <path d="M6 9V3M3 5l3-3 3 3" />
+                          </svg>
+                          {Math.abs(pct)}%
+                        </span>
+                      )
+                    })()}
+                    <span className="text-xs text-gray-400 truncate">{fSales(metrics?.yoy_sales?.previous, metrics?.yoy_sales?.previous_usd)}</span>
                   </div>
                 </div>
               </div>
             </div>
             {MetricIcons.revenue}
           </div>
+          {currency === 'USD' && (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+              <div className="bg-gray-800 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-lg">
+                USD values use historical exchange rates from transaction dates
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -391,7 +428,7 @@ export default function Dashboard() {
         {/* Aging Stock Donut */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-2">Aging Stock</h2>
-          <p className="text-xs text-gray-400 mb-4">Click a segment to filter Top 10</p>
+          <p className="text-xs text-gray-400 mb-4">Click a segment to filter charts below</p>
           {(() => {
             const DONUT_COLORS = { under_1y: '#22c55e', '1_to_2y': '#eab308', over_2y: '#ef4444' }
             const donutData = AGING_BUCKETS.map(b => ({ key: b.key, name: b.label, value: agingData[b.key] || 0 })).filter(d => d.value > 0)
@@ -457,9 +494,19 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Category Treemap */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="mb-5">
-            <h2 className="text-base font-semibold text-gray-900">Inventory by Category</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Unit count per asset type</p>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">
+                Inventory by Category
+                {agingFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {AGING_BUCKETS.find(b => b.key === agingFilter)?.label}</span>}
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">Unit count per asset type</p>
+            </div>
+            {agingFilter && (
+              <button onClick={() => handleAgingClick(agingFilter)} className="text-xs text-gray-500 hover:text-gray-700">
+                Clear filter
+              </button>
+            )}
           </div>
           {categoryData && categoryData.length > 0 ? (() => {
             const flatData = []
