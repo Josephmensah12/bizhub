@@ -62,9 +62,14 @@ exports.login = asyncHandler(async (req, res, next) => {
     failedAttempts.delete(username);
   }
 
-  // Find user by username or email — return same error for not-found and wrong-password to prevent enumeration
+  // Find user by username or email (case-insensitive) — return same error for not-found and wrong-password to prevent enumeration
   const user = await User.findOne({
-    where: { [Op.or]: [{ username }, { email: username.toLowerCase() }] }
+    where: {
+      [Op.or]: [
+        db.sequelize.where(db.sequelize.fn('LOWER', db.sequelize.col('username')), username.toLowerCase()),
+        db.sequelize.where(db.sequelize.fn('LOWER', db.sequelize.col('email')), username.toLowerCase())
+      ]
+    }
   });
 
   if (!user || !user.is_active) {
