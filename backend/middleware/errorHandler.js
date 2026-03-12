@@ -4,8 +4,9 @@
 
 const errorHandler = (err, req, res, next) => {
   // Log error for debugging
+  console.error(`[${req.method} ${req.originalUrl}] Error:`, err.message || err);
   if (process.env.NODE_ENV === 'development') {
-    console.error('Error:', err);
+    console.error(err.stack);
   }
 
   // Default error response
