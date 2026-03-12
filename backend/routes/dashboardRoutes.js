@@ -8,4 +8,7 @@ router.use(authenticate);
 // GET /api/v1/dashboard/metrics
 router.get('/metrics', dashboardController.getMetrics);
 
+// GET /api/v1/dashboard/category-breakdown
+router.get('/category-breakdown', dashboardController.getCategoryBreakdown);
+
 module.exports = router;

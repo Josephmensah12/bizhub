@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell, Treemap } from 'recharts'
 
 function formatCurrency(amount, currency = 'GHS', rate = 1) {
   if (amount == null) return `${currency} 0`
@@ -139,6 +139,36 @@ function RevenueBar({ label, value, maxValue }) {
   )
 }
 
+// ─── Treemap Colors & Cell ───────────────────────────────────
+const TREEMAP_COLORS = [
+  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316',
+  '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
+  '#a855f7', '#d946ef', '#10b981', '#0ea5e9'
+]
+
+function TreemapCell(props) {
+  const { x, y, width, height, name, size, index } = props
+  if (width < 4 || height < 4) return null
+  const color = TREEMAP_COLORS[(props.parentIndex ?? index) % TREEMAP_COLORS.length]
+  const showLabel = width > 45 && height > 28
+  const showSize = width > 35 && height > 42
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={5} fill={color} opacity={0.85} stroke="#fff" strokeWidth={2} />
+      {showLabel && (
+        <text x={x + width / 2} y={y + height / 2 - (showSize ? 7 : 0)} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={width < 75 ? 10 : 12} fontWeight={600}>
+          {width < 65 && name?.length > 7 ? name.slice(0, 6) + '\u2026' : name}
+        </text>
+      )}
+      {showSize && (
+        <text x={x + width / 2} y={y + height / 2 + 12} textAnchor="middle" dominantBaseline="central" fill="rgba(255,255,255,0.85)" fontSize={11} fontWeight={500}>
+          {size}
+        </text>
+      )}
+    </g>
+  )
+}
+
 export default function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -150,18 +180,21 @@ export default function Dashboard() {
   const [filteredTop10, setFilteredTop10] = useState(null)
   const [currency, setCurrency] = useState('GHS')
   const [xRate, setXRate] = useState(1) // GHS per USD
+  const [categoryData, setCategoryData] = useState(null)
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [metricsRes, valRes, rateRes] = await Promise.allSettled([
+        const [metricsRes, valRes, rateRes, catRes] = await Promise.allSettled([
           axios.get('/api/v1/dashboard/metrics'),
           axios.get('/api/v1/reports/inventory-valuation'),
-          axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS')
+          axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS'),
+          axios.get('/api/v1/dashboard/category-breakdown')
         ])
         if (metricsRes.status === 'fulfilled') setMetrics(metricsRes.value.data.data)
         if (valRes.status === 'fulfilled') setValuation(valRes.value.data.data)
         if (rateRes.status === 'fulfilled') setXRate((rateRes.value.data.data.rate || 1) + 1.0)
+        if (catRes.status === 'fulfilled') setCategoryData(catRes.value.data.data)
         if (metricsRes.status === 'rejected') {
           setError(metricsRes.reason?.response?.data?.error?.message || 'Failed to load metrics')
         }
@@ -420,46 +453,105 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Top 10 by Quantity */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-gray-900">{top10Label}</h2>
-          {agingFilter && (
-            <button onClick={() => { setAgingFilter(null); setFilteredTop10(null) }} className="text-xs text-gray-500 hover:text-gray-700">
-              Clear filter
-            </button>
+      {/* Category Treemap + Top 10 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Category Treemap */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="mb-5">
+            <h2 className="text-base font-semibold text-gray-900">Inventory by Category</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Unit count per asset type</p>
+          </div>
+          {categoryData && categoryData.length > 0 ? (() => {
+            const flatData = []
+            categoryData.forEach((cat, catIdx) => {
+              (cat.children || []).forEach(child => {
+                flatData.push({ name: child.name, size: child.size, category: cat.name, parentIndex: catIdx })
+              })
+            })
+            return (
+              <>
+                <ResponsiveContainer width="100%" height={320}>
+                  <Treemap
+                    data={flatData}
+                    dataKey="size"
+                    aspectRatio={4 / 3}
+                    stroke="#fff"
+                    content={<TreemapCell />}
+                  >
+                    <Tooltip
+                      content={({ payload }) => {
+                        if (!payload?.[0]) return null
+                        const d = payload[0].payload
+                        return (
+                          <div className="bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg">
+                            <p className="font-semibold">{d.category} &rsaquo; {d.name}</p>
+                            <p className="mt-0.5">{d.size} units</p>
+                          </div>
+                        )
+                      }}
+                    />
+                  </Treemap>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-3 border-t border-gray-100">
+                  {categoryData.map((cat, i) => {
+                    const total = cat.children.reduce((s, c) => s + c.size, 0)
+                    return (
+                      <div key={cat.name} className="flex items-center gap-1.5 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: TREEMAP_COLORS[i % TREEMAP_COLORS.length] }} />
+                        <span className="text-gray-600">{cat.name}</span>
+                        <span className="font-semibold text-gray-900">{total}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )
+          })() : (
+            <p className="text-sm text-gray-400 py-8 text-center">No category data</p>
           )}
         </div>
-        {top10Data && top10Data.length > 0 ? (
-          <ResponsiveContainer width="100%" height={Math.max(top10Data.length * 36, 180)}>
-            <BarChart
-              layout="vertical"
-              data={top10Data.map(item => ({
-                id: item.id,
-                name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
-                quantity: Number(item.quantity)
-              }))}
-              margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
-              barCategoryGap="20%"
-              style={{ cursor: 'pointer' }}
-              onClick={(state) => {
-                if (state?.activePayload?.[0]?.payload?.id) {
-                  navigate(`/inventory/${state.activePayload[0].payload.id}`)
-                }
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
-              <Bar dataKey="quantity" fill="rgba(99,102,241,0.2)" stroke="#6366f1" strokeWidth={1.5} radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={22}>
-                <LabelList dataKey="quantity" position="right" style={{ fontSize: 11, fill: '#6366f1', fontWeight: 700 }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-sm text-gray-400 py-4 text-center">{agingFilter ? 'No items in this age range' : 'No inventory data'}</p>
-        )}
+
+        {/* Top 10 by Quantity */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-base font-semibold text-gray-900">{top10Label}</h2>
+            {agingFilter && (
+              <button onClick={() => { setAgingFilter(null); setFilteredTop10(null) }} className="text-xs text-gray-500 hover:text-gray-700">
+                Clear filter
+              </button>
+            )}
+          </div>
+          {top10Data && top10Data.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(top10Data.length * 36, 180)}>
+              <BarChart
+                layout="vertical"
+                data={top10Data.map(item => ({
+                  id: item.id,
+                  name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
+                  quantity: Number(item.quantity)
+                }))}
+                margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
+                barCategoryGap="20%"
+                style={{ cursor: 'pointer' }}
+                onClick={(state) => {
+                  if (state?.activePayload?.[0]?.payload?.id) {
+                    navigate(`/inventory/${state.activePayload[0].payload.id}`)
+                  }
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: '#374151' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                <Bar dataKey="quantity" fill="rgba(99,102,241,0.2)" stroke="#6366f1" strokeWidth={1.5} radius={[0, 4, 4, 0]} className="cursor-pointer" barSize={22}>
+                  <LabelList dataKey="quantity" position="right" style={{ fontSize: 11, fill: '#6366f1', fontWeight: 700 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-gray-400 py-4 text-center">{agingFilter ? 'No items in this age range' : 'No inventory data'}</p>
+          )}
+        </div>
       </div>
     </div>
   )

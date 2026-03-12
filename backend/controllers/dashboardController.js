@@ -230,4 +230,37 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
+/**
+ * GET /api/v1/dashboard/category-breakdown
+ * Category → asset_type hierarchy with unit counts for treemap
+ */
+exports.getCategoryBreakdown = asyncHandler(async (req, res) => {
+  const rows = await sequelize.query(
+    `SELECT a.category, a.asset_type,
+            COUNT(*) AS product_count,
+            COALESCE(SUM(
+              CASE WHEN a.is_serialized THEN
+                (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped'))
+              ELSE a.quantity END
+            ), 0) AS unit_count
+     FROM assets a
+     WHERE a.deleted_at IS NULL AND a.status IN ('In Stock','Processing','Reserved')
+     GROUP BY a.category, a.asset_type
+     ORDER BY a.category, unit_count DESC`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
+
+  const catMap = {};
+  for (const r of rows) {
+    const cat = r.category || 'Uncategorized';
+    if (!catMap[cat]) catMap[cat] = { name: cat, children: [] };
+    catMap[cat].children.push({
+      name: r.asset_type || 'Other',
+      size: parseInt(r.unit_count, 10)
+    });
+  }
+
+  res.json({ success: true, data: Object.values(catMap) });
+});
+
 module.exports = exports;
