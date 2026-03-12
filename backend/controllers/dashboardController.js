@@ -362,10 +362,41 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
   );
   const currentInventoryValue = parseFloat(valRow.inventory_value) || 0;
 
-  // 3. Build monthly data
+  // 3. Cumulative sold value after each month-end (to reconstruct historical inventory)
+  //    Inventory at month-end ≈ current inventory + total sold value after that month
+  const soldRows = await sequelize.query(
+    `SELECT
+       TO_CHAR(i.invoice_date, 'YYYY-MM') AS month,
+       SUM(ii.quantity * COALESCE(ii.unit_price_amount::numeric, 0)) AS sold_value
+     FROM invoice_items ii
+     JOIN invoices i ON ii.invoice_id = i.id
+     WHERE i.status = 'PAID'
+       AND ii.voided_at IS NULL
+     GROUP BY TO_CHAR(i.invoice_date, 'YYYY-MM')
+     ORDER BY month`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
+
+  // Build cumulative sold-after-month lookup (reverse cumulative sum)
+  const soldByMonth = new Map(soldRows.map(r => [r.month, parseFloat(r.sold_value) || 0]));
+  const allMonths = [...new Set([...revenueRows.map(r => r.month), ...soldRows.map(r => r.month)])].sort();
+  const cumulativeSoldAfter = new Map();
+  let cumulative = 0;
+  for (let i = allMonths.length - 1; i >= 0; i--) {
+    const m = allMonths[i];
+    // Sold value in months AFTER this one contributes to this month's inventory
+    cumulativeSoldAfter.set(m, cumulative);
+    cumulative += soldByMonth.get(m) || 0;
+  }
+
+  // 4. Build monthly data with reconstructed inventory
   const data = revenueRows.map(r => {
     const revenue = parseFloat(r.revenue) || 0;
-    const avgInventory = currentInventoryValue; // best available approximation
+    const soldAfter = cumulativeSoldAfter.get(r.month) || 0;
+    const closingInventory = currentInventoryValue + soldAfter;
+    // Opening = closing of previous month (closing + that month's sold value)
+    const openingInventory = closingInventory + (soldByMonth.get(r.month) || 0);
+    const avgInventory = (openingInventory + closingInventory) / 2;
     const ratio = avgInventory > 0 ? revenue / avgInventory : 0;
     return {
       month: r.month,
