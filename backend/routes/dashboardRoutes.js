@@ -11,4 +11,7 @@ router.get('/metrics', dashboardController.getMetrics);
 // GET /api/v1/dashboard/category-breakdown
 router.get('/category-breakdown', dashboardController.getCategoryBreakdown);
 
+// GET /api/v1/dashboard/conversion-efficiency
+router.get('/conversion-efficiency', dashboardController.getConversionEfficiency);
+
 module.exports = router;

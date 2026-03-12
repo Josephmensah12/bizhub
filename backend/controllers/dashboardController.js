@@ -320,4 +320,64 @@ exports.getCategoryBreakdown = asyncHandler(async (req, res) => {
   res.json({ success: true, data: Object.values(catMap) });
 });
 
+/**
+ * GET /api/v1/dashboard/conversion-efficiency
+ * Monthly Inventory Conversion Ratio = Revenue / Avg Inventory Value
+ * Returns last 12 months of data.
+ */
+exports.getConversionEfficiency = asyncHandler(async (req, res) => {
+  // 1. Monthly revenue for last 12 months
+  const revenueRows = await sequelize.query(
+    `SELECT
+       TO_CHAR(invoice_date, 'YYYY-MM') AS month,
+       SUM(total_amount::numeric) AS revenue,
+       COUNT(*) AS invoice_count
+     FROM invoices
+     WHERE status != 'CANCELLED'
+       AND invoice_date >= DATE_TRUNC('month', NOW()) - INTERVAL '11 months'
+       AND invoice_date < DATE_TRUNC('month', NOW()) + INTERVAL '1 month'
+     GROUP BY TO_CHAR(invoice_date, 'YYYY-MM')
+     ORDER BY month`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
+
+  // 2. Current inventory value (non-serialized: qty × price, serialized: sum unit prices)
+  const [[valRow]] = await sequelize.query(
+    `SELECT
+       COALESCE(SUM(
+         CASE WHEN a.is_serialized THEN
+           (SELECT COALESCE(SUM(COALESCE(u.price_amount, a.price_amount)), 0)
+            FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped'))
+         ELSE
+           a.quantity * COALESCE(a.price_amount, 0)
+         END
+       ), 0) AS inventory_value
+     FROM assets a
+     WHERE a.deleted_at IS NULL AND a.status IN ('In Stock','Processing','Reserved')`
+  );
+  const currentInventoryValue = parseFloat(valRow.inventory_value) || 0;
+
+  // 3. Build monthly data
+  const data = revenueRows.map(r => {
+    const revenue = parseFloat(r.revenue) || 0;
+    const avgInventory = currentInventoryValue; // best available approximation
+    const ratio = avgInventory > 0 ? revenue / avgInventory : 0;
+    return {
+      month: r.month,
+      revenue: parseFloat(revenue.toFixed(2)),
+      avg_inventory: parseFloat(avgInventory.toFixed(2)),
+      ratio: parseFloat(ratio.toFixed(2)),
+      invoice_count: parseInt(r.invoice_count)
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      months: data,
+      current_inventory_value: parseFloat(currentInventoryValue.toFixed(2))
+    }
+  });
+});
+
 module.exports = exports;

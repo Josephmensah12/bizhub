@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell, Treemap } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell, Treemap, LineChart, Line, ReferenceLine } from 'recharts'
 
 function formatCurrency(amount, currency = 'GHS', rate = 1) {
   if (amount == null) return `${currency} 0`
@@ -187,20 +187,23 @@ export default function Dashboard() {
   const [currency, setCurrency] = useState('GHS')
   const [xRate, setXRate] = useState(1) // GHS per USD
   const [categoryData, setCategoryData] = useState(null)
+  const [conversionData, setConversionData] = useState(null)
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [metricsRes, valRes, rateRes, catRes] = await Promise.allSettled([
+        const [metricsRes, valRes, rateRes, catRes, convRes] = await Promise.allSettled([
           axios.get('/api/v1/dashboard/metrics'),
           axios.get('/api/v1/reports/inventory-valuation'),
           axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS'),
-          axios.get('/api/v1/dashboard/category-breakdown')
+          axios.get('/api/v1/dashboard/category-breakdown'),
+          axios.get('/api/v1/dashboard/conversion-efficiency')
         ])
         if (metricsRes.status === 'fulfilled') setMetrics(metricsRes.value.data.data)
         if (valRes.status === 'fulfilled') setValuation(valRes.value.data.data)
         if (rateRes.status === 'fulfilled') setXRate((rateRes.value.data.data.rate || 1) + 1.0)
         if (catRes.status === 'fulfilled') setCategoryData(catRes.value.data.data)
+        if (convRes.status === 'fulfilled') setConversionData(convRes.value.data.data)
         if (metricsRes.status === 'rejected') {
           setError(metricsRes.reason?.response?.data?.error?.message || 'Failed to load metrics')
         }
@@ -600,6 +603,57 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Inventory Conversion Efficiency */}
+      {conversionData?.months?.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+          <div className="mb-5">
+            <h2 className="text-base font-semibold text-gray-900">Inventory Conversion Efficiency</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Monthly revenue relative to inventory value held (ratio)</p>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={conversionData.months.map(m => ({
+              ...m,
+              label: new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+            }))} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
+              <ReferenceLine y={0.5} stroke="#22c55e" strokeDasharray="6 4" strokeWidth={1.5} label={{ value: '0.5 benchmark', position: 'right', fontSize: 10, fill: '#22c55e' }} />
+              <Tooltip
+                content={({ payload }) => {
+                  if (!payload?.[0]) return null
+                  const d = payload[0].payload
+                  return (
+                    <div className="bg-gray-800 text-white text-xs rounded-lg px-3 py-2.5 shadow-lg">
+                      <p className="font-semibold mb-1">{new Date(d.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                      <p>Revenue: GHS {Number(d.revenue).toLocaleString()}</p>
+                      <p>Avg Inventory: GHS {Number(d.avg_inventory).toLocaleString()}</p>
+                      <p className="mt-1 font-semibold">Conversion Ratio: {d.ratio.toFixed(2)}</p>
+                      <p className="text-gray-400 mt-0.5">{d.invoice_count} invoices</p>
+                    </div>
+                  )
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="ratio"
+                stroke="#6366f1"
+                strokeWidth={2.5}
+                dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 6, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="flex items-center gap-6 mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400">
+            <span>Current inventory value: GHS {Number(conversionData.current_inventory_value).toLocaleString()}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-0 border-t-2 border-dashed border-green-500 inline-block" />
+              0.5 = healthy benchmark
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
