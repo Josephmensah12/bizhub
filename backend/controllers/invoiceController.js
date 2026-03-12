@@ -2240,6 +2240,7 @@ exports.getAvailableAssets = asyncHandler(async (req, res) => {
             a.cost_amount, a.cost_currency,
             a.price_amount, a.price_currency,
             a.category, a.asset_type,
+            a.repair_state,
             COALESCE(reserved.total, 0) AS reserved_quantity,
             CASE WHEN a.is_serialized = true THEN
               (SELECT COUNT(*) FROM asset_units au WHERE au.asset_id = a.id AND au.status = 'Available')
@@ -2280,6 +2281,7 @@ exports.getAvailableAssets = asyncHandler(async (req, res) => {
         `SELECT au.id, au.asset_id, au.serial_number, au.status,
                 au.cpu, au.memory, au.storage,
                 au.cost_amount, au.price_amount,
+                au.repair_state,
                 cs.id as condition_id, cs.name as condition_name, cs.color as condition_color
          FROM asset_units au
          LEFT JOIN condition_statuses cs ON au.condition_status_id = cs.id
@@ -2293,6 +2295,7 @@ exports.getAvailableAssets = asyncHandler(async (req, res) => {
           id: u.id, serial_number: u.serial_number, status: u.status,
           cpu: u.cpu, memory: u.memory, storage: u.storage,
           cost_amount: u.cost_amount, price_amount: u.price_amount,
+          repair_state: u.repair_state,
           conditionStatus: u.condition_id ? { id: u.condition_id, name: u.condition_name, color: u.condition_color } : null
         });
       }

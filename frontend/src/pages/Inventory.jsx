@@ -206,7 +206,8 @@ export default function Inventory() {
     assetType: [],     // Multi-select
     status: [],        // Multi-select
     condition: [],     // Multi-select
-    make: []           // Multi-select
+    make: [],          // Multi-select
+    repairState: []    // Multi-select
   });
   const [filterOptions, setFilterOptions] = useState({
     categories: [],
@@ -281,6 +282,7 @@ export default function Inventory() {
       if (filters.status.length > 0) params.status = filters.status.join(',');
       if (filters.condition.length > 0) params.condition = filters.condition.join(',');
       if (filters.make.length > 0) params.make = filters.make.join(',');
+      if (filters.repairState.length > 0) params.repairState = filters.repairState.join(',');
 
       const response = await axios.get('/api/v1/assets', { params });
       setAssets(response.data.data.assets);
@@ -305,6 +307,7 @@ export default function Inventory() {
       if (filters.status.length > 0) params.status = filters.status.join(',');
       if (filters.condition.length > 0) params.condition = filters.condition.join(',');
       if (filters.make.length > 0) params.make = filters.make.join(',');
+      if (filters.repairState.length > 0) params.repairState = filters.repairState.join(',');
 
       const response = await axios.get('/api/v1/assets/valuation-summary', { params });
       setValuation(response.data.data);
@@ -786,7 +789,7 @@ export default function Inventory() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Search
@@ -838,6 +841,14 @@ export default function Inventory() {
             selected={filters.make}
             onChange={(val) => handleMultiSelectToggle('make', val)}
             onClear={() => clearFilter('make')}
+          />
+
+          <MultiSelectDropdown
+            label="Repair State"
+            options={['Under Repair', 'Salvage / Parts']}
+            selected={filters.repairState}
+            onChange={(val) => handleMultiSelectToggle('repairState', val)}
+            onClear={() => clearFilter('repairState')}
           />
         </div>
       </div>
@@ -895,7 +906,11 @@ export default function Inventory() {
                   const isPartial = remaining > 0 && reserved > 0;
                   const isSalvage = asset.condition?.toLowerCase() === 'salvage';
                   const hasUnits = asset.units && asset.units.length > 0;
-                  const rowClasses = `hover:bg-gray-50 ${selectedIds.has(asset.id) ? 'bg-blue-50' : ''} ${isUnavailable ? 'opacity-50' : ''} ${isSalvage ? 'bg-amber-50' : ''} ${hasUnits ? 'border-l-2 border-l-blue-400' : ''}`;
+                  const repairState = asset.repair_state || 'regular';
+                  const isUnderRepair = repairState === 'under_repair';
+                  const isSalvageParts = repairState === 'salvage_parts';
+                  const repairBg = isUnderRepair ? 'bg-orange-50' : isSalvageParts ? 'bg-red-50' : '';
+                  const rowClasses = `hover:bg-gray-50 ${selectedIds.has(asset.id) ? 'bg-blue-50' : ''} ${isUnavailable ? 'opacity-50' : ''} ${isSalvage ? 'bg-amber-50' : repairBg} ${hasUnits ? 'border-l-2 border-l-blue-400' : ''}`;
 
                   return (
                   <React.Fragment key={asset.id}>
@@ -960,22 +975,34 @@ export default function Inventory() {
                       </div>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
-                      {(() => {
-                        const displayStatus = isPartial ? 'Partial Stock' : asset.status;
-                        const badgeClass =
-                          displayStatus === 'In Stock' ? 'bg-green-100 text-green-800' :
-                          displayStatus === 'Partial Stock' ? 'bg-cyan-100 text-cyan-800' :
-                          displayStatus === 'Processing' ? 'bg-blue-100 text-blue-800' :
-                          displayStatus === 'Reserved' ? 'bg-yellow-100 text-yellow-800' :
-                          displayStatus === 'Sold' ? 'bg-gray-200 text-gray-600' :
-                          displayStatus === 'In Repair' ? 'bg-orange-100 text-orange-800' :
-                          'bg-purple-100 text-purple-800';
-                        return (
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
-                            {displayStatus}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {(() => {
+                          const displayStatus = isPartial ? 'Partial Stock' : asset.status;
+                          const badgeClass =
+                            displayStatus === 'In Stock' ? 'bg-green-100 text-green-800' :
+                            displayStatus === 'Partial Stock' ? 'bg-cyan-100 text-cyan-800' :
+                            displayStatus === 'Processing' ? 'bg-blue-100 text-blue-800' :
+                            displayStatus === 'Reserved' ? 'bg-yellow-100 text-yellow-800' :
+                            displayStatus === 'Sold' ? 'bg-gray-200 text-gray-600' :
+                            displayStatus === 'In Repair' ? 'bg-orange-100 text-orange-800' :
+                            'bg-purple-100 text-purple-800';
+                          return (
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
+                              {displayStatus}
+                            </span>
+                          );
+                        })()}
+                        {isUnderRepair && (
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">
+                            Under Repair
                           </span>
-                        );
-                      })()}
+                        )}
+                        {isSalvageParts && (
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700">
+                            Salvage
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm">
                       {asset.conditionStatus ? (

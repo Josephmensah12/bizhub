@@ -143,6 +143,9 @@ router.delete('/permanent', requireRole(['Admin']), assetController.permanentDel
 // GET /api/v1/assets/:id/history - Get inventory item event history
 router.get('/:id/history', assetController.getHistory);
 
+// PUT /api/v1/assets/:id/repair-state - Change repair/salvage state
+router.put('/:id/repair-state', requireRole(['Technician', 'Warehouse', 'Manager', 'Admin']), assetController.updateRepairState);
+
 // GET /api/v1/assets/:id
 router.get('/:id', assetController.getById);
 

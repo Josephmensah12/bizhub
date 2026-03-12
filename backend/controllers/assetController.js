@@ -1,4 +1,4 @@
-const { Asset, AssetUnit, User, InventoryItemEvent, ConditionStatus, sequelize } = require('../models');
+const { Asset, AssetUnit, User, InventoryItemEvent, ConditionStatus, ActivityLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { generateAssetTag } = require('../utils/assetTagGenerator');
 const { getReservedQuantity } = require('../services/inventoryAvailabilityService');
@@ -25,6 +25,7 @@ exports.list = asyncHandler(async (req, res) => {
     status,
     condition,
     make,
+    repairState,
     sortBy: rawSortBy = 'created_at',
     sortOrder: rawSortOrder = 'DESC'
   } = req.query;
@@ -87,6 +88,11 @@ exports.list = asyncHandler(async (req, res) => {
     } else {
       where.make = { [Op.or]: makes.map(m => ({ [Op.iLike]: `%${m}%` })) };
     }
+  }
+  if (repairState) {
+    const labelToValue = { 'Under Repair': 'under_repair', 'Salvage / Parts': 'salvage_parts', 'Regular': 'regular' };
+    const states = repairState.split(',').map(s => labelToValue[s.trim()] || s.trim()).filter(Boolean);
+    where.repair_state = states.length === 1 ? states[0] : { [Op.in]: states };
   }
 
   const queryOpts = {
@@ -199,6 +205,7 @@ exports.getById = asyncHandler(async (req, res) => {
   const includeArr = [
     { model: User, as: 'creator', attributes: ['id', 'full_name', 'email'] },
     { model: User, as: 'updater', attributes: ['id', 'full_name', 'email'] },
+    { model: User, as: 'repairUpdater', attributes: ['id', 'full_name'] },
     { model: ConditionStatus, as: 'conditionStatus', attributes: ['id', 'name', 'color', 'valuation_rule'] }
   ];
 
@@ -1147,4 +1154,198 @@ exports.importUnits = asyncHandler(async (req, res) => {
     },
     message: `Import complete: ${unitsCreated} units created across ${productsCreated + productsExisting} products`
   });
+});
+
+// ---------------------------------------------------------------------------
+// Repair / Salvage workflow
+// ---------------------------------------------------------------------------
+
+const REPAIR_STATE_LABELS = {
+  regular: 'Regular',
+  under_repair: 'Under Repair',
+  salvage_parts: 'Salvage / Parts'
+};
+
+/**
+ * PUT /api/v1/assets/:id/repair-state
+ * Change asset repair state and auto-update condition status for valuation.
+ *
+ * Body: { repair_state, repair_notes?, unit_ids? }
+ *   - If unit_ids provided (serialized), updates those specific units
+ *   - Otherwise updates the asset-level repair state
+ */
+exports.updateRepairState = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { repair_state, repair_notes, unit_ids } = req.body;
+
+  if (!['regular', 'under_repair', 'salvage_parts'].includes(repair_state)) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_STATE', message: 'repair_state must be regular, under_repair, or salvage_parts' }
+    });
+  }
+
+  const asset = await Asset.findByPk(id, {
+    include: [{ model: ConditionStatus, as: 'conditionStatus' }]
+  });
+  if (!asset) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Asset not found' }
+    });
+  }
+
+  // Resolve condition statuses for valuation mapping
+  const [needsRepairCond, partsOnlyCond, defaultCond] = await Promise.all([
+    ConditionStatus.findOne({ where: { name: 'Needs Repair' } }),
+    ConditionStatus.findOne({ where: { name: 'Parts Only' } }),
+    ConditionStatus.findOne({ where: { is_default: true } })
+  ]);
+
+  const conditionMap = {
+    under_repair: needsRepairCond?.id || null,
+    salvage_parts: partsOnlyCond?.id || null,
+    regular: null // will use previous or default
+  };
+
+  const transaction = await sequelize.transaction();
+  try {
+    const userId = req.user?.id;
+    const now = new Date();
+
+    // If unit_ids provided, update specific units (serialized assets)
+    if (unit_ids && Array.isArray(unit_ids) && unit_ids.length > 0) {
+      const units = await AssetUnit.findAll({
+        where: { id: unit_ids, asset_id: id },
+        transaction
+      });
+
+      for (const unit of units) {
+        const oldState = unit.repair_state;
+        if (oldState === repair_state) continue;
+
+        // Store previous condition when entering repair/salvage
+        if (repair_state !== 'regular' && oldState === 'regular') {
+          unit.previous_condition_status_id = unit.condition_status_id;
+        }
+
+        // Update condition status for valuation
+        if (repair_state === 'regular') {
+          unit.condition_status_id = unit.previous_condition_status_id || defaultCond?.id || null;
+          unit.previous_condition_status_id = null;
+        } else {
+          unit.condition_status_id = conditionMap[repair_state];
+        }
+
+        unit.repair_state = repair_state;
+        unit.repair_notes = repair_notes != null ? repair_notes : unit.repair_notes;
+        unit.repair_updated_at = now;
+        unit.repair_updated_by = userId;
+        await unit.save({ transaction });
+      }
+
+      // Log event
+      await InventoryItemEvent.log({
+        inventoryItemId: asset.id,
+        eventType: 'UPDATED',
+        actorUserId: userId,
+        source: 'USER',
+        summary: `${units.length} unit(s) marked as ${REPAIR_STATE_LABELS[repair_state]}`,
+        details: {
+          unit_ids,
+          repair_state,
+          repair_notes: repair_notes || null
+        }
+      }, transaction);
+
+    } else {
+      // Asset-level repair state change
+      const oldState = asset.repair_state || 'regular';
+
+      if (repair_state !== 'regular' && oldState === 'regular') {
+        asset.previous_condition_status_id = asset.condition_status_id;
+      }
+
+      if (repair_state === 'regular') {
+        asset.condition_status_id = asset.previous_condition_status_id || defaultCond?.id || null;
+        asset.previous_condition_status_id = null;
+      } else {
+        asset.condition_status_id = conditionMap[repair_state];
+      }
+
+      asset.repair_state = repair_state;
+      asset.repair_notes = repair_notes != null ? repair_notes : asset.repair_notes;
+      asset.repair_updated_at = now;
+      asset.repair_updated_by = userId;
+      await asset.save({ transaction });
+
+      // Also update all non-Sold units if serialized
+      if (asset.is_serialized) {
+        const unitUpdate = {
+          repair_state,
+          repair_updated_at: now,
+          repair_updated_by: userId
+        };
+        if (repair_notes != null) unitUpdate.repair_notes = repair_notes;
+
+        if (repair_state === 'regular') {
+          // Restore each unit's previous condition individually
+          const units = await AssetUnit.findAll({
+            where: { asset_id: id, status: { [Op.notIn]: ['Sold'] } },
+            transaction
+          });
+          for (const unit of units) {
+            unit.condition_status_id = unit.previous_condition_status_id || defaultCond?.id || null;
+            unit.previous_condition_status_id = null;
+            Object.assign(unit, unitUpdate);
+            await unit.save({ transaction });
+          }
+        } else {
+          // Bulk update units to repair/salvage condition
+          await AssetUnit.update({
+            ...unitUpdate,
+            condition_status_id: conditionMap[repair_state],
+            previous_condition_status_id: sequelize.literal(
+              'CASE WHEN repair_state = \'regular\' THEN condition_status_id ELSE previous_condition_status_id END'
+            )
+          }, {
+            where: { asset_id: id, status: { [Op.notIn]: ['Sold'] } },
+            transaction
+          });
+        }
+      }
+
+      await InventoryItemEvent.log({
+        inventoryItemId: asset.id,
+        eventType: 'UPDATED',
+        actorUserId: userId,
+        source: 'USER',
+        summary: `Asset marked as ${REPAIR_STATE_LABELS[repair_state]}`,
+        details: {
+          previous_state: oldState,
+          repair_state,
+          repair_notes: repair_notes || null
+        }
+      }, transaction);
+    }
+
+    await transaction.commit();
+
+    // Reload with associations
+    await asset.reload({
+      include: [
+        { model: ConditionStatus, as: 'conditionStatus' },
+        { model: User, as: 'repairUpdater', attributes: ['id', 'full_name'] }
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: { asset },
+      message: `Asset marked as ${REPAIR_STATE_LABELS[repair_state]}`
+    });
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 });

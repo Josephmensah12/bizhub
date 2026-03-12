@@ -172,7 +172,32 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
   const totalUnits = Array.from(selected.values()).reduce((sum, e) => sum + e.quantity, 0);
 
   const handleDone = () => {
-    // Check for salvage items and warn
+    // Check for repair state warnings (under_repair and salvage_parts)
+    const underRepairItems = Array.from(selected.values()).filter(
+      ({ asset, unit }) => (unit?.repair_state || asset.repair_state) === 'under_repair'
+    );
+    if (underRepairItems.length > 0) {
+      const names = underRepairItems.map(({ asset, unit }) =>
+        unit ? `${asset.make} ${asset.model} (S/N: ${unit.serial_number})` : `${asset.make} ${asset.model}`
+      ).join(', ');
+      if (!window.confirm(`Warning: The following items are currently Under Repair:\n\n${names}\n\nThey may have reduced functionality. Are you sure you want to add them?`)) {
+        return;
+      }
+    }
+
+    const salvagePartsItems = Array.from(selected.values()).filter(
+      ({ asset, unit }) => (unit?.repair_state || asset.repair_state) === 'salvage_parts'
+    );
+    if (salvagePartsItems.length > 0) {
+      const names = salvagePartsItems.map(({ asset, unit }) =>
+        unit ? `${asset.make} ${asset.model} (S/N: ${unit.serial_number})` : `${asset.make} ${asset.model}`
+      ).join(', ');
+      if (!window.confirm(`Warning: The following items are marked as Salvage / Parts:\n\n${names}\n\nThey may only be suitable for parts. Are you sure you want to add them?`)) {
+        return;
+      }
+    }
+
+    // Check for salvage condition items and warn
     const salvageItems = Array.from(selected.values()).filter(
       ({ asset }) => asset.condition?.toLowerCase() === 'salvage'
     );
@@ -307,6 +332,12 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
                               {isSerialized && (
                                 <span className="ml-1.5 text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 rounded">SN</span>
                               )}
+                              {asset.repair_state === 'under_repair' && (
+                                <span className="ml-1.5 text-[10px] font-medium text-orange-700 bg-orange-100 px-1.5 rounded">Repair</span>
+                              )}
+                              {asset.repair_state === 'salvage_parts' && (
+                                <span className="ml-1.5 text-[10px] font-medium text-red-700 bg-red-100 px-1.5 rounded">Salvage</span>
+                              )}
                             </div>
                             <div className="text-sm text-gray-500">
                               {asset.asset_tag}
@@ -407,6 +438,12 @@ export default function InventoryPickerModal({ open, onClose, onAddItems, invoic
                                     <span className="ml-2 inline-block px-1.5 py-0 text-[10px] font-medium rounded-full" style={{ backgroundColor: unit.conditionStatus.color + '20', color: unit.conditionStatus.color }}>
                                       {unit.conditionStatus.name}
                                     </span>
+                                  )}
+                                  {unit.repair_state === 'under_repair' && (
+                                    <span className="ml-2 text-[10px] font-medium text-orange-700 bg-orange-100 px-1.5 rounded">Repair</span>
+                                  )}
+                                  {unit.repair_state === 'salvage_parts' && (
+                                    <span className="ml-2 text-[10px] font-medium text-red-700 bg-red-100 px-1.5 rounded">Salvage</span>
                                   )}
                                 </div>
                                 <div className="text-sm font-medium text-green-600 shrink-0">

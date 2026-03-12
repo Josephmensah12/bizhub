@@ -107,6 +107,35 @@ module.exports = (sequelize, DataTypes) => {
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    // Repair / Salvage workflow
+    repair_state: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'regular',
+      validate: {
+        isIn: [['regular', 'under_repair', 'salvage_parts']]
+      },
+      comment: 'Operational repair state — does not block sales'
+    },
+    repair_notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    repair_updated_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    repair_updated_by: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: 'users', key: 'id' }
+    },
+    previous_condition_status_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: 'condition_statuses', key: 'id' },
+      comment: 'Stored when entering repair/salvage so we can restore on return to regular'
     }
   }, {
     tableName: 'asset_units',
@@ -139,6 +168,7 @@ module.exports = (sequelize, DataTypes) => {
     AssetUnit.belongsTo(models.Asset, { foreignKey: 'asset_id', as: 'product' });
     AssetUnit.belongsTo(models.ConditionStatus, { foreignKey: 'condition_status_id', as: 'conditionStatus' });
     AssetUnit.belongsTo(models.InvoiceItem, { foreignKey: 'invoice_item_id', as: 'invoiceItem' });
+    AssetUnit.belongsTo(models.User, { foreignKey: 'repair_updated_by', as: 'repairUpdater' });
   };
 
   return AssetUnit;

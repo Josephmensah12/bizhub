@@ -235,6 +235,35 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    // Repair / Salvage workflow
+    repair_state: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'regular',
+      validate: {
+        isIn: [['regular', 'under_repair', 'salvage_parts']]
+      },
+      comment: 'Operational repair state — does not block sales'
+    },
+    repair_notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    repair_updated_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    repair_updated_by: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: 'users', key: 'id' }
+    },
+    previous_condition_status_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: 'condition_statuses', key: 'id' },
+      comment: 'Stored when entering repair/salvage so we can restore on return to regular'
+    },
     // Audit fields
     created_by: {
       type: DataTypes.INTEGER,
@@ -290,6 +319,7 @@ module.exports = (sequelize, DataTypes) => {
     Asset.belongsTo(models.User, { as: 'creator', foreignKey: 'created_by' });
     Asset.belongsTo(models.User, { as: 'updater', foreignKey: 'updated_by' });
     Asset.belongsTo(models.User, { as: 'deleter', foreignKey: 'deleted_by' });
+    Asset.belongsTo(models.User, { as: 'repairUpdater', foreignKey: 'repair_updated_by' });
     Asset.belongsTo(models.ImportBatch, { as: 'importBatch', foreignKey: 'import_batch_id' });
     Asset.belongsTo(models.ConditionStatus, { as: 'conditionStatus', foreignKey: 'condition_status_id' });
     Asset.hasMany(models.InvoiceItem, { as: 'invoiceItems', foreignKey: 'asset_id' });

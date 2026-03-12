@@ -9,6 +9,7 @@ export default function AssetDetail() {
   const { permissions } = usePermissions();
   const canSeeCost = permissions?.canSeeCost ?? false;
   const canManage = permissions?.role && ['Admin', 'Manager', 'Warehouse'].includes(permissions.role);
+  const canRepair = permissions?.role && ['Admin', 'Manager', 'Warehouse', 'Technician'].includes(permissions.role);
   const [asset, setAsset] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -35,6 +36,13 @@ export default function AssetDetail() {
   const [unitSaving, setUnitSaving] = useState(false);
   const emptyUnitForm = { serial_number: '', cpu: '', memory: '', storage: '', cost_amount: '', price_amount: '', condition_status_id: '', notes: '' };
   const [addFormData, setAddFormData] = useState(emptyUnitForm);
+
+  // Repair state modal
+  const [showRepairModal, setShowRepairModal] = useState(false);
+  const [repairTarget, setRepairTarget] = useState(''); // 'regular', 'under_repair', 'salvage_parts'
+  const [repairNotes, setRepairNotes] = useState('');
+  const [repairUnitIds, setRepairUnitIds] = useState([]);
+  const [repairSaving, setRepairSaving] = useState(false);
 
   const fetchUnits = useCallback(async (filters = unitFilter) => {
     if (!id) return;
@@ -233,6 +241,37 @@ export default function AssetDetail() {
     }
   };
 
+  const openRepairModal = (targetState) => {
+    setRepairTarget(targetState);
+    setRepairNotes('');
+    setRepairUnitIds([]);
+    setShowRepairModal(true);
+  };
+
+  const handleRepairStateChange = async () => {
+    setRepairSaving(true);
+    try {
+      const payload = { repair_state: repairTarget, repair_notes: repairNotes || undefined };
+      if (asset.is_serialized && repairUnitIds.length > 0) {
+        payload.unit_ids = repairUnitIds;
+      }
+      await axios.put(`/api/v1/assets/${id}/repair-state`, payload);
+      setShowRepairModal(false);
+      alert('Repair state updated successfully.');
+      fetchAsset();
+      if (asset.is_serialized) fetchUnits();
+      fetchHistory();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to update repair state');
+    } finally {
+      setRepairSaving(false);
+    }
+  };
+
+  const toggleRepairUnitId = (unitId) => {
+    setRepairUnitIds(prev => prev.includes(unitId) ? prev.filter(id => id !== unitId) : [...prev, unitId]);
+  };
+
   const startEditUnit = (unit) => {
     setEditingUnitId(unit.id);
     setEditFormData({
@@ -302,7 +341,31 @@ export default function AssetDetail() {
               {asset.make} {asset.model}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
+            {canRepair && asset.repair_state !== 'under_repair' && (
+              <button
+                onClick={() => openRepairModal('under_repair')}
+                className="px-3 py-2 text-sm bg-orange-100 text-orange-700 border border-orange-300 rounded-md hover:bg-orange-200"
+              >
+                Mark Under Repair
+              </button>
+            )}
+            {canRepair && asset.repair_state !== 'salvage_parts' && (
+              <button
+                onClick={() => openRepairModal('salvage_parts')}
+                className="px-3 py-2 text-sm bg-red-100 text-red-700 border border-red-300 rounded-md hover:bg-red-200"
+              >
+                Mark Salvage / Parts
+              </button>
+            )}
+            {canRepair && asset.repair_state && asset.repair_state !== 'regular' && (
+              <button
+                onClick={() => openRepairModal('regular')}
+                className="px-3 py-2 text-sm bg-green-100 text-green-700 border border-green-300 rounded-md hover:bg-green-200"
+              >
+                Return to Regular
+              </button>
+            )}
             <Link
               to={`/inventory/${id}/edit`}
               className="btn btn-secondary"
@@ -331,6 +394,16 @@ export default function AssetDetail() {
         }`}>
           {asset.status}
         </span>
+        {asset.repair_state === 'under_repair' && (
+          <span className="ml-2 inline-block px-3 py-1 text-sm font-semibold rounded-full bg-orange-100 text-orange-700">
+            Under Repair
+          </span>
+        )}
+        {asset.repair_state === 'salvage_parts' && (
+          <span className="ml-2 inline-block px-3 py-1 text-sm font-semibold rounded-full bg-red-100 text-red-700">
+            Salvage / Parts
+          </span>
+        )}
         {asset.conditionStatus ? (
           <span
             className="ml-2 inline-block px-3 py-1 text-sm font-semibold rounded-full"
@@ -362,6 +435,92 @@ export default function AssetDetail() {
           return null;
         })()}
       </div>
+
+      {/* Repair Notes */}
+      {asset.repair_state && asset.repair_state !== 'regular' && (asset.repair_notes || asset.repairUpdater) && (
+        <div className={`mb-6 p-3 rounded-lg border text-sm ${
+          asset.repair_state === 'under_repair' ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200'
+        }`}>
+          {asset.repair_notes && (
+            <p className="text-gray-800"><span className="font-medium">Repair notes:</span> {asset.repair_notes}</p>
+          )}
+          {(asset.repairUpdater || asset.repair_state_updated_at) && (
+            <p className="text-gray-500 text-xs mt-1">
+              Last updated{asset.repairUpdater ? ` by ${asset.repairUpdater.full_name}` : ''}
+              {asset.repair_state_updated_at ? ` on ${new Date(asset.repair_state_updated_at).toLocaleDateString()}` : ''}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Repair State Change Modal */}
+      {showRepairModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              {repairTarget === 'regular' ? 'Return to Regular' :
+               repairTarget === 'under_repair' ? 'Mark Under Repair' :
+               'Mark Salvage / Parts'}
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Repair Notes (optional)</label>
+              <textarea
+                rows={3}
+                value={repairNotes}
+                onChange={e => setRepairNotes(e.target.value)}
+                placeholder="Enter any notes about this repair state change..."
+                className="input-field text-sm w-full"
+              />
+            </div>
+            {asset.is_serialized && units.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Apply to specific units (leave unchecked for all)
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1">
+                  {units.map(unit => (
+                    <label key={unit.id} className="flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-50 px-1 py-0.5 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={repairUnitIds.includes(unit.id)}
+                        onChange={() => toggleRepairUnitId(unit.id)}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="font-mono text-xs">{unit.serial_number}</span>
+                      <UnitStatusBadge status={unit.status} />
+                      {unit.repair_state && unit.repair_state !== 'regular' && (
+                        <RepairStateBadge state={unit.repair_state} size="xs" />
+                      )}
+                    </label>
+                  ))}
+                </div>
+                {repairUnitIds.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">{repairUnitIds.length} unit(s) selected</p>
+                )}
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowRepairModal(false)}
+                className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRepairStateChange}
+                disabled={repairSaving}
+                className={`px-4 py-2 text-sm text-white rounded-md disabled:opacity-50 ${
+                  repairTarget === 'regular' ? 'bg-green-600 hover:bg-green-700' :
+                  repairTarget === 'under_repair' ? 'bg-orange-600 hover:bg-orange-700' :
+                  'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {repairSaving ? 'Saving...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Basic Information */}
       <div className="card mb-6">
@@ -733,7 +892,10 @@ export default function AssetDetail() {
                         </td>
                       </tr>
                     ) : (
-                      <tr key={unit.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <tr key={unit.id} className={`border-b border-gray-100 hover:bg-gray-50 ${
+                        unit.repair_state === 'under_repair' ? 'bg-orange-50/50' :
+                        unit.repair_state === 'salvage_parts' ? 'bg-red-50/50' : ''
+                      }`}>
                         <td className="py-2 pr-3 font-mono text-xs">{unit.serial_number}</td>
                         <td className="py-2 pr-3 text-gray-700">{unit.cpu || '—'}</td>
                         <td className="py-2 pr-3 text-gray-700">{unit.memory ? `${unit.memory >= 1024 ? (unit.memory / 1024) + 'GB' : unit.memory + 'MB'}` : '—'}</td>
@@ -759,6 +921,9 @@ export default function AssetDetail() {
                         </td>
                         <td className="py-2 pr-3">
                           <UnitStatusBadge status={unit.status} />
+                          {unit.repair_state && unit.repair_state !== 'regular' && (
+                            <RepairStateBadge state={unit.repair_state} size="xs" />
+                          )}
                         </td>
                         <td className="py-2 pr-3 text-gray-500 text-xs max-w-[120px] truncate" title={unit.notes}>{unit.notes || ''}</td>
                         {canManage && (
@@ -916,6 +1081,24 @@ function UnitStatusBadge({ status }) {
   return (
     <span className={`inline-block px-2 py-0.5 text-[10px] font-medium rounded-full ${styles[status] || 'bg-gray-100 text-gray-600'}`}>
       {status}
+    </span>
+  );
+}
+
+function RepairStateBadge({ state, size = 'sm' }) {
+  if (!state || state === 'regular') return null;
+  const styles = {
+    under_repair: 'bg-orange-100 text-orange-700',
+    salvage_parts: 'bg-red-100 text-red-700'
+  };
+  const labels = {
+    under_repair: 'Under Repair',
+    salvage_parts: 'Salvage / Parts'
+  };
+  const sizeClass = size === 'xs' ? 'text-[10px] px-1.5 py-0.5 ml-1' : 'text-xs px-2 py-0.5 ml-2';
+  return (
+    <span className={`inline-block font-medium rounded-full ${styles[state] || 'bg-gray-100 text-gray-600'} ${sizeClass}`}>
+      {labels[state] || state}
     </span>
   );
 }
