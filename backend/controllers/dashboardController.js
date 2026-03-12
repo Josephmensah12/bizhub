@@ -321,12 +321,17 @@ exports.getCategoryBreakdown = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/v1/dashboard/conversion-efficiency
+ * GET /api/v1/dashboard/conversion-efficiency?months=24
  * Monthly Inventory Conversion Ratio = Revenue / Avg Inventory Value
- * Returns last 12 months of data.
+ * Defaults to all available history. Use ?months=N to limit.
  */
 exports.getConversionEfficiency = asyncHandler(async (req, res) => {
-  // 1. Monthly revenue for last 12 months
+  const monthsBack = parseInt(req.query.months) || 0; // 0 = all history
+
+  // 1. Monthly revenue
+  const dateFilter = monthsBack > 0
+    ? `AND invoice_date >= DATE_TRUNC('month', NOW()) - INTERVAL '${monthsBack - 1} months'`
+    : '';
   const revenueRows = await sequelize.query(
     `SELECT
        TO_CHAR(invoice_date, 'YYYY-MM') AS month,
@@ -334,20 +339,20 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
        COUNT(*) AS invoice_count
      FROM invoices
      WHERE status != 'CANCELLED'
-       AND invoice_date >= DATE_TRUNC('month', NOW()) - INTERVAL '11 months'
        AND invoice_date < DATE_TRUNC('month', NOW()) + INTERVAL '1 month'
+       ${dateFilter}
      GROUP BY TO_CHAR(invoice_date, 'YYYY-MM')
      ORDER BY month`,
     { type: sequelize.QueryTypes.SELECT }
   );
 
-  // 2. Current inventory value (non-serialized: qty × price, serialized: sum unit prices)
+  // 2. Current inventory value — excludes Sold, Scrapped, In Repair
   const [[valRow]] = await sequelize.query(
     `SELECT
        COALESCE(SUM(
          CASE WHEN a.is_serialized THEN
            (SELECT COALESCE(SUM(COALESCE(u.price_amount, a.price_amount)), 0)
-            FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped'))
+            FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','In Repair'))
          ELSE
            a.quantity * COALESCE(a.price_amount, 0)
          END

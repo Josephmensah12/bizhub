@@ -188,6 +188,7 @@ export default function Dashboard() {
   const [xRate, setXRate] = useState(1) // GHS per USD
   const [categoryData, setCategoryData] = useState(null)
   const [conversionData, setConversionData] = useState(null)
+  const [conversionRange, setConversionRange] = useState(12)
 
   useEffect(() => {
     async function fetchData() {
@@ -197,7 +198,7 @@ export default function Dashboard() {
           axios.get('/api/v1/reports/inventory-valuation'),
           axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS'),
           axios.get('/api/v1/dashboard/category-breakdown'),
-          axios.get('/api/v1/dashboard/conversion-efficiency')
+          axios.get('/api/v1/dashboard/conversion-efficiency?months=0')
         ])
         if (metricsRes.status === 'fulfilled') setMetrics(metricsRes.value.data.data)
         if (valRes.status === 'fulfilled') setValuation(valRes.value.data.data)
@@ -605,14 +606,34 @@ export default function Dashboard() {
       </div>
 
       {/* Inventory Conversion Efficiency */}
-      {conversionData?.months?.length > 0 && (
+      {conversionData?.months?.length > 0 && (() => {
+        const allMonths = conversionData.months
+        const displayMonths = conversionRange === 0 ? allMonths : allMonths.slice(-conversionRange)
+        return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
-          <div className="mb-5">
-            <h2 className="text-base font-semibold text-gray-900">Inventory Conversion Efficiency</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Monthly revenue relative to inventory value held (ratio)</p>
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Inventory Conversion Efficiency</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Monthly revenue relative to inventory value held (ratio)</p>
+            </div>
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+              {[
+                { label: '12M', value: 12 },
+                { label: '24M', value: 24 },
+                { label: 'All', value: 0 }
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setConversionRange(opt.value)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${conversionRange === opt.value ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={conversionData.months.map(m => ({
+            <LineChart data={displayMonths.map(m => ({
               ...m,
               label: new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
             }))} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
@@ -653,7 +674,8 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
