@@ -19,7 +19,7 @@ router.post('/', requireRole(['Admin', 'Manager', 'Warehouse']), controller.crea
 router.post('/bulk', requireRole(['Admin', 'Manager', 'Warehouse']), controller.bulkCreate);
 
 // PUT /api/v1/assets/:assetId/units/:unitId - update unit
-router.put('/:unitId', requireRole(['Admin', 'Manager', 'Warehouse']), controller.update);
+router.put('/:unitId', requireRole(['Admin', 'Manager', 'Warehouse', 'Technician']), controller.update);
 
 // DELETE /api/v1/assets/:assetId/units/:unitId - delete unit
 router.delete('/:unitId', requireRole(['Admin', 'Manager']), controller.remove);

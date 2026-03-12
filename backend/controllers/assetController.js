@@ -1351,9 +1351,18 @@ exports.updateRepairState = asyncHandler(async (req, res) => {
     regular: null // will use previous or default
   };
 
+  // Helper to append a note entry to a JSONB array
+  const appendNote = (existing, text, userName, userId) => {
+    if (!text) return existing;
+    const arr = Array.isArray(existing) ? [...existing] : [];
+    arr.push({ text, author: userName || 'Unknown', author_id: userId, timestamp: new Date().toISOString() });
+    return arr;
+  };
+
   const transaction = await sequelize.transaction();
   try {
     const userId = req.user?.id;
+    const userName = req.user?.full_name || 'Unknown';
     const now = new Date();
 
     // If unit_ids provided, update specific units (serialized assets)
@@ -1381,7 +1390,7 @@ exports.updateRepairState = asyncHandler(async (req, res) => {
         }
 
         unit.repair_state = repair_state;
-        unit.repair_notes = repair_notes != null ? repair_notes : unit.repair_notes;
+        if (repair_notes) unit.repair_notes = appendNote(unit.repair_notes, repair_notes, userName, userId);
         unit.repair_updated_at = now;
         unit.repair_updated_by = userId;
         await unit.save({ transaction });
@@ -1417,7 +1426,7 @@ exports.updateRepairState = asyncHandler(async (req, res) => {
       }
 
       asset.repair_state = repair_state;
-      asset.repair_notes = repair_notes != null ? repair_notes : asset.repair_notes;
+      if (repair_notes) asset.repair_notes = appendNote(asset.repair_notes, repair_notes, userName, userId);
       asset.repair_updated_at = now;
       asset.repair_updated_by = userId;
       await asset.save({ transaction });

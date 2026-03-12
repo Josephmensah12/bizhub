@@ -119,8 +119,10 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Operational repair state — does not block sales'
     },
     repair_notes: {
-      type: DataTypes.TEXT,
-      allowNull: true
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Array of { text, author, author_id, timestamp }'
     },
     repair_updated_at: {
       type: DataTypes.DATE,

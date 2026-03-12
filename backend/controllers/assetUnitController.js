@@ -274,8 +274,15 @@ exports.update = asyncHandler(async (req, res) => {
   if (status !== undefined) unit.status = status;
   if (purchase_date !== undefined) unit.purchase_date = purchase_date || null;
   if (notes !== undefined) unit.notes = notes || null;
-  if (repair_notes !== undefined) {
-    unit.repair_notes = repair_notes || null;
+  if (repair_notes !== undefined && repair_notes) {
+    const existing = Array.isArray(unit.repair_notes) ? unit.repair_notes : [];
+    existing.push({
+      text: repair_notes,
+      author: req.user?.full_name || 'Unknown',
+      author_id: req.user?.id,
+      timestamp: new Date().toISOString()
+    });
+    unit.repair_notes = existing;
     unit.repair_updated_at = new Date();
     unit.repair_updated_by = req.user?.id;
   }

@@ -34,8 +34,9 @@ export default function Repairs() {
   const [counts, setCounts] = useState({ under_repair: 0, salvage_parts: 0 });
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
-  // Notes editing
-  const [editingNotes, setEditingNotes] = useState(null); // { unitId, assetId, value }
+  // Notes panel
+  const [notesPanel, setNotesPanel] = useState(null); // { unitId, assetId, notes: [] }
+  const [newNote, setNewNote] = useState('');
 
   // Repair state modal
   const [modal, setModal] = useState(null); // { unitId, assetId, serial, currentState, targetState }
@@ -91,18 +92,30 @@ export default function Repairs() {
   const expandAll = () => setExpandedGroups(new Set(groups.map(g => g.asset_id)));
   const collapseAll = () => setExpandedGroups(new Set());
 
-  // Save notes on an individual unit
-  const saveNotes = async () => {
-    if (!editingNotes) return;
+  // Add a note to an individual unit
+  const addNote = async () => {
+    if (!notesPanel || !newNote.trim()) return;
     try {
-      await axios.put(`/api/v1/assets/${editingNotes.assetId}/units/${editingNotes.unitId}`, {
-        repair_notes: editingNotes.value
+      await axios.put(`/api/v1/assets/${notesPanel.assetId}/units/${notesPanel.unitId}`, {
+        repair_notes: newNote.trim()
       });
-      showToast('success', 'Notes saved');
-      setEditingNotes(null);
-      fetchData();
+      showToast('success', 'Note added');
+      setNewNote('');
+      // Refresh data and update panel
+      const res = await axios.get('/api/v1/assets/repair-units', {
+        params: { limit: 200, ...(tab !== 'all' ? { repairState: tab } : {}), ...(debouncedSearch ? { search: debouncedSearch } : {}) }
+      });
+      setGroups(res.data.data.groups);
+      setNonSerialized(res.data.data.non_serialized);
+      setCounts(res.data.data.counts);
+      // Update notes panel with fresh data
+      const updatedGroup = res.data.data.groups.find(g => g.asset_id === notesPanel.assetId);
+      const updatedUnit = updatedGroup?.units.find(u => u.id === notesPanel.unitId);
+      if (updatedUnit) {
+        setNotesPanel(prev => ({ ...prev, notes: Array.isArray(updatedUnit.repair_notes) ? updatedUnit.repair_notes : [] }));
+      }
     } catch (err) {
-      showToast('error', err.response?.data?.error?.message || 'Failed to save notes');
+      showToast('error', err.response?.data?.error?.message || 'Failed to add note');
     }
   };
 
@@ -309,7 +322,6 @@ export default function Repairs() {
                         {group.units.map((unit) => {
                           const rs = unit.repair_state;
                           const style = REPAIR_STATE_STYLES[rs] || {};
-                          const isEditingThis = editingNotes?.unitId === unit.id;
 
                           return (
                             <tr key={unit.id} className={`border-l-4 ${style.row || 'border-l-gray-200'} hover:bg-gray-50`}>
@@ -343,34 +355,28 @@ export default function Repairs() {
                                 {!unit.cpu && !unit.memory && !unit.storage && <span className="text-gray-300">—</span>}
                               </td>
                               <td className="px-4 py-2.5">
-                                {isEditingThis ? (
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="text"
-                                      value={editingNotes.value}
-                                      onChange={(e) => setEditingNotes(prev => ({ ...prev, value: e.target.value }))}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') saveNotes(); if (e.key === 'Escape') setEditingNotes(null); }}
-                                      className="text-xs border border-gray-300 rounded px-2 py-1 flex-1 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                      autoFocus
-                                      placeholder="Add notes..."
-                                    />
-                                    <button onClick={saveNotes} className="text-green-600 hover:text-green-800 text-xs font-medium">Save</button>
-                                    <button onClick={() => setEditingNotes(null)} className="text-gray-400 hover:text-gray-600 text-xs">Cancel</button>
-                                  </div>
-                                ) : (
-                                  <div
-                                    className={`text-xs max-w-[200px] truncate ${canRepair ? 'cursor-pointer hover:text-blue-600' : ''} ${unit.repair_notes ? 'text-gray-700' : 'text-gray-300'}`}
-                                    onClick={() => canRepair && setEditingNotes({ unitId: unit.id, assetId: group.asset_id, value: unit.repair_notes || '' })}
-                                    title={unit.repair_notes ? `${unit.repair_notes}\n\nClick to edit` : 'Click to add notes'}
-                                  >
-                                    {unit.repair_notes || (canRepair ? 'Add notes...' : '—')}
-                                  </div>
-                                )}
-                                {unit.repair_updated_by_name && !isEditingThis && (
-                                  <div className="text-[10px] text-gray-400 mt-0.5">
-                                    {unit.repair_updated_by_name} · {new Date(unit.repair_updated_at).toLocaleDateString()}
-                                  </div>
-                                )}
+                                {(() => {
+                                  const notes = Array.isArray(unit.repair_notes) ? unit.repair_notes : [];
+                                  const lastNote = notes.length > 0 ? notes[notes.length - 1] : null;
+                                  return (
+                                    <div
+                                      className={`cursor-pointer hover:text-blue-600 ${notes.length > 0 ? 'text-gray-700' : 'text-gray-300'}`}
+                                      onClick={() => { setNotesPanel({ unitId: unit.id, assetId: group.asset_id, serial: unit.serial_number, notes }); setNewNote(''); }}
+                                    >
+                                      {lastNote ? (
+                                        <>
+                                          <div className="text-xs max-w-[200px] truncate">{lastNote.text}</div>
+                                          <div className="text-[10px] text-gray-400 mt-0.5">
+                                            {lastNote.author} · {new Date(lastNote.timestamp).toLocaleString()}
+                                            {notes.length > 1 && <span className="ml-1 text-blue-500">+{notes.length - 1} more</span>}
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <span className="text-xs">{canRepair ? 'Add notes...' : '—'}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               {canRepair && (
                                 <td className="px-4 py-2.5">
@@ -481,6 +487,65 @@ export default function Repairs() {
           </div>
         )}
       </div>
+
+      {/* Notes panel */}
+      {notesPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 p-6 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Repair Notes</h3>
+                <p className="text-sm text-gray-500 font-mono">{notesPanel.serial}</p>
+              </div>
+              <button onClick={() => setNotesPanel(null)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Notes list */}
+            <div className="flex-1 overflow-y-auto space-y-3 mb-4 min-h-[100px]">
+              {notesPanel.notes.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">No notes yet</p>
+              ) : (
+                [...notesPanel.notes].reverse().map((note, idx) => (
+                  <div key={idx} className="bg-gray-50 rounded-lg px-3 py-2">
+                    <p className="text-sm text-gray-800">{note.text}</p>
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400">
+                      <span className="font-medium text-gray-500">{note.author}</span>
+                      <span>·</span>
+                      <span>{new Date(note.timestamp).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Add note input */}
+            {canRepair && (
+              <div className="border-t pt-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && newNote.trim()) addNote(); }}
+                    placeholder="Add a note..."
+                    className="input flex-1 text-sm"
+                    autoFocus
+                  />
+                  <button
+                    onClick={addNote}
+                    disabled={!newNote.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >Add</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Repair state change modal */}
       {modal && (
