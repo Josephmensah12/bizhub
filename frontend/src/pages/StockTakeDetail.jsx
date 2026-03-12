@@ -232,7 +232,21 @@ export default function StockTakeDetail() {
       addToast('success', res.data.message || 'Stock take finalized')
       navigate('/stock-takes')
     } catch (err) {
-      addToast('error', err.response?.data?.error?.message || 'Failed to finalize')
+      const errorData = err.response?.data?.error
+      if (errorData?.code === 'UNCOUNTED_ITEMS' && errorData?.items?.length > 0) {
+        const firstItem = errorData.items[0]
+        addToast('warning', `${errorData.items.length} items need reasons for unscanned units`)
+        if (firstItem.item_id) {
+          setExpandedItems(prev => ({ ...prev, [firstItem.item_id]: true }))
+          fetchItemScans(firstItem.item_id)
+          setTimeout(() => {
+            const el = document.getElementById(`item-row-${firstItem.item_id}`)
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }, 300)
+        }
+      } else {
+        addToast('error', errorData?.message || 'Failed to finalize')
+      }
     } finally {
       setActionLoading(false)
     }

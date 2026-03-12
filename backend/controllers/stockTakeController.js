@@ -646,15 +646,67 @@ exports.finalize = asyncHandler(async (req, res) => {
     });
   }
 
-  // All items must be counted
-  const uncounted = await StockTakeItem.count({
-    where: { stock_take_id: stockTake.id, counted_quantity: null }
+  // All items must be counted (or have reasons for unscanned units)
+  const uncountedItems = await StockTakeItem.findAll({
+    where: { stock_take_id: stockTake.id, counted_quantity: null },
+    include: [{ model: Asset, as: 'asset', attributes: ['id', 'asset_tag', 'is_serialized'] }]
   });
-  if (uncounted > 0) {
-    return res.status(400).json({
-      success: false,
-      error: { code: 'UNCOUNTED_ITEMS', message: `${uncounted} items have not been counted` }
-    });
+
+  if (uncountedItems.length > 0) {
+    const needsAttention = [];
+    for (const item of uncountedItems) {
+      if (item.count_method === 'serial') {
+        const allUnits = await AssetUnit.findAll({
+          where: { asset_id: item.asset_id },
+          attributes: ['id']
+        });
+        const scannedUnitIds = (await StockTakeScan.findAll({
+          where: { stock_take_item_id: item.id },
+          attributes: ['asset_unit_id']
+        })).map(s => s.asset_unit_id);
+
+        const unscannedIds = allUnits.filter(u => !scannedUnitIds.includes(u.id)).map(u => u.id);
+
+        if (unscannedIds.length > 0) {
+          const reasons = await StockTakeUnitNote.findAll({
+            where: { stock_take_id: stockTake.id, asset_unit_id: unscannedIds }
+          });
+          const reasonedIds = new Set(reasons.filter(r => r.reason).map(r => r.asset_unit_id));
+          const missingReasons = unscannedIds.filter(uid => !reasonedIds.has(uid));
+
+          if (missingReasons.length > 0) {
+            needsAttention.push({
+              item_id: item.id,
+              asset_tag: item.asset?.asset_tag,
+              missing_reasons: missingReasons.length
+            });
+          } else {
+            item.counted_quantity = scannedUnitIds.length;
+            item.variance = scannedUnitIds.length - item.expected_quantity;
+            item.status = 'counted';
+            item.counted_at = new Date();
+            await item.save();
+          }
+        }
+      } else {
+        needsAttention.push({
+          item_id: item.id,
+          asset_tag: item.asset?.asset_tag,
+          missing_reasons: 0
+        });
+      }
+    }
+
+    if (needsAttention.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'UNCOUNTED_ITEMS',
+          message: `${needsAttention.length} items need attention — enter reasons for unscanned units`,
+          items: needsAttention
+        }
+      });
+    }
   }
 
   // Note: unresolved variances are allowed — they will be skipped during adjustment
