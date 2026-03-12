@@ -1167,6 +1167,149 @@ const REPAIR_STATE_LABELS = {
 };
 
 /**
+ * GET /api/v1/assets/repair-units
+ * List all units in repair/salvage, grouped by product (asset).
+ * Also includes non-serialized assets in repair/salvage.
+ */
+exports.getRepairUnits = asyncHandler(async (req, res) => {
+  const { search, repairState, page = 1, limit = 50 } = req.query;
+
+  const stateFilter = repairState && repairState !== 'all'
+    ? repairState.split(',').map(s => s.trim())
+    : ['under_repair', 'salvage_parts'];
+
+  // Build unit query
+  let unitWhere = `au.repair_state IN (:states)`;
+  const replacements = { states: stateFilter };
+
+  if (search) {
+    unitWhere += ` AND (au.serial_number ILIKE :search OR a.asset_tag ILIKE :search OR a.make ILIKE :search OR a.model ILIKE :search)`;
+    replacements.search = `%${search}%`;
+  }
+
+  // Get total count
+  const [[{ total }]] = await sequelize.query(
+    `SELECT COUNT(*) as total FROM asset_units au JOIN assets a ON au.asset_id = a.id WHERE ${unitWhere}`,
+    { replacements }
+  );
+
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  // Fetch units with product info
+  const [units] = await sequelize.query(
+    `SELECT au.id, au.serial_number, au.status, au.repair_state, au.repair_notes,
+            au.repair_updated_at, au.cost_amount as unit_cost, au.price_amount as unit_price,
+            au.cpu, au.memory, au.storage,
+            a.id as asset_id, a.asset_tag, a.make, a.model, a.category, a.asset_type,
+            a.cost_amount as product_cost, a.price_amount as product_price,
+            a.price_currency, a.cost_currency,
+            cs.id as condition_id, cs.name as condition_name, cs.color as condition_color,
+            u.full_name as repair_updated_by_name
+     FROM asset_units au
+     JOIN assets a ON au.asset_id = a.id
+     LEFT JOIN condition_statuses cs ON au.condition_status_id = cs.id
+     LEFT JOIN users u ON au.repair_updated_by = u.id
+     WHERE ${unitWhere}
+     ORDER BY a.make, a.model, au.repair_state, au.serial_number
+     LIMIT :limit OFFSET :offset`,
+    { replacements: { ...replacements, limit: parseInt(limit), offset } }
+  );
+
+  // Group by product (asset_id)
+  const grouped = [];
+  const groupMap = {};
+  for (const unit of units) {
+    if (!groupMap[unit.asset_id]) {
+      groupMap[unit.asset_id] = {
+        asset_id: unit.asset_id,
+        asset_tag: unit.asset_tag,
+        make: unit.make,
+        model: unit.model,
+        category: unit.category,
+        asset_type: unit.asset_type,
+        price_currency: unit.price_currency,
+        cost_currency: unit.cost_currency,
+        product_cost: unit.product_cost,
+        product_price: unit.product_price,
+        units: []
+      };
+      grouped.push(groupMap[unit.asset_id]);
+    }
+    groupMap[unit.asset_id].units.push({
+      id: unit.id,
+      serial_number: unit.serial_number,
+      status: unit.status,
+      repair_state: unit.repair_state,
+      repair_notes: unit.repair_notes,
+      repair_updated_at: unit.repair_updated_at,
+      repair_updated_by_name: unit.repair_updated_by_name,
+      cost_amount: unit.unit_cost != null ? parseFloat(unit.unit_cost) : parseFloat(unit.product_cost),
+      price_amount: unit.unit_price != null ? parseFloat(unit.unit_price) : parseFloat(unit.product_price),
+      cpu: unit.cpu,
+      memory: unit.memory,
+      storage: unit.storage,
+      conditionStatus: unit.condition_id ? { id: unit.condition_id, name: unit.condition_name, color: unit.condition_color } : null
+    });
+  }
+
+  // Also include non-serialized assets in repair/salvage
+  let nonSerializedWhere = `a.is_serialized = false AND a.repair_state IN (:states) AND a.deleted_at IS NULL`;
+  if (search) {
+    nonSerializedWhere += ` AND (a.asset_tag ILIKE :search OR a.make ILIKE :search OR a.model ILIKE :search)`;
+  }
+  const [nonSerialized] = await sequelize.query(
+    `SELECT a.id, a.asset_tag, a.make, a.model, a.category, a.asset_type,
+            a.quantity, a.repair_state, a.repair_notes, a.repair_updated_at,
+            a.cost_amount, a.cost_currency, a.price_amount, a.price_currency,
+            cs.id as condition_id, cs.name as condition_name, cs.color as condition_color,
+            u.full_name as repair_updated_by_name
+     FROM assets a
+     LEFT JOIN condition_statuses cs ON a.condition_status_id = cs.id
+     LEFT JOIN users u ON a.repair_updated_by = u.id
+     WHERE ${nonSerializedWhere}
+     ORDER BY a.make, a.model`,
+    { replacements }
+  );
+
+  // Count totals
+  const [[unitCounts]] = await sequelize.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE au.repair_state = 'under_repair') as under_repair,
+       COUNT(*) FILTER (WHERE au.repair_state = 'salvage_parts') as salvage_parts
+     FROM asset_units au`,
+    {}
+  );
+  const [[assetCounts]] = await sequelize.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE a.repair_state = 'under_repair' AND a.is_serialized = false) as under_repair,
+       COUNT(*) FILTER (WHERE a.repair_state = 'salvage_parts' AND a.is_serialized = false) as salvage_parts
+     FROM assets a WHERE a.deleted_at IS NULL`,
+    {}
+  );
+
+  res.json({
+    success: true,
+    data: {
+      groups: grouped,
+      non_serialized: nonSerialized.map(a => ({
+        ...a,
+        conditionStatus: a.condition_id ? { id: a.condition_id, name: a.condition_name, color: a.condition_color } : null
+      })),
+      counts: {
+        under_repair: parseInt(unitCounts.under_repair) + parseInt(assetCounts.under_repair),
+        salvage_parts: parseInt(unitCounts.salvage_parts) + parseInt(assetCounts.salvage_parts)
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: parseInt(total),
+        totalPages: Math.ceil(parseInt(total) / parseInt(limit))
+      }
+    }
+  });
+});
+
+/**
  * PUT /api/v1/assets/:id/repair-state
  * Change asset repair state and auto-update condition status for valuation.
  *

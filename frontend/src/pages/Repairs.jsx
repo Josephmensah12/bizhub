@@ -9,25 +9,36 @@ const REPAIR_STATE_LABELS = {
 };
 
 const REPAIR_STATE_STYLES = {
-  under_repair: { badge: 'bg-orange-100 text-orange-700', bg: 'bg-orange-50', btn: 'bg-orange-600 hover:bg-orange-700' },
-  salvage_parts: { badge: 'bg-red-100 text-red-700', bg: 'bg-red-50', btn: 'bg-red-600 hover:bg-red-700' }
+  under_repair: { badge: 'bg-orange-100 text-orange-700', row: 'border-l-orange-400', btn: 'bg-orange-600 hover:bg-orange-700' },
+  salvage_parts: { badge: 'bg-red-100 text-red-700', row: 'border-l-red-400', btn: 'bg-red-600 hover:bg-red-700' }
+};
+
+const UNIT_STATUS_STYLES = {
+  Available: 'bg-green-100 text-green-800',
+  Reserved: 'bg-yellow-100 text-yellow-800',
+  Sold: 'bg-gray-200 text-gray-600',
+  'In Repair': 'bg-orange-100 text-orange-800',
+  Scrapped: 'bg-purple-100 text-purple-800'
 };
 
 export default function Repairs() {
   const { permissions } = usePermissions();
   const canRepair = ['Admin', 'Manager', 'Warehouse', 'Technician'].includes(permissions?.role);
 
-  const [tab, setTab] = useState('all'); // 'all', 'under_repair', 'salvage_parts'
-  const [assets, setAssets] = useState([]);
+  const [tab, setTab] = useState('all');
+  const [groups, setGroups] = useState([]);
+  const [nonSerialized, setNonSerialized] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
-  const [sortBy, setSortBy] = useState('repair_updated_at');
-  const [sortOrder, setSortOrder] = useState('DESC');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [counts, setCounts] = useState({ under_repair: 0, salvage_parts: 0 });
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
-  // Repair state change modal
-  const [modal, setModal] = useState(null); // { assetId, assetTag, currentState, targetState }
+  // Notes editing
+  const [editingNotes, setEditingNotes] = useState(null); // { unitId, assetId, value }
+
+  // Repair state modal
+  const [modal, setModal] = useState(null); // { unitId, assetId, serial, currentState, targetState }
   const [modalNotes, setModalNotes] = useState('');
   const [modalSaving, setModalSaving] = useState(false);
 
@@ -38,69 +49,91 @@ export default function Repairs() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const repairStateParam = tab === 'all' ? 'under_repair,salvage_parts' : tab;
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const fetchAssets = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {
-        page: pagination.page,
-        limit: pagination.limit,
-        sortBy,
-        sortOrder,
-        repairState: repairStateParam
-      };
-      if (search) params.search = search;
+      const params = { limit: 200 };
+      if (tab !== 'all') params.repairState = tab;
+      if (debouncedSearch) params.search = debouncedSearch;
 
-      const response = await axios.get('/api/v1/assets', { params });
-      setAssets(response.data.data.assets);
-      setPagination(prev => ({ ...prev, ...response.data.data.pagination }));
+      const res = await axios.get('/api/v1/assets/repair-units', { params });
+      setGroups(res.data.data.groups);
+      setNonSerialized(res.data.data.non_serialized);
+      setCounts(res.data.data.counts);
+
+      // Auto-expand all groups on first load
+      if (expandedGroups.size === 0 && res.data.data.groups.length > 0) {
+        setExpandedGroups(new Set(res.data.data.groups.map(g => g.asset_id)));
+      }
     } catch (err) {
-      console.error('Failed to fetch repair assets:', err);
+      console.error('Failed to fetch repair units:', err);
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, tab, search, sortBy, sortOrder]);
+  }, [tab, debouncedSearch]);
 
-  // Fetch counts for tabs
-  const fetchCounts = useCallback(async () => {
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const toggleGroup = (assetId) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(assetId)) next.delete(assetId); else next.add(assetId);
+      return next;
+    });
+  };
+
+  const expandAll = () => setExpandedGroups(new Set(groups.map(g => g.asset_id)));
+  const collapseAll = () => setExpandedGroups(new Set());
+
+  // Save notes on an individual unit
+  const saveNotes = async () => {
+    if (!editingNotes) return;
     try {
-      const [repairRes, salvageRes] = await Promise.all([
-        axios.get('/api/v1/assets', { params: { repairState: 'under_repair', limit: 1 } }),
-        axios.get('/api/v1/assets', { params: { repairState: 'salvage_parts', limit: 1 } })
-      ]);
-      setCounts({
-        under_repair: repairRes.data.data.pagination.total,
-        salvage_parts: salvageRes.data.data.pagination.total
+      await axios.put(`/api/v1/assets/${editingNotes.assetId}/units/${editingNotes.unitId}`, {
+        repair_notes: editingNotes.value
       });
+      showToast('success', 'Notes saved');
+      setEditingNotes(null);
+      fetchData();
     } catch (err) {
-      console.error('Failed to fetch counts:', err);
-    }
-  }, []);
-
-  useEffect(() => { fetchAssets(); }, [fetchAssets]);
-  useEffect(() => { fetchCounts(); }, []);
-
-  const handleSearch = (e) => {
-    setSearch(e.target.value);
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  const handleTabChange = (newTab) => {
-    setTab(newTab);
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      setSortOrder(prev => prev === 'ASC' ? 'DESC' : 'ASC');
-    } else {
-      setSortBy(column);
-      setSortOrder('DESC');
+      showToast('error', err.response?.data?.error?.message || 'Failed to save notes');
     }
   };
 
+  // Change repair state on a single unit
   const handleRepairAction = async () => {
+    if (!modal) return;
+    try {
+      setModalSaving(true);
+      await axios.put(`/api/v1/assets/${modal.assetId}/repair-state`, {
+        repair_state: modal.targetState,
+        repair_notes: modalNotes || undefined,
+        unit_ids: [modal.unitId]
+      });
+      showToast('success', `${modal.serial} marked as ${modal.targetState === 'regular' ? 'Regular' : REPAIR_STATE_LABELS[modal.targetState]}`);
+      setModal(null);
+      setModalNotes('');
+      fetchData();
+    } catch (err) {
+      showToast('error', err.response?.data?.error?.message || 'Failed to update');
+    } finally {
+      setModalSaving(false);
+    }
+  };
+
+  // Change repair state on a non-serialized asset
+  const handleNonSerializedAction = async (assetId, assetTag, targetState) => {
+    setModal({ unitId: null, assetId, serial: assetTag, currentState: null, targetState, isAsset: true });
+    setModalNotes('');
+  };
+
+  const confirmNonSerializedAction = async () => {
     if (!modal) return;
     try {
       setModalSaving(true);
@@ -108,33 +141,19 @@ export default function Repairs() {
         repair_state: modal.targetState,
         repair_notes: modalNotes || undefined
       });
-      showToast('success', `${modal.assetTag} marked as ${modal.targetState === 'regular' ? 'Regular' : REPAIR_STATE_LABELS[modal.targetState]}`);
+      showToast('success', `${modal.serial} marked as ${modal.targetState === 'regular' ? 'Regular' : REPAIR_STATE_LABELS[modal.targetState]}`);
       setModal(null);
       setModalNotes('');
-      fetchAssets();
-      fetchCounts();
+      fetchData();
     } catch (err) {
-      showToast('error', err.response?.data?.error?.message || 'Failed to update repair state');
+      showToast('error', err.response?.data?.error?.message || 'Failed to update');
     } finally {
       setModalSaving(false);
     }
   };
 
-  const SortHeader = ({ column, label }) => (
-    <th
-      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-      onClick={() => handleSort(column)}
-    >
-      <span className="flex items-center gap-1">
-        {label}
-        <span className="text-gray-400">
-          {sortBy === column ? (sortOrder === 'ASC' ? '▲' : '▼') : '⇅'}
-        </span>
-      </span>
-    </th>
-  );
-
   const totalCount = counts.under_repair + counts.salvage_parts;
+  const totalUnits = groups.reduce((sum, g) => sum + g.units.length, 0) + nonSerialized.length;
 
   return (
     <div>
@@ -142,9 +161,11 @@ export default function Repairs() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Repairs & Salvage</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {totalCount} item{totalCount !== 1 ? 's' : ''} in repair or salvage
-          </p>
+          <p className="text-sm text-gray-500 mt-1">{totalCount} item{totalCount !== 1 ? 's' : ''} across {groups.length + (nonSerialized.length > 0 ? nonSerialized.length : 0)} product{groups.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={expandAll} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border rounded">Expand All</button>
+          <button onClick={collapseAll} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border rounded">Collapse All</button>
         </div>
       </div>
 
@@ -188,7 +209,7 @@ export default function Repairs() {
 
       {/* Tabs + Search */}
       <div className="card">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             {[
               { key: 'all', label: 'All', count: totalCount },
@@ -197,203 +218,267 @@ export default function Repairs() {
             ].map(t => (
               <button
                 key={t.key}
-                onClick={() => handleTabChange(t.key)}
+                onClick={() => setTab(t.key)}
                 className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  tab === t.key
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                  tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 {t.label}
                 <span className={`ml-1.5 px-1.5 py-0.5 text-xs rounded-full ${
                   tab === t.key ? 'bg-gray-200 text-gray-700' : 'bg-gray-200/60 text-gray-500'
-                }`}>
-                  {t.count}
-                </span>
+                }`}>{t.count}</span>
               </button>
             ))}
           </div>
           <div className="w-full sm:w-72">
             <input
               type="text"
-              placeholder="Search by tag, make, model, serial..."
+              placeholder="Search serial, tag, make, model..."
               value={search}
-              onChange={handleSearch}
+              onChange={(e) => setSearch(e.target.value)}
               className="input"
             />
           </div>
         </div>
 
-        {/* Table */}
+        {/* Content */}
         {loading ? (
           <div className="text-center py-12 text-gray-500">Loading...</div>
-        ) : assets.length === 0 ? (
+        ) : totalUnits === 0 ? (
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="mt-2 text-gray-500 font-medium">No items in {tab === 'all' ? 'repair or salvage' : REPAIR_STATE_LABELS[tab]?.toLowerCase()}</p>
-            <p className="text-sm text-gray-400 mt-1">Items marked for repair or salvage will appear here</p>
+            <p className="mt-2 text-gray-500 font-medium">No items in repair or salvage</p>
           </div>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <SortHeader column="asset_tag" label="Asset Tag" />
-                    <SortHeader column="make" label="Make & Model" />
-                    <SortHeader column="category" label="Category" />
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Specs</th>
-                    <SortHeader column="quantity" label="Qty" />
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Repair State</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condition</th>
-                    <SortHeader column="price_amount" label="Price" />
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
-                    {canRepair && (
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {assets.map((asset) => {
-                    const rs = asset.repair_state || 'regular';
-                    const style = REPAIR_STATE_STYLES[rs];
-                    const remaining = asset.available_quantity != null ? Number(asset.available_quantity) : (asset.quantity || 1);
-                    const total = asset.total_quantity || asset.quantity || 1;
+          <div className="space-y-3">
+            {/* Serialized product groups */}
+            {groups.map((group) => {
+              const isExpanded = expandedGroups.has(group.asset_id);
+              const repairCount = group.units.filter(u => u.repair_state === 'under_repair').length;
+              const salvageCount = group.units.filter(u => u.repair_state === 'salvage_parts').length;
 
-                    return (
-                      <tr key={asset.id} className={`hover:bg-gray-50 ${style?.bg || ''}`}>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <Link to={`/inventory/${asset.id}`} className="font-medium text-blue-600 hover:text-blue-800">
-                            {asset.asset_tag}
-                          </Link>
-                          {asset.is_serialized && (
-                            <span className="ml-1.5 text-[10px] font-medium text-purple-600 bg-purple-50 px-1.5 rounded">SN</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 text-sm">
-                          <div className="font-medium text-gray-900">{asset.make}</div>
-                          <div className="text-gray-500">{asset.model}</div>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-600">
-                          <div>{asset.category || '—'}</div>
-                          <div className="text-gray-400 text-xs">{asset.asset_type}</div>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-600">
-                          {asset.ram_gb && `${asset.ram_gb}GB`}
-                          {asset.ram_gb && asset.storage_gb && ' / '}
-                          {asset.storage_gb && `${asset.storage_gb}GB ${asset.storage_type || ''}`}
-                        </td>
-                        <td className="px-4 py-4 text-center text-sm">
-                          <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded ${
-                            remaining <= 0 ? 'bg-red-100 text-red-800 font-medium' : 'text-gray-600'
-                          }`}>
-                            {remaining}/{total}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          {(() => {
-                            const badgeClass =
-                              asset.status === 'In Stock' ? 'bg-green-100 text-green-800' :
-                              asset.status === 'Processing' ? 'bg-blue-100 text-blue-800' :
-                              asset.status === 'Reserved' ? 'bg-yellow-100 text-yellow-800' :
-                              asset.status === 'Sold' ? 'bg-gray-200 text-gray-600' :
-                              'bg-purple-100 text-purple-800';
-                            return (
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
-                                {asset.status}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${style?.badge || 'bg-gray-100 text-gray-600'}`}>
-                            {REPAIR_STATE_LABELS[rs] || rs}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm">
-                          {asset.conditionStatus ? (
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                              style={{ backgroundColor: asset.conditionStatus.color + '20', color: asset.conditionStatus.color }}
-                            >
-                              {asset.conditionStatus.name}
-                            </span>
-                          ) : (
-                            <span className="text-gray-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {asset.price_amount ? `${asset.price_currency} ${parseFloat(asset.price_amount).toFixed(2)}` : '—'}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-500 max-w-[200px] truncate" title={asset.repair_notes || ''}>
-                          {asset.repair_notes || <span className="text-gray-300">—</span>}
-                        </td>
-                        {canRepair && (
-                          <td className="px-4 py-4 whitespace-nowrap text-sm">
-                            <div className="flex gap-2">
-                              {rs === 'under_repair' && (
-                                <>
-                                  <button
-                                    onClick={() => { setModal({ assetId: asset.id, assetTag: asset.asset_tag, currentState: rs, targetState: 'regular' }); setModalNotes(''); }}
-                                    className="text-green-600 hover:text-green-800 text-xs font-medium"
+              return (
+                <div key={group.asset_id} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Group header */}
+                  <button
+                    onClick={() => toggleGroup(group.asset_id)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <Link to={`/inventory/${group.asset_id}`} className="text-sm font-medium text-blue-600 hover:text-blue-800" onClick={e => e.stopPropagation()}>
+                        {group.asset_tag}
+                      </Link>
+                      <span className="text-sm font-semibold text-gray-900">{group.make} {group.model}</span>
+                      <span className="text-xs text-gray-500">{group.category} / {group.asset_type}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {repairCount > 0 && (
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                          {repairCount} repair
+                        </span>
+                      )}
+                      {salvageCount > 0 && (
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                          {salvageCount} salvage
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">{group.units.length} unit{group.units.length !== 1 ? 's' : ''}</span>
+                    </div>
+                  </button>
+
+                  {/* Unit rows */}
+                  {isExpanded && (
+                    <table className="min-w-full divide-y divide-gray-100">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-48">Serial Number</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Status</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">Repair State</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Condition</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Specs</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                          {canRepair && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-36">Actions</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {group.units.map((unit) => {
+                          const rs = unit.repair_state;
+                          const style = REPAIR_STATE_STYLES[rs] || {};
+                          const isEditingThis = editingNotes?.unitId === unit.id;
+
+                          return (
+                            <tr key={unit.id} className={`border-l-4 ${style.row || 'border-l-gray-200'} hover:bg-gray-50`}>
+                              <td className="px-4 py-2.5">
+                                <span className="font-mono text-sm text-gray-800">{unit.serial_number}</span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${UNIT_STATUS_STYLES[unit.status] || 'bg-gray-100 text-gray-600'}`}>
+                                  {unit.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${style.badge || 'bg-gray-100 text-gray-600'}`}>
+                                  {REPAIR_STATE_LABELS[rs] || rs}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {unit.conditionStatus ? (
+                                  <span
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
+                                    style={{ backgroundColor: unit.conditionStatus.color + '20', color: unit.conditionStatus.color }}
                                   >
-                                    Return
-                                  </button>
-                                  <button
-                                    onClick={() => { setModal({ assetId: asset.id, assetTag: asset.asset_tag, currentState: rs, targetState: 'salvage_parts' }); setModalNotes(''); }}
-                                    className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                    {unit.conditionStatus.name}
+                                  </span>
+                                ) : <span className="text-gray-300 text-xs">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-gray-600">
+                                {unit.cpu && <span>{unit.cpu}</span>}
+                                {unit.memory && <span>{unit.cpu ? ' · ' : ''}{Math.round(unit.memory / 1024)}GB</span>}
+                                {unit.storage && <span>{(unit.cpu || unit.memory) ? ' · ' : ''}{unit.storage}GB</span>}
+                                {!unit.cpu && !unit.memory && !unit.storage && <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {isEditingThis ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      value={editingNotes.value}
+                                      onChange={(e) => setEditingNotes(prev => ({ ...prev, value: e.target.value }))}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') saveNotes(); if (e.key === 'Escape') setEditingNotes(null); }}
+                                      className="text-xs border border-gray-300 rounded px-2 py-1 flex-1 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                      autoFocus
+                                      placeholder="Add notes..."
+                                    />
+                                    <button onClick={saveNotes} className="text-green-600 hover:text-green-800 text-xs font-medium">Save</button>
+                                    <button onClick={() => setEditingNotes(null)} className="text-gray-400 hover:text-gray-600 text-xs">Cancel</button>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className={`text-xs max-w-[200px] truncate ${canRepair ? 'cursor-pointer hover:text-blue-600' : ''} ${unit.repair_notes ? 'text-gray-700' : 'text-gray-300'}`}
+                                    onClick={() => canRepair && setEditingNotes({ unitId: unit.id, assetId: group.asset_id, value: unit.repair_notes || '' })}
+                                    title={unit.repair_notes ? `${unit.repair_notes}\n\nClick to edit` : 'Click to add notes'}
                                   >
-                                    Salvage
-                                  </button>
-                                </>
+                                    {unit.repair_notes || (canRepair ? 'Add notes...' : '—')}
+                                  </div>
+                                )}
+                                {unit.repair_updated_by_name && !isEditingThis && (
+                                  <div className="text-[10px] text-gray-400 mt-0.5">
+                                    {unit.repair_updated_by_name} · {new Date(unit.repair_updated_at).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </td>
+                              {canRepair && (
+                                <td className="px-4 py-2.5">
+                                  <div className="flex gap-2">
+                                    {rs === 'under_repair' && (
+                                      <>
+                                        <button
+                                          onClick={() => { setModal({ unitId: unit.id, assetId: group.asset_id, serial: unit.serial_number, currentState: rs, targetState: 'regular' }); setModalNotes(''); }}
+                                          className="text-green-600 hover:text-green-800 text-xs font-medium"
+                                        >Return</button>
+                                        <button
+                                          onClick={() => { setModal({ unitId: unit.id, assetId: group.asset_id, serial: unit.serial_number, currentState: rs, targetState: 'salvage_parts' }); setModalNotes(''); }}
+                                          className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                        >Salvage</button>
+                                      </>
+                                    )}
+                                    {rs === 'salvage_parts' && (
+                                      <button
+                                        onClick={() => { setModal({ unitId: unit.id, assetId: group.asset_id, serial: unit.serial_number, currentState: rs, targetState: 'regular' }); setModalNotes(''); }}
+                                        className="text-green-600 hover:text-green-800 text-xs font-medium"
+                                      >Return to Regular</button>
+                                    )}
+                                  </div>
+                                </td>
                               )}
-                              {rs === 'salvage_parts' && (
-                                <button
-                                  onClick={() => { setModal({ assetId: asset.id, assetTag: asset.asset_tag, currentState: rs, targetState: 'regular' }); setModalNotes(''); }}
-                                  className="text-green-600 hover:text-green-800 text-xs font-medium"
-                                >
-                                  Return to Regular
-                                </button>
-                              )}
-                            </div>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Non-serialized assets */}
+            {nonSerialized.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-4 py-3 bg-gray-50">
+                  <span className="text-sm font-semibold text-gray-700">Non-Serialized Items</span>
+                  <span className="ml-2 text-xs text-gray-400">{nonSerialized.length} item{nonSerialized.length !== 1 ? 's' : ''}</span>
+                </div>
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead>
+                    <tr className="bg-gray-50/50">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Asset Tag</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Make & Model</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Repair State</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Condition</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                      {canRepair && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {nonSerialized.map((asset) => {
+                      const rs = asset.repair_state;
+                      const style = REPAIR_STATE_STYLES[rs] || {};
+                      return (
+                        <tr key={asset.id} className={`border-l-4 ${style.row || 'border-l-gray-200'} hover:bg-gray-50`}>
+                          <td className="px-4 py-2.5">
+                            <Link to={`/inventory/${asset.id}`} className="text-sm font-medium text-blue-600 hover:text-blue-800">{asset.asset_tag}</Link>
                           </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="mt-4 flex items-center justify-between px-4 py-3 border-t border-gray-200">
-              <div className="text-sm text-gray-700">
-                Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} items
+                          <td className="px-4 py-2.5 text-sm">
+                            <span className="font-medium text-gray-900">{asset.make}</span>
+                            <span className="text-gray-500 ml-1">{asset.model}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-sm text-gray-600">{asset.quantity}</td>
+                          <td className="px-4 py-2.5">
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${style.badge}`}>
+                              {REPAIR_STATE_LABELS[rs]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {asset.conditionStatus ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
+                                style={{ backgroundColor: asset.conditionStatus.color + '20', color: asset.conditionStatus.color }}>
+                                {asset.conditionStatus.name}
+                              </span>
+                            ) : <span className="text-gray-300 text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[200px] truncate">
+                            {asset.repair_notes || <span className="text-gray-300">—</span>}
+                          </td>
+                          {canRepair && (
+                            <td className="px-4 py-2.5">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleNonSerializedAction(asset.id, asset.asset_tag, 'regular')}
+                                  className="text-green-600 hover:text-green-800 text-xs font-medium"
+                                >Return</button>
+                                {rs === 'under_repair' && (
+                                  <button
+                                    onClick={() => handleNonSerializedAction(asset.id, asset.asset_tag, 'salvage_parts')}
+                                    className="text-red-600 hover:text-red-800 text-xs font-medium"
+                                  >Salvage</button>
+                                )}
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                  disabled={pagination.page === 1}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                >
-                  Previous
-                </button>
-                <span className="px-3 py-1 text-sm text-gray-700">
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
-                <button
-                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                  disabled={pagination.page >= pagination.totalPages}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </>
+            )}
+          </div>
         )}
       </div>
 
@@ -407,7 +492,7 @@ export default function Repairs() {
                'Mark Salvage / Parts'}
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              {modal.assetTag} — currently <span className="font-medium">{REPAIR_STATE_LABELS[modal.currentState]}</span>
+              <span className="font-mono font-medium text-gray-700">{modal.serial}</span>
             </p>
             <div className="mb-4">
               <label className="label">Notes (optional)</label>
@@ -423,20 +508,16 @@ export default function Repairs() {
                 onClick={() => { setModal(null); setModalNotes(''); }}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
                 disabled={modalSaving}
-              >
-                Cancel
-              </button>
+              >Cancel</button>
               <button
-                onClick={handleRepairAction}
+                onClick={modal.isAsset ? confirmNonSerializedAction : handleRepairAction}
                 disabled={modalSaving}
                 className={`px-4 py-2 text-white text-sm rounded-lg disabled:opacity-50 ${
                   modal.targetState === 'regular' ? 'bg-green-600 hover:bg-green-700' :
                   modal.targetState === 'under_repair' ? 'bg-orange-600 hover:bg-orange-700' :
                   'bg-red-600 hover:bg-red-700'
                 }`}
-              >
-                {modalSaving ? 'Saving...' : 'Confirm'}
-              </button>
+              >{modalSaving ? 'Saving...' : 'Confirm'}</button>
             </div>
           </div>
         </div>
@@ -446,9 +527,7 @@ export default function Repairs() {
       {toast && (
         <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-white ${
           toast.type === 'success' ? 'bg-green-700' : 'bg-red-700'
-        }`}>
-          {toast.message}
-        </div>
+        }`}>{toast.message}</div>
       )}
     </div>
   );

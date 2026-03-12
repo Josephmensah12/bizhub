@@ -248,7 +248,7 @@ exports.update = asyncHandler(async (req, res) => {
     });
   }
 
-  const { serial_number, cpu, cpu_model, memory, storage, cost_amount, price_amount, condition_status_id, status, purchase_date, notes } = req.body;
+  const { serial_number, cpu, cpu_model, memory, storage, cost_amount, price_amount, condition_status_id, status, purchase_date, notes, repair_notes } = req.body;
 
   // If changing serial number, check uniqueness
   if (serial_number !== undefined && serial_number.trim() !== unit.serial_number) {
@@ -274,6 +274,11 @@ exports.update = asyncHandler(async (req, res) => {
   if (status !== undefined) unit.status = status;
   if (purchase_date !== undefined) unit.purchase_date = purchase_date || null;
   if (notes !== undefined) unit.notes = notes || null;
+  if (repair_notes !== undefined) {
+    unit.repair_notes = repair_notes || null;
+    unit.repair_updated_at = new Date();
+    unit.repair_updated_by = req.user?.id;
+  }
 
   await unit.save();
   await unit.reload({

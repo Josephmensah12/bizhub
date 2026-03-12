@@ -102,6 +102,9 @@ router.get('/export/template', assetController.downloadTemplate);
 // GET /api/v1/assets/valuation-summary - Inventory valuation with drilldown
 router.get('/valuation-summary', assetController.getValuationSummary);
 
+// GET /api/v1/assets/repair-units - List repair/salvage units grouped by product
+router.get('/repair-units', assetController.getRepairUnits);
+
 // GET /api/v1/assets
 router.get('/', assetController.list);
 
