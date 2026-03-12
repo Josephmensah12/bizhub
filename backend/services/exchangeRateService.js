@@ -168,9 +168,56 @@ async function getCachedRates(date = null) {
   });
 }
 
+/**
+ * Get historical FX rate for a specific date with closest-earlier-date fallback.
+ * Used for converting historical invoice amounts accurately.
+ */
+async function getHistoricalFxRate(date, fromCurrency = 'USD', toCurrency = 'GHS') {
+  if (fromCurrency === toCurrency) return 1;
+
+  const dateStr = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+
+  // Try exact date first
+  const exact = await ExchangeRateCache.findOne({
+    where: {
+      base_currency: fromCurrency,
+      quote_currency: toCurrency,
+      rate_date: dateStr
+    }
+  });
+  if (exact) return parseFloat(exact.rate);
+
+  // Fallback: closest earlier date
+  const earlier = await ExchangeRateCache.findOne({
+    where: {
+      base_currency: fromCurrency,
+      quote_currency: toCurrency,
+      rate_date: { [require('sequelize').Op.lt]: dateStr }
+    },
+    order: [['rate_date', 'DESC']]
+  });
+  if (earlier) return parseFloat(earlier.rate);
+
+  // Fallback: closest later date (if no earlier data at all)
+  const later = await ExchangeRateCache.findOne({
+    where: {
+      base_currency: fromCurrency,
+      quote_currency: toCurrency,
+      rate_date: { [require('sequelize').Op.gt]: dateStr }
+    },
+    order: [['rate_date', 'ASC']]
+  });
+  if (later) return parseFloat(later.rate);
+
+  // Last resort: hardcoded fallback
+  const pairKey = `${fromCurrency}_${toCurrency}`;
+  return FALLBACK_RATES[pairKey] || null;
+}
+
 module.exports = {
   getExchangeRate,
   getLatestRate,
   convertAmount,
-  getCachedRates
+  getCachedRates,
+  getHistoricalFxRate
 };
