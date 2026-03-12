@@ -668,6 +668,16 @@ export default function InvoiceDetail() {
       alert('Please enter a valid price');
       return;
     }
+    const currentItem = invoice.items?.find(i => i.id === itemId);
+    const currentPrice = parseFloat(currentItem?.unit_price_amount) || 0;
+    if (newPrice < currentPrice) {
+      alert(`Price can only be revised upward. Current price: ${currentPrice.toFixed(2)}`);
+      return;
+    }
+    if (newPrice === currentPrice) {
+      setEditingPriceItemId(null);
+      return;
+    }
 
     try {
       setActionLoading(true);
@@ -1183,7 +1193,7 @@ export default function InvoiceDetail() {
                                 <input
                                   type="number"
                                   step="0.01"
-                                  min="0"
+                                  min={item.unit_price_amount || 0}
                                   value={editingPriceValue}
                                   onChange={(e) => setEditingPriceValue(e.target.value)}
                                   onKeyDown={(e) => {
@@ -1192,6 +1202,7 @@ export default function InvoiceDetail() {
                                   }}
                                   className="w-24 px-2 py-1 text-right border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                                   autoFocus
+                                  title={`Min: ${parseFloat(item.unit_price_amount || 0).toFixed(2)} (upward only)`}
                                 />
                                 <button
                                   onClick={() => handleSavePrice(item.id)}
@@ -1217,7 +1228,7 @@ export default function InvoiceDetail() {
                               <span
                                 className={canEdit && !isItemVoided ? 'cursor-pointer hover:text-blue-600 hover:underline' : ''}
                                 onClick={() => canEdit && !isItemVoided && handleStartEditPrice(item)}
-                                title={canEdit && !isItemVoided ? 'Click to edit price' : ''}
+                                title={canEdit && !isItemVoided ? 'Click to revise price upward' : ''}
                               >
                                 {formatCurrency(item.unit_price_amount, invoice.currency)}
                               </span>

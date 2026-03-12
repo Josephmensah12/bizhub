@@ -855,7 +855,7 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
     }
   }
 
-  // Update price if provided
+  // Update price if provided — only allow upward revisions
   const priceVal = unitPrice ?? unit_price;
   if (priceVal !== undefined) {
     const newPrice = parseFloat(priceVal);
@@ -863,6 +863,13 @@ exports.updateItemPrice = asyncHandler(async (req, res) => {
       return res.status(400).json({
         success: false,
         error: { code: 'INVALID_PRICE', message: 'Unit price must be a non-negative number' }
+      });
+    }
+    const currentPrice = parseFloat(item.unit_price_amount) || 0;
+    if (newPrice < currentPrice) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'PRICE_DECREASE_NOT_ALLOWED', message: `Price can only be revised upward. Current: ${currentPrice.toFixed(2)}, requested: ${newPrice.toFixed(2)}` }
       });
     }
     changes.oldPrice = item.unit_price_amount;
