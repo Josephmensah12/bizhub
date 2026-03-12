@@ -195,14 +195,30 @@ export default function StockTakeDetail() {
   }
 
   const handleSubmitReview = async () => {
-    if (!window.confirm('Submit for review? All items must be counted.')) return
+    if (!window.confirm('Submit for review? Unscanned items must have reasons entered.')) return
     setActionLoading(true)
     try {
       await axios.post(`/api/v1/stock-takes/${id}/submit-review`)
       addToast('success', 'Submitted for review')
       navigate('/stock-takes')
     } catch (err) {
-      addToast('error', err.response?.data?.error?.message || 'Failed to submit')
+      const errorData = err.response?.data?.error
+      if (errorData?.code === 'UNCOUNTED_ITEMS' && errorData?.items?.length > 0) {
+        // Scroll to the first item that needs attention and expand it
+        const firstItem = errorData.items[0]
+        addToast('warning', `${errorData.items.length} items need reasons for unscanned units`)
+        // Expand the item and load its scans
+        if (firstItem.item_id) {
+          setExpandedItems(prev => ({ ...prev, [firstItem.item_id]: true }))
+          fetchItemScans(firstItem.item_id)
+          setTimeout(() => {
+            const el = document.getElementById(`item-row-${firstItem.item_id}`)
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }, 300)
+        }
+      } else {
+        addToast('error', errorData?.message || 'Failed to submit')
+      }
     } finally {
       setActionLoading(false)
     }
