@@ -4,7 +4,7 @@
  * CRUD operations for invoices with payments and inventory locking
  */
 
-const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, AssetUnit, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, AssetUnit, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, DescriptionMapping, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { sanitizeInvoiceForRole, canSeeCost, canEditInvoices, canVoidInvoices } = require('../middleware/permissions');
 const exchangeRateService = require('../services/exchangeRateService');
@@ -2635,6 +2635,69 @@ exports.getWhatsAppLink = asyncHandler(async (req, res) => {
       message,
       pdfUrl
     }
+  });
+});
+
+/**
+ * POST /api/v1/invoices/:id/items/:itemId/link-asset
+ * Manually link an invoice item to an asset (and optionally save the mapping)
+ */
+exports.linkItemAsset = asyncHandler(async (req, res) => {
+  const { id, itemId } = req.params;
+  const { asset_id, save_mapping } = req.body;
+
+  if (!asset_id) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'MISSING_ASSET_ID', message: 'asset_id is required' }
+    });
+  }
+
+  const invoice = await Invoice.findByPk(id);
+  if (!invoice) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Invoice not found' }
+    });
+  }
+
+  const item = await InvoiceItem.findOne({ where: { id: itemId, invoice_id: id } });
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'ITEM_NOT_FOUND', message: 'Invoice item not found' }
+    });
+  }
+
+  const asset = await Asset.findByPk(asset_id);
+  if (!asset) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'ASSET_NOT_FOUND', message: 'Asset not found' }
+    });
+  }
+
+  // Update the item's asset_id
+  await item.update({ asset_id });
+
+  // Optionally save the description → asset mapping for future auto-matching
+  if (save_mapping && item.description && DescriptionMapping) {
+    await DescriptionMapping.upsert({
+      description: item.description,
+      asset_id,
+      match_type: 'manual'
+    });
+  }
+
+  // Reload with asset association
+  await item.reload({
+    include: [{ model: Asset, as: 'asset' }]
+  });
+
+  res.json({
+    success: true,
+    data: { item },
+    message: 'Item linked to asset'
   });
 });
 

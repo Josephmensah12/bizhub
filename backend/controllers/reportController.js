@@ -186,10 +186,10 @@ exports.topSellers = asyncHandler(async (req, res) => {
 
   const topByQuantity = await sequelize.query(`
     SELECT
-      a.make,
-      a.model,
-      a.category,
-      a.asset_type,
+      COALESCE(a.make, 'Unlinked') as make,
+      COALESCE(a.model, 'Unlinked') as model,
+      COALESCE(a.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_profit_amount) as total_profit,
@@ -199,12 +199,12 @@ exports.topSellers = asyncHandler(async (req, res) => {
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
-    JOIN assets a ON ii.asset_id = a.id
+    LEFT JOIN assets a ON ii.asset_id = a.id
     WHERE i.invoice_date BETWEEN :startDate AND :endDate
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY a.make, a.model, a.category, a.asset_type
+    GROUP BY COALESCE(a.make, 'Unlinked'), COALESCE(a.model, 'Unlinked'), COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
     ORDER BY total_sold DESC
     LIMIT :limit
   `, {
@@ -215,10 +215,10 @@ exports.topSellers = asyncHandler(async (req, res) => {
   // Top by revenue
   const topByRevenue = await sequelize.query(`
     SELECT
-      a.make,
-      a.model,
-      a.category,
-      a.asset_type,
+      COALESCE(a.make, 'Unlinked') as make,
+      COALESCE(a.model, 'Unlinked') as model,
+      COALESCE(a.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_profit_amount) as total_profit,
@@ -227,12 +227,12 @@ exports.topSellers = asyncHandler(async (req, res) => {
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
-    JOIN assets a ON ii.asset_id = a.id
+    LEFT JOIN assets a ON ii.asset_id = a.id
     WHERE i.invoice_date BETWEEN :startDate AND :endDate
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY a.make, a.model, a.category, a.asset_type
+    GROUP BY COALESCE(a.make, 'Unlinked'), COALESCE(a.model, 'Unlinked'), COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
     ORDER BY total_revenue DESC
     LIMIT :limit
   `, {
@@ -242,24 +242,24 @@ exports.topSellers = asyncHandler(async (req, res) => {
 
   // Top by category
   const topCategories = await sequelize.query(`
-    SELECT 
-      a.category,
-      a.asset_type,
+    SELECT
+      COALESCE(a.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, 'Unlinked') as asset_type,
       COUNT(DISTINCT i.id) as invoice_count,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_profit_amount) as total_profit,
-      CASE WHEN SUM(ii.line_total_amount) > 0 
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100) 
+      CASE WHEN SUM(ii.line_total_amount) > 0
+        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
-    JOIN assets a ON ii.asset_id = a.id
+    LEFT JOIN assets a ON ii.asset_id = a.id
     WHERE i.invoice_date BETWEEN :startDate AND :endDate
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY a.category, a.asset_type
+    GROUP BY COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
     ORDER BY total_revenue DESC
   `, {
     replacements: { startDate, endDate },
@@ -653,24 +653,24 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
 
   // Margin by category
   const marginByCategory = await sequelize.query(`
-    SELECT 
-      a.category,
-      a.asset_type,
+    SELECT
+      COALESCE(a.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, 'Unlinked') as asset_type,
       SUM(ii.line_total_amount) as revenue,
       SUM(ii.line_cost_amount) as cost,
       SUM(ii.line_profit_amount) as profit,
-      CASE WHEN SUM(ii.line_total_amount) > 0 
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100) 
+      CASE WHEN SUM(ii.line_total_amount) > 0
+        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
         ELSE 0 END as margin_percent,
       COUNT(DISTINCT i.id) as invoice_count
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
-    JOIN assets a ON ii.asset_id = a.id
+    LEFT JOIN assets a ON ii.asset_id = a.id
     WHERE i.invoice_date BETWEEN :startDate AND :endDate
       AND i.status != 'CANCELLED'
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY a.category, a.asset_type
+    GROUP BY COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
     ORDER BY profit DESC
   `, {
     replacements: { startDate, endDate },
@@ -722,7 +722,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
   // Margin by model
   const marginByModel = await sequelize.query(`
     SELECT
-      a.make, a.model, a.category, a.asset_type,
+      COALESCE(a.make, 'Unlinked') as make, COALESCE(a.model, 'Unlinked') as model, COALESCE(a.category, 'Unlinked') as category, COALESCE(a.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_cost_amount) as total_cost,
@@ -732,12 +732,12 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
-    JOIN assets a ON ii.asset_id = a.id
+    LEFT JOIN assets a ON ii.asset_id = a.id
     WHERE i.invoice_date BETWEEN :startDate AND :endDate
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY a.make, a.model, a.category, a.asset_type
+    GROUP BY COALESCE(a.make, 'Unlinked'), COALESCE(a.model, 'Unlinked'), COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
     ORDER BY margin_percent DESC
     LIMIT 20
   `, {

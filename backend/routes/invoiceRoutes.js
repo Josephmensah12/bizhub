@@ -88,4 +88,7 @@ router.get('/:invoiceId/returns', returnController.getInvoiceReturns);
 // POST /api/v1/invoices/:invoiceId/returns - Create a new return
 router.post('/:invoiceId/returns', invoiceAdmins, returnController.createReturn);
 
+// POST /api/v1/invoices/:id/items/:itemId/link-asset - Link item to asset
+router.post('/:id/items/:itemId/link-asset', invoiceAdmins, invoiceController.linkItemAsset);
+
 module.exports = router;
