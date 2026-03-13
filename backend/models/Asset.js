@@ -351,6 +351,27 @@ module.exports = (sequelize, DataTypes) => {
     );
 
     if (parseInt(paidResult.cnt) > 0) {
+      // For serialized assets: only "Sold" if ALL units are sold/scrapped
+      if (this.is_serialized) {
+        const [availUnits] = await sequelize.query(
+          `SELECT COUNT(*) AS cnt FROM asset_units
+           WHERE asset_id = :assetId AND status NOT IN ('Sold', 'Scrapped')`,
+          { replacements: { assetId: this.id }, ...queryOptions }
+        );
+        if (parseInt(availUnits.cnt) > 0) {
+          // Still has available units — check for active invoices too
+          const [activeResult] = await sequelize.query(
+            `SELECT COUNT(*) AS cnt
+             FROM invoice_items ii
+             JOIN invoices i ON ii.invoice_id = i.id
+             WHERE ii.asset_id = :assetId
+               AND i.status NOT IN ('CANCELLED', 'PAID')
+               AND ii.voided_at IS NULL`,
+            { replacements: { assetId: this.id }, ...queryOptions }
+          );
+          return parseInt(activeResult.cnt) > 0 ? 'Processing' : 'In Stock';
+        }
+      }
       return 'Sold';
     }
 
