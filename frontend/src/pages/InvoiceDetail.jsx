@@ -1149,9 +1149,11 @@ export default function InvoiceDetail() {
                                 >
                                   {item.asset.asset_tag}
                                 </Link>
-                                {item.asset.serial_number && (
+                                {item.assetUnit?.serial_number ? (
+                                  <span> • S/N: {item.assetUnit.serial_number}</span>
+                                ) : item.asset.serial_number ? (
                                   <span> • S/N: {item.asset.serial_number}</span>
-                                )}
+                                ) : null}
                                 {invoice.status !== 'CANCELLED' && !isItemVoided && (
                                   <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
                                     item.asset.status === 'Sold' ? 'bg-green-100 text-green-700' :
