@@ -70,6 +70,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
 
   const invoiceWhere = {
     status: { [Op.ne]: 'CANCELLED' },
+    is_deleted: false,
     invoice_date: { [Op.gte]: todayStart }
   };
   if (role === 'Sales') {
@@ -96,10 +97,12 @@ exports.getMetrics = asyncHandler(async (req, res) => {
 
   const mtdSalesWhere = {
     status: { [Op.ne]: 'CANCELLED' },
+    is_deleted: false,
     invoice_date: { [Op.gte]: mtdStart, [Op.lt]: mtdEnd }
   };
   const prevMtdSalesWhere = {
     status: { [Op.ne]: 'CANCELLED' },
+    is_deleted: false,
     invoice_date: { [Op.gte]: prevMonthStart, [Op.lt]: prevEnd }
   };
   if (role === 'Sales') {
@@ -124,6 +127,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
 
   const yoySalesWhere = {
     status: { [Op.ne]: 'CANCELLED' },
+    is_deleted: false,
     invoice_date: { [Op.gte]: yoyStart, [Op.lt]: yoyEnd }
   };
   if (role === 'Sales') {
@@ -181,6 +185,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
      FROM invoices i
      LEFT JOIN customers c ON i.customer_id = c.id
      WHERE i.status != 'CANCELLED'
+       AND i.is_deleted = false
        AND i.invoice_date = CURRENT_DATE
        ${role === 'Sales' ? 'AND i.created_by = $1' : ''}
      ORDER BY i.created_at DESC
@@ -339,6 +344,7 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
        COUNT(*) AS invoice_count
      FROM invoices
      WHERE status != 'CANCELLED'
+       AND is_deleted = false
        AND invoice_date < DATE_TRUNC('month', NOW()) + INTERVAL '1 month'
        ${dateFilter}
      GROUP BY TO_CHAR(invoice_date, 'YYYY-MM')
@@ -371,6 +377,7 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
      FROM invoice_items ii
      JOIN invoices i ON ii.invoice_id = i.id
      WHERE i.status = 'PAID'
+       AND i.is_deleted = false
        AND ii.voided_at IS NULL
      GROUP BY TO_CHAR(i.invoice_date, 'YYYY-MM')
      ORDER BY month`,

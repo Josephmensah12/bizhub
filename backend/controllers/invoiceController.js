@@ -113,8 +113,14 @@ exports.list = asyncHandler(async (req, res) => {
   const sortBy = ALLOWED_SORT.includes(rawSortBy) ? rawSortBy : 'invoice_date';
   const sortOrder = rawSortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-  // Build where clause
+  // Build where clause — exclude soft-deleted by default, show only deleted when status=ARCHIVED
   const where = {};
+  const isArchiveView = status === 'ARCHIVED';
+  if (isArchiveView) {
+    where.is_deleted = true;
+  } else {
+    where.is_deleted = false;
+  }
 
   // Only filter by date if explicitly provided
   if (dateFrom || dateTo) {
@@ -123,7 +129,7 @@ exports.list = asyncHandler(async (req, res) => {
     where.invoice_date = { [Op.between]: [startDate, endDate] };
   }
 
-  if (status) {
+  if (status && !isArchiveView) {
     const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
     where.status = statuses.length === 1 ? statuses[0] : { [Op.in]: statuses };
   }

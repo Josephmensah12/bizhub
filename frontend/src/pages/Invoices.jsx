@@ -402,21 +402,31 @@ export default function Invoices() {
                 { value: 'UNPAID', label: 'Unpaid' },
                 { value: 'PARTIALLY_PAID', label: 'Partial' },
                 { value: 'PAID', label: 'Paid' },
-                { value: 'CANCELLED', label: 'Cancelled' }
+                { value: 'CANCELLED', label: 'Cancelled' },
+                { value: 'ARCHIVED', label: 'Archived' }
               ].map(opt => {
                 const active = statusFilter.includes(opt.value);
                 return (
                   <button
                     key={opt.value}
                     onClick={() => {
-                      setStatusFilter(prev =>
-                        active ? prev.filter(s => s !== opt.value) : [...prev, opt.value]
-                      );
+                      if (opt.value === 'ARCHIVED') {
+                        // Archived is exclusive — toggle it alone
+                        setStatusFilter(active ? [] : ['ARCHIVED']);
+                      } else {
+                        // Regular statuses — clear ARCHIVED if present
+                        setStatusFilter(prev => {
+                          const without = prev.filter(s => s !== opt.value && s !== 'ARCHIVED');
+                          return active ? without : [...without, opt.value];
+                        });
+                      }
                       setPagination(prev => ({ ...prev, page: 1 }));
                     }}
                     className={`px-3 py-1.5 text-sm rounded-md border ${
                       active
-                        ? 'bg-primary-100 border-primary-500 text-primary-700'
+                        ? opt.value === 'ARCHIVED'
+                          ? 'bg-red-100 border-red-400 text-red-700'
+                          : 'bg-primary-100 border-primary-500 text-primary-700'
                         : 'border-gray-300 hover:bg-gray-50'
                     }`}
                   >
@@ -478,7 +488,7 @@ export default function Invoices() {
                 {invoices.map((invoice) => (
                   <tr
                     key={invoice.id}
-                    className="hover:bg-gray-50 cursor-pointer"
+                    className={`hover:bg-gray-50 cursor-pointer ${invoice.is_deleted ? 'opacity-60' : ''}`}
                     onClick={() => navigate(`/sales/invoices/${invoice.id}`)}
                   >
                     <td className="px-4 py-4 text-sm font-medium text-blue-600">
@@ -502,7 +512,10 @@ export default function Invoices() {
                       {formatCurrency(invoice.balance_due, invoice.currency)}
                     </td>
                     <td className="px-4 py-4 text-center">
-                      <StatusBadge status={invoice.status} />
+                      {invoice.is_deleted
+                        ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600">Archived</span>
+                        : <StatusBadge status={invoice.status} />
+                      }
                     </td>
                   </tr>
                 ))}
