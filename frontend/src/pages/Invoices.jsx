@@ -121,7 +121,7 @@ export default function Invoices() {
   const [search, setSearch] = useState('');
 
   // Filters — initialise from URL search params if present
-  const [datePreset, setDatePreset] = useState(() => searchParams.get('date') || 'all');
+  const [datePreset, setDatePreset] = useState(() => searchParams.get('date') || 'today');
   const [customDateFrom, setCustomDateFrom] = useState(() => searchParams.get('dateFrom') || '');
   const [customDateTo, setCustomDateTo] = useState(() => searchParams.get('dateTo') || '');
   const [statusFilter, setStatusFilter] = useState(() => {
