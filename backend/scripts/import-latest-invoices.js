@@ -226,9 +226,19 @@ async function buildAssetLookup() {
 }
 
 // For serialized assets, find an Available unit and return its id
+// Also checks that the unit is not already on any active (non-cancelled) BizHub invoice
 async function findAvailableUnit(assetId, transaction) {
   const [rows] = await seq.query(
-    `SELECT id FROM asset_units WHERE asset_id = $1 AND status = 'Available' ORDER BY id LIMIT 1`,
+    `SELECT u.id FROM asset_units u
+     WHERE u.asset_id = $1 AND u.status = 'Available'
+       AND u.id NOT IN (
+         SELECT ii.asset_unit_id FROM invoice_items ii
+         JOIN invoices i ON ii.invoice_id = i.id
+         WHERE ii.asset_unit_id IS NOT NULL
+           AND i.status NOT IN ('CANCELLED')
+           AND ii.voided_at IS NULL
+       )
+     ORDER BY u.id LIMIT 1`,
     { bind: [assetId], transaction }
   );
   return rows.length > 0 ? rows[0].id : null;
@@ -251,6 +261,7 @@ async function markUnitSold(unitId, invoiceItemId, transaction) {
 }
 
 // Update asset computed status based on invoice_items
+// For serialized assets: only "Sold" if ALL units are Sold/Scrapped
 async function updateAssetStatus(assetId, transaction) {
   // Check PAID invoices
   const [[paid]] = await seq.query(
@@ -259,6 +270,28 @@ async function updateAssetStatus(assetId, transaction) {
     { bind: [assetId], transaction }
   );
   if (parseInt(paid.cnt) > 0) {
+    // For serialized assets, check if any units are still available
+    const [[assetRow]] = await seq.query(
+      `SELECT is_serialized FROM assets WHERE id = $1`,
+      { bind: [assetId], transaction }
+    );
+    if (assetRow?.is_serialized) {
+      const [[availUnits]] = await seq.query(
+        `SELECT COUNT(*) AS cnt FROM asset_units WHERE asset_id = $1 AND status NOT IN ('Sold', 'Scrapped')`,
+        { bind: [assetId], transaction }
+      );
+      if (parseInt(availUnits.cnt) > 0) {
+        // Still has available units — check for active invoices
+        const [[activeCheck]] = await seq.query(
+          `SELECT COUNT(*) AS cnt FROM invoice_items ii JOIN invoices i ON ii.invoice_id = i.id
+           WHERE ii.asset_id = $1 AND i.status NOT IN ('CANCELLED','PAID') AND ii.voided_at IS NULL`,
+          { bind: [assetId], transaction }
+        );
+        const newStatus = parseInt(activeCheck.cnt) > 0 ? 'Processing' : 'In Stock';
+        await seq.query(`UPDATE assets SET status = $2, updated_at = NOW() WHERE id = $1`, { bind: [assetId, newStatus], transaction });
+        return;
+      }
+    }
     await seq.query(`UPDATE assets SET status = 'Sold', updated_at = NOW() WHERE id = $1`, { bind: [assetId], transaction });
     return;
   }
@@ -303,6 +336,22 @@ async function run() {
     'SELECT salesbinder_id FROM invoices WHERE salesbinder_id IS NOT NULL'
   );
   const existingIds = new Set(existing.map(r => r.salesbinder_id));
+
+  // Step 3b: Build set of asset_unit_ids already on active BizHub invoices
+  // This prevents migrating an invoice that would double-book a unit
+  const [activeUnitRows] = await seq.query(
+    `SELECT ii.asset_unit_id, i.invoice_number
+     FROM invoice_items ii
+     JOIN invoices i ON ii.invoice_id = i.id
+     WHERE ii.asset_unit_id IS NOT NULL
+       AND i.status NOT IN ('CANCELLED')
+       AND ii.voided_at IS NULL
+       AND i.salesbinder_id IS NULL`
+  );
+  const unitsOnBizhubInvoices = new Map(); // unit_id → invoice_number
+  for (const r of activeUnitRows) {
+    unitsOnBizhubInvoices.set(r.asset_unit_id, r.invoice_number);
+  }
 
   // Step 4: Fetch invoices from SalesBinder
   console.log('Fetching invoices from SalesBinder API...');
@@ -441,7 +490,12 @@ async function run() {
           if (assetInfo.isSerialized) {
             const unitId = await findAvailableUnit(assetId, t);
             if (unitId) {
-              assetUnitId = unitId;
+              // Check if this unit is already on an active BizHub-created invoice
+              if (unitsOnBizhubInvoices.has(unitId)) {
+                console.log(`    ⚠ Unit ${unitId} for ${assetInfo.model} already on BizHub invoice ${unitsOnBizhubInvoices.get(unitId)} — skipping unit link`);
+              } else {
+                assetUnitId = unitId;
+              }
             } else {
               console.log(`    ⚠ No available unit for ${assetInfo.model} (asset ${assetId})`);
             }
