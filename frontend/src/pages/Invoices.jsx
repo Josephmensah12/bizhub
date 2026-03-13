@@ -16,6 +16,27 @@ function formatCurrency(amount, currency = 'GHS') {
 }
 
 /**
+ * Compact currency for metric cards — abbreviates large values
+ * e.g. 1200000 → "GHS 1.2M", 25000 → "GHS 25K", 3500 → "GHS 3,500"
+ */
+function formatCompactCurrency(amount, currency = 'GHS') {
+  if (amount === null || amount === undefined) return '—';
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  const sym = currency;
+
+  if (abs >= 1_000_000) {
+    const val = abs / 1_000_000;
+    return `${sign}${sym} ${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}M`;
+  }
+  if (abs >= 100_000) {
+    const val = abs / 1_000;
+    return `${sign}${sym} ${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}K`;
+  }
+  return `${sign}${sym} ${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
  * Format date for display
  */
 function formatDate(dateString) {
@@ -222,10 +243,10 @@ export default function Invoices() {
       {/* Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 md:gap-4 mb-6">
         {/* Total Revenue - Always visible */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 min-w-0">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Total Revenue</div>
-          <div className="text-xs sm:text-sm md:text-xl lg:text-2xl font-bold text-green-600">
-            {formatCurrency(metrics.totalRevenue)}
+          <div className="font-bold text-green-600 leading-tight" style={{ fontSize: 'clamp(0.75rem, 2.5vw, 1.5rem)' }}>
+            {formatCompactCurrency(metrics.totalRevenue)}
           </div>
           <div className="text-xs text-gray-400 mt-1">
             {metrics.invoiceCount} invoice{metrics.invoiceCount !== 1 ? 's' : ''}
@@ -233,10 +254,10 @@ export default function Invoices() {
         </div>
 
         {/* Net Total - Excludes cancelled invoices */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 min-w-0">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Net Total</div>
-          <div className="text-xs sm:text-sm md:text-xl lg:text-2xl font-bold text-emerald-600">
-            {formatCurrency(metrics.netTotal)}
+          <div className="font-bold text-emerald-600 leading-tight" style={{ fontSize: 'clamp(0.75rem, 2.5vw, 1.5rem)' }}>
+            {formatCompactCurrency(metrics.netTotal)}
           </div>
           <div className="text-xs text-gray-400 mt-1">
             {metrics.netCount || 0} active invoice{(metrics.netCount || 0) !== 1 ? 's' : ''}
@@ -244,24 +265,24 @@ export default function Invoices() {
         </div>
 
         {/* Total Collected */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 min-w-0">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Collected</div>
-          <div className="text-xs sm:text-sm md:text-xl lg:text-2xl font-bold text-blue-600">
-            {formatCurrency(metrics.totalCollected)}
+          <div className="font-bold text-blue-600 leading-tight" style={{ fontSize: 'clamp(0.75rem, 2.5vw, 1.5rem)' }}>
+            {formatCompactCurrency(metrics.totalCollected)}
           </div>
         </div>
 
         {/* Total Outstanding */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 min-w-0">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Outstanding</div>
-          <div className={`text-xs sm:text-sm md:text-xl lg:text-2xl font-bold ${metrics.totalOutstanding > 0 ? 'text-red-600' : 'text-gray-600'}`}>
-            {formatCurrency(metrics.totalOutstanding)}
+          <div className={`font-bold leading-tight ${metrics.totalOutstanding > 0 ? 'text-red-600' : 'text-gray-600'}`} style={{ fontSize: 'clamp(0.75rem, 2.5vw, 1.5rem)' }}>
+            {formatCompactCurrency(metrics.totalOutstanding)}
           </div>
         </div>
 
         {/* Total Profit - Only visible to roles that can see cost */}
         {canSeeCost && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 min-w-0">
             <div className="flex justify-between items-center mb-1">
               <span className="text-xs md:text-sm text-gray-500">Profit</span>
               <button
@@ -281,17 +302,17 @@ export default function Invoices() {
                 )}
               </button>
             </div>
-            <div className={`text-xs sm:text-sm md:text-xl lg:text-2xl font-bold ${metrics.totalProfit >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
-              {showProfit ? formatCurrency(metrics.totalProfit) : '******'}
+            <div className={`font-bold leading-tight ${metrics.totalProfit >= 0 ? 'text-purple-600' : 'text-red-600'}`} style={{ fontSize: 'clamp(0.75rem, 2.5vw, 1.5rem)' }}>
+              {showProfit ? formatCompactCurrency(metrics.totalProfit) : '******'}
             </div>
           </div>
         )}
 
         {/* Margin % - Only visible to Admin (canSeeProfit) */}
         {canSeeProfit && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 md:p-4 min-w-0">
             <div className="text-xs md:text-sm text-gray-500 mb-1">Margin</div>
-            <div className={`text-xs sm:text-sm md:text-xl lg:text-2xl font-bold ${metrics.marginPercent >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+            <div className={`font-bold leading-tight ${metrics.marginPercent >= 0 ? 'text-purple-600' : 'text-red-600'}`} style={{ fontSize: 'clamp(0.75rem, 2.5vw, 1.5rem)' }}>
               {showProfit ? `${metrics.marginPercent?.toFixed(1) || 0}%` : '******'}
             </div>
           </div>
