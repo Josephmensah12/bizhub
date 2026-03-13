@@ -28,9 +28,9 @@ function formatWithEquiv(ghs, usd) {
   const usdFormatted = formatCurrency(usd, 'USD');
 
   return (
-    <span>
-      {ghsFormatted}
-      <span className="text-gray-500 text-sm ml-1">(≈ {usdFormatted})</span>
+    <span className="block">
+      <span className="block truncate">{ghsFormatted}</span>
+      <span className="block text-gray-500 text-xs truncate">(≈ {usdFormatted})</span>
     </span>
   );
 }
@@ -40,12 +40,12 @@ function formatWithEquiv(ghs, usd) {
  */
 function SummaryCard({ title, value, subtext, highlight, negative }) {
   return (
-    <div className={`bg-white rounded-lg border p-4 ${highlight ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
-      <div className="text-sm font-medium text-gray-600 mb-1">{title}</div>
-      <div className={`text-lg font-semibold ${negative ? 'text-red-600' : 'text-gray-900'}`}>
+    <div className={`bg-white rounded-lg border p-3 md:p-4 overflow-hidden ${highlight ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}>
+      <div className="text-xs md:text-sm font-medium text-gray-600 mb-1 truncate">{title}</div>
+      <div className={`text-sm md:text-lg font-semibold truncate ${negative ? 'text-red-600' : 'text-gray-900'}`}>
         {value}
       </div>
-      {subtext && <div className="text-xs text-gray-500 mt-1">{subtext}</div>}
+      {subtext && <div className="text-xs text-gray-500 mt-1 truncate">{subtext}</div>}
     </div>
   );
 }
@@ -669,7 +669,7 @@ export default function Inventory() {
       {/* Valuation Summary Cards — hidden for roles that cannot see cost */}
       {canSeeCost && !valuationLoading && valuation && (
         <div className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4">
             <SummaryCard
               title="Total Cost"
               value={formatWithEquiv(valuation.overall.totalCost.ghs, valuation.overall.totalCost.usd)}
@@ -776,9 +776,9 @@ export default function Inventory() {
       {/* Valuation Loading Skeleton */}
       {canSeeCost && valuationLoading && (
         <div className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-white rounded-lg border border-gray-200 p-4 animate-pulse">
+              <div key={i} className="bg-white rounded-lg border border-gray-200 p-3 md:p-4 animate-pulse">
                 <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
                 <div className="h-6 bg-gray-200 rounded w-32"></div>
               </div>
