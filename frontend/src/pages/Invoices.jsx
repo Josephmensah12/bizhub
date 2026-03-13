@@ -224,7 +224,7 @@ export default function Invoices() {
         {/* Total Revenue - Always visible */}
         <div className="card overflow-hidden p-3 md:p-4">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Total Revenue</div>
-          <div className="text-base md:text-2xl font-bold text-green-600 truncate">
+          <div className="text-sm md:text-2xl font-bold text-green-600">
             {formatCurrency(metrics.totalRevenue)}
           </div>
           <div className="text-xs text-gray-400 mt-1">
@@ -235,7 +235,7 @@ export default function Invoices() {
         {/* Net Total - Excludes cancelled invoices */}
         <div className="card overflow-hidden p-3 md:p-4">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Net Total</div>
-          <div className="text-base md:text-2xl font-bold text-emerald-600 truncate">
+          <div className="text-sm md:text-2xl font-bold text-emerald-600">
             {formatCurrency(metrics.netTotal)}
           </div>
           <div className="text-xs text-gray-400 mt-1">
@@ -246,7 +246,7 @@ export default function Invoices() {
         {/* Total Collected */}
         <div className="card overflow-hidden p-3 md:p-4">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Collected</div>
-          <div className="text-base md:text-2xl font-bold text-blue-600 truncate">
+          <div className="text-sm md:text-2xl font-bold text-blue-600">
             {formatCurrency(metrics.totalCollected)}
           </div>
         </div>
@@ -254,7 +254,7 @@ export default function Invoices() {
         {/* Total Outstanding */}
         <div className="card overflow-hidden p-3 md:p-4">
           <div className="text-xs md:text-sm text-gray-500 mb-1">Outstanding</div>
-          <div className={`text-base md:text-2xl font-bold truncate ${metrics.totalOutstanding > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+          <div className={`text-sm md:text-2xl font-bold ${metrics.totalOutstanding > 0 ? 'text-red-600' : 'text-gray-600'}`}>
             {formatCurrency(metrics.totalOutstanding)}
           </div>
         </div>
@@ -281,7 +281,7 @@ export default function Invoices() {
                 )}
               </button>
             </div>
-            <div className={`text-base md:text-2xl font-bold truncate ${metrics.totalProfit >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+            <div className={`text-sm md:text-2xl font-bold ${metrics.totalProfit >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
               {showProfit ? formatCurrency(metrics.totalProfit) : '******'}
             </div>
           </div>
@@ -291,7 +291,7 @@ export default function Invoices() {
         {canSeeProfit && (
           <div className="card overflow-hidden p-3 md:p-4">
             <div className="text-xs md:text-sm text-gray-500 mb-1">Margin</div>
-            <div className={`text-base md:text-2xl font-bold truncate ${metrics.marginPercent >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+            <div className={`text-sm md:text-2xl font-bold ${metrics.marginPercent >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
               {showProfit ? `${metrics.marginPercent?.toFixed(1) || 0}%` : '******'}
             </div>
           </div>
