@@ -249,11 +249,11 @@ exports.create = asyncHandler(async (req, res) => {
         });
       }
 
-      if (unit.status !== 'Available') {
+      if (unit.status === 'Sold') {
         await t.rollback();
         return res.status(409).json({
           success: false,
-          error: { code: 'UNIT_NOT_AVAILABLE', message: `Unit is currently ${unit.status}, must be Available` }
+          error: { code: 'UNIT_NOT_AVAILABLE', message: 'Sold units cannot be written off' }
         });
       }
 

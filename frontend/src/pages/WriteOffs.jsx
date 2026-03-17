@@ -92,7 +92,7 @@ export default function WriteOffs() {
     if (query.length < 2) { setAssetResults([]); return }
     setSearchingAssets(true)
     try {
-      const res = await axios.get('/api/v1/assets', { params: { search: query, limit: 10, status: 'In Stock' } })
+      const res = await axios.get('/api/v1/assets', { params: { search: query, limit: 10 } })
       setAssetResults(res.data.data?.assets || res.data.data || [])
     } catch (err) {
       console.error('Asset search error:', err)
@@ -115,7 +115,7 @@ export default function WriteOffs() {
 
     if (asset.is_serialized) {
       try {
-        const res = await axios.get(`/api/v1/assets/${asset.id}/units`, { params: { status: 'Available' } })
+        const res = await axios.get(`/api/v1/assets/${asset.id}/units`)
         setAssetUnits(res.data.data?.units || res.data.data || [])
       } catch (err) {
         console.error('Failed to load units:', err)
@@ -400,7 +400,7 @@ export default function WriteOffs() {
                     <option value="">Select a unit...</option>
                     {assetUnits.map(u => (
                       <option key={u.id} value={u.id}>
-                        S/N: {u.serial_number} {u.cpu ? `| ${u.cpu}` : ''} {u.memory ? `| ${Math.round(u.memory/1024)}GB RAM` : ''}
+                        S/N: {u.serial_number} {u.cpu ? `| ${u.cpu}` : ''} {u.memory ? `| ${Math.round(u.memory/1024)}GB RAM` : ''} [{u.status}]
                       </option>
                     ))}
                   </select>
