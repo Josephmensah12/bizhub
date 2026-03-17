@@ -20,7 +20,7 @@ function writeOffIncludes() {
     {
       model: Asset,
       as: 'asset',
-      attributes: ['id', 'asset_tag', 'make', 'model', 'is_serialized', 'quantity', 'cost_amount', 'currency']
+      attributes: ['id', 'asset_tag', 'make', 'model', 'is_serialized', 'quantity', 'cost_amount', 'cost_currency', 'price_currency']
     },
     {
       model: AssetUnit,
@@ -294,7 +294,7 @@ exports.create = asyncHandler(async (req, res) => {
       quantity,
       unit_cost_amount: unitCost,
       total_cost_amount: totalCost,
-      currency: asset.currency || 'GHS',
+      currency: asset.cost_currency || asset.price_currency || 'GHS',
       status: autoApprove ? 'APPROVED' : 'PENDING',
       created_by: userId,
       approved_by: autoApprove ? userId : null,
@@ -331,7 +331,7 @@ exports.create = asyncHandler(async (req, res) => {
 
     res.status(201).json({ success: true, data: result });
   } catch (err) {
-    await t.rollback();
+    if (!t.finished) await t.rollback();
     throw err;
   }
 });
