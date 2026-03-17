@@ -30,6 +30,7 @@ const storefrontRoutes = require('./routes/storefrontRoutes');
 const stockTakeRoutes = require('./routes/stockTakeRoutes');
 const conditionStatusRoutes = require('./routes/conditionStatusRoutes');
 const assetUnitRoutes = require('./routes/assetUnitRoutes');
+const writeOffRoutes = require('./routes/writeOffRoutes');
 
 const app = express();
 
@@ -96,6 +97,7 @@ app.use(`${API_BASE}/storefront`, storefrontRoutes);
 app.use(`${API_BASE}/stock-takes`, stockTakeRoutes);
 app.use(`${API_BASE}/condition-statuses`, conditionStatusRoutes);
 app.use(`${API_BASE}/assets/:assetId/units`, assetUnitRoutes);
+app.use(`${API_BASE}/write-offs`, writeOffRoutes);
 
 // 404 handler
 app.use((req, res) => {

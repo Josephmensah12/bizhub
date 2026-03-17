@@ -3,7 +3,7 @@
  */
 
 function canSeeCost(role) {
-  return ['Admin', 'Manager'].includes(role);
+  return role === 'Admin';
 }
 
 function canSeeProfit(role) {

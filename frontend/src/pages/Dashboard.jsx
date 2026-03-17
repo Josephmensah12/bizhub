@@ -576,16 +576,16 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={Math.max(top10Data.length * 36, 180)}>
               <BarChart
                 layout="vertical"
-                data={top10Data.map(item => ({
-                  id: item.id,
-                  name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || `#${item.id}`,
+                data={top10Data.map((item, idx) => ({
+                  id: item.id || idx,
+                  name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || 'Unknown',
                   quantity: Number(item.quantity)
                 }))}
                 margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
                 barCategoryGap="20%"
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: 'default' }}
                 onClick={(state) => {
-                  if (state?.activePayload?.[0]?.payload?.id) {
+                  if (state?.activePayload?.[0]?.payload?.id && typeof state.activePayload[0].payload.id === 'number' && state.activePayload[0].payload.id > 0) {
                     navigate(`/inventory/${state.activePayload[0].payload.id}`)
                   }
                 }}

@@ -34,6 +34,7 @@ import Payments from './pages/Payments'
 import UserManagement from './pages/UserManagement'
 import StockTakes from './pages/StockTakes'
 import StockTakeDetail from './pages/StockTakeDetail'
+import WriteOffs from './pages/WriteOffs'
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -105,6 +106,7 @@ function App() {
         <Route path="customers/import" element={<RoleRoute roles={['Admin', 'Manager']}><CustomerImport /></RoleRoute>} />
         <Route path="customers/:id" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><CustomerDetail /></RoleRoute>} />
         <Route path="customers/:id/edit" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><CustomerForm /></RoleRoute>} />
+        <Route path="financials/write-offs" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><WriteOffs /></RoleRoute>} />
         <Route path="reports" element={<Reports />} />
         <Route path="users" element={<RoleRoute roles={['Admin']}><UserManagement /></RoleRoute>} />
         <Route path="settings/currency" element={<RoleRoute roles={['Admin', 'Manager']}><CurrencySettings /></RoleRoute>} />

@@ -125,6 +125,12 @@ const iconMap = {
   Users: Icons.Users,
   Settings: Icons.Settings,
   Sales: Icons.Invoices,
+  'Write-Offs': (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 2h12a1 1 0 011 1v14a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" />
+      <path d="M7 8l6 6M13 8l-6 6" />
+    </svg>
+  ),
 }
 
 // ─── Navigation Structure (grouped) ─────────────────────────
@@ -154,6 +160,12 @@ const navGroups = [
       { name: 'Stock Takes', path: '/stock-takes', roles: ['Admin', 'Manager', 'Warehouse'] },
       { name: 'Repairs', path: '/repairs', roles: ['Admin', 'Manager', 'Technician'] },
       { name: 'Customers', path: '/customers', roles: ['Admin', 'Manager', 'Sales'] },
+    ]
+  },
+  {
+    label: 'FINANCIALS',
+    items: [
+      { name: 'Write-Offs', path: '/financials/write-offs', roles: ['Admin', 'Manager', 'Warehouse'] },
     ]
   },
   {

@@ -30,7 +30,7 @@ export function usePermissions() {
       const role = user.role
       const fallback = {
         role,
-        canSeeCost: ['Admin', 'Manager'].includes(role),
+        canSeeCost: role === 'Admin',
         canSeeProfit: role === 'Admin',
         canDelete: role === 'Admin',
         canManageUsers: role === 'Admin',
