@@ -362,7 +362,7 @@ exports.bulkCreate = asyncHandler(async (req, res) => {
   try {
     const units = await AssetUnit.findAll({
       where: { id: { [Op.in]: unit_ids } },
-      include: [{ model: Asset, as: 'asset' }],
+      include: [{ model: Asset, as: 'product' }],
       transaction: t
     });
 
@@ -378,7 +378,7 @@ exports.bulkCreate = asyncHandler(async (req, res) => {
     const created = [];
 
     for (const unit of units) {
-      const asset = unit.asset;
+      const asset = unit.product;
       const unitCost = parseFloat(unit.cost_amount) || parseFloat(asset.cost_amount) || 0;
       const writeOffNumber = await generateWriteOffNumber();
 
