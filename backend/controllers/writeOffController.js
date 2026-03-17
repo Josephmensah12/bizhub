@@ -57,7 +57,7 @@ function writeOffIncludes() {
 /**
  * Generate a unique write-off number: WO-YYYY-000001
  */
-async function generateWriteOffNumber() {
+async function generateWriteOffNumber(offset = 0) {
   const year = new Date().getFullYear();
   const lastWo = await InventoryWriteOff.findOne({
     where: {
@@ -71,7 +71,7 @@ async function generateWriteOffNumber() {
     const parts = lastWo.write_off_number.split('-');
     seq = parseInt(parts[2], 10) + 1;
   }
-  return `WO-${year}-${String(seq).padStart(6, '0')}`;
+  return `WO-${year}-${String(seq + offset).padStart(6, '0')}`;
 }
 
 /**
@@ -377,10 +377,11 @@ exports.bulkCreate = asyncHandler(async (req, res) => {
     const autoApprove = ['Admin', 'Manager'].includes(userRole);
     const created = [];
 
-    for (const unit of units) {
+    for (let i = 0; i < units.length; i++) {
+      const unit = units[i];
       const asset = unit.product;
       const unitCost = parseFloat(unit.cost_amount) || parseFloat(asset.cost_amount) || 0;
-      const writeOffNumber = await generateWriteOffNumber();
+      const writeOffNumber = await generateWriteOffNumber(i);
 
       // Set unit to Scrapped if not already
       if (unit.status !== 'Scrapped') {
