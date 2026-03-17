@@ -93,7 +93,7 @@ export default function WriteOffs() {
     setSearchingAssets(true)
     try {
       const res = await axios.get('/api/v1/assets', { params: { search: query, limit: 10, status: 'In Stock' } })
-      setAssetResults(res.data.data || [])
+      setAssetResults(res.data.data?.assets || res.data.data || [])
     } catch (err) {
       console.error('Asset search error:', err)
     } finally {
@@ -116,7 +116,7 @@ export default function WriteOffs() {
     if (asset.is_serialized) {
       try {
         const res = await axios.get(`/api/v1/assets/${asset.id}/units`, { params: { status: 'Available' } })
-        setAssetUnits(res.data.data || [])
+        setAssetUnits(res.data.data?.units || res.data.data || [])
       } catch (err) {
         console.error('Failed to load units:', err)
         setAssetUnits([])
