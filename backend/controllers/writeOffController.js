@@ -456,10 +456,22 @@ exports.approve = asyncHandler(async (req, res) => {
     });
   }
 
-  writeOff.status = 'APPROVED';
-  writeOff.approved_by = req.user.id;
-  writeOff.approved_at = new Date();
-  await writeOff.save();
+  const t = await sequelize.transaction();
+  try {
+    writeOff.status = 'APPROVED';
+    writeOff.approved_by = req.user.id;
+    writeOff.approved_at = new Date();
+    await writeOff.save({ transaction: t });
+
+    // Recompute asset status (may become 'Written Off')
+    const asset = await Asset.findByPk(writeOff.asset_id, { transaction: t });
+    if (asset) await asset.updateComputedStatus(t);
+
+    await t.commit();
+  } catch (err) {
+    if (!t.finished) await t.rollback();
+    throw err;
+  }
 
   await ActivityLog.log({
     actorUserId: req.user.id,

@@ -76,6 +76,9 @@ exports.list = asyncHandler(async (req, res) => {
   if (status) {
     const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
     where.status = statuses.length === 1 ? statuses[0] : { [Op.in]: statuses };
+  } else {
+    // Exclude Written Off from default inventory view
+    where.status = { [Op.ne]: 'Written Off' };
   }
   if (condition) {
     const conditions = condition.split(',').map(c => c.trim()).filter(Boolean);

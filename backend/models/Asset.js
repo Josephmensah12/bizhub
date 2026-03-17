@@ -33,7 +33,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 'In Stock',
       validate: {
-        isIn: [['In Stock', 'Processing', 'Reserved', 'Sold', 'In Repair', 'Returned']]
+        isIn: [['In Stock', 'Processing', 'Reserved', 'Sold', 'In Repair', 'Returned', 'Written Off']]
       }
     },
     condition: {
@@ -388,6 +388,35 @@ module.exports = (sequelize, DataTypes) => {
 
     if (parseInt(activeResult.cnt) > 0) {
       return 'Processing';
+    }
+
+    // Check if asset is fully written off (all units scrapped, none sold)
+    if (this.is_serialized) {
+      const [totalUnits] = await sequelize.query(
+        `SELECT COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE status = 'Scrapped') AS scrapped
+         FROM asset_units WHERE asset_id = :assetId`,
+        { replacements: { assetId: this.id }, ...queryOptions }
+      );
+      if (parseInt(totalUnits.total) > 0 && parseInt(totalUnits.total) === parseInt(totalUnits.scrapped)) {
+        // All units scrapped — check if any have write-offs (vs sold+returned)
+        const [woCount] = await sequelize.query(
+          `SELECT COUNT(*) AS cnt FROM inventory_write_offs
+           WHERE asset_id = :assetId AND status IN ('APPROVED', 'PENDING')`,
+          { replacements: { assetId: this.id }, ...queryOptions }
+        );
+        if (parseInt(woCount.cnt) > 0) return 'Written Off';
+      }
+    } else {
+      // Non-serialized: if quantity is 0 and has write-offs
+      if (this.quantity <= 0) {
+        const [woCount] = await sequelize.query(
+          `SELECT COUNT(*) AS cnt FROM inventory_write_offs
+           WHERE asset_id = :assetId AND status IN ('APPROVED', 'PENDING')`,
+          { replacements: { assetId: this.id }, ...queryOptions }
+        );
+        if (parseInt(woCount.cnt) > 0) return 'Written Off';
+      }
     }
 
     return 'In Stock';

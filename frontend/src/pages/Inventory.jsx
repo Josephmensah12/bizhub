@@ -986,6 +986,7 @@ export default function Inventory() {
                             displayStatus === 'Reserved' ? 'bg-yellow-100 text-yellow-800' :
                             displayStatus === 'Sold' ? 'bg-gray-200 text-gray-600' :
                             displayStatus === 'In Repair' ? 'bg-orange-100 text-orange-800' :
+                            displayStatus === 'Written Off' ? 'bg-red-100 text-red-800' :
                             'bg-purple-100 text-purple-800';
                           return (
                             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
