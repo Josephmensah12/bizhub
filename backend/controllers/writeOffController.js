@@ -337,6 +337,104 @@ exports.create = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/v1/write-offs/bulk
+ * Bulk create write-offs from selected unit IDs
+ */
+exports.bulkCreate = asyncHandler(async (req, res) => {
+  const { unit_ids, reason, reason_detail } = req.body;
+  const userId = req.user.id;
+  const userRole = req.user.role;
+
+  if (!unit_ids || !Array.isArray(unit_ids) || unit_ids.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'unit_ids array is required' }
+    });
+  }
+  if (!reason) {
+    return res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'reason is required' }
+    });
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    const units = await AssetUnit.findAll({
+      where: { id: { [Op.in]: unit_ids } },
+      include: [{ model: Asset, as: 'asset' }],
+      transaction: t
+    });
+
+    if (units.length === 0) {
+      await t.rollback();
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'No matching units found' }
+      });
+    }
+
+    const autoApprove = ['Admin', 'Manager'].includes(userRole);
+    const created = [];
+
+    for (const unit of units) {
+      const asset = unit.asset;
+      const unitCost = parseFloat(unit.cost_amount) || parseFloat(asset.cost_amount) || 0;
+      const writeOffNumber = await generateWriteOffNumber();
+
+      // Set unit to Scrapped if not already
+      if (unit.status !== 'Scrapped') {
+        unit.status = 'Scrapped';
+        await unit.save({ transaction: t });
+      }
+
+      const writeOff = await InventoryWriteOff.create({
+        write_off_number: writeOffNumber,
+        asset_id: asset.id,
+        asset_unit_id: unit.id,
+        reason,
+        reason_detail: reason_detail || null,
+        quantity: 1,
+        unit_cost_amount: unitCost,
+        total_cost_amount: unitCost,
+        currency: asset.cost_currency || asset.price_currency || 'GHS',
+        status: autoApprove ? 'APPROVED' : 'PENDING',
+        created_by: userId,
+        approved_by: autoApprove ? userId : null,
+        approved_at: autoApprove ? new Date() : null
+      }, { transaction: t });
+
+      created.push(writeOff);
+
+      // Update asset computed status
+      await asset.updateComputedStatus(t);
+    }
+
+    await t.commit();
+
+    // Log activity for each
+    for (const wo of created) {
+      await ActivityLog.log({
+        actorUserId: userId,
+        actionType: 'WRITE_OFF_CREATED',
+        entityType: 'WRITE_OFF',
+        entityId: wo.id,
+        summary: `Write-off ${wo.write_off_number} created (bulk)${autoApprove ? ' (auto-approved)' : ''}`,
+        metadata: { writeOffNumber: wo.write_off_number, reason, bulk: true }
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { count: created.length, writeOffs: created }
+    });
+  } catch (err) {
+    if (!t.finished) await t.rollback();
+    throw err;
+  }
+});
+
+/**
  * POST /api/v1/write-offs/:id/approve
  * Approve a pending write-off (Admin/Manager only)
  */
@@ -552,4 +650,31 @@ exports.summary = asyncHandler(async (req, res) => {
       byReason
     }
   });
+});
+
+/**
+ * GET /api/v1/write-offs/salvage-units
+ * List units with Salvage/Scrapped/Parts Only status that don't already have active write-offs
+ */
+exports.salvageUnits = asyncHandler(async (req, res) => {
+  const units = await sequelize.query(`
+    SELECT u.id, u.serial_number, u.status, u.cost_amount AS unit_cost,
+           u.condition_status_id, cs.name AS condition_name,
+           a.id AS asset_id, a.asset_tag, a.make, a.model,
+           a.cost_amount AS product_cost, a.cost_currency, a.price_currency
+    FROM asset_units u
+    JOIN assets a ON u.asset_id = a.id
+    LEFT JOIN condition_statuses cs ON u.condition_status_id = cs.id
+    WHERE a.deleted_at IS NULL
+      AND (u.status = 'Scrapped' OR u.condition_status_id IN (
+        SELECT id FROM condition_statuses WHERE LOWER(name) IN ('salvage', 'parts only')
+      ))
+      AND u.id NOT IN (
+        SELECT asset_unit_id FROM inventory_write_offs
+        WHERE asset_unit_id IS NOT NULL AND status NOT IN ('REJECTED', 'REVERSED')
+      )
+    ORDER BY a.asset_tag, u.serial_number
+  `, { type: sequelize.QueryTypes.SELECT });
+
+  res.json({ success: true, data: units });
 });

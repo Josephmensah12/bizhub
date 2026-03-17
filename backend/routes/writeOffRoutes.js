@@ -20,6 +20,9 @@ const writeOffAdmins = requireRole(['Admin']);
 // GET /api/v1/write-offs/summary - Monthly totals for dashboard/reports
 router.get('/summary', writeOffApprovers, writeOffController.summary);
 
+// GET /api/v1/write-offs/salvage-units - Salvage/scrapped units available for write-off
+router.get('/salvage-units', writeOffViewers, writeOffController.salvageUnits);
+
 // GET /api/v1/write-offs - List write-offs with filters
 router.get('/', writeOffViewers, writeOffController.list);
 
@@ -28,6 +31,9 @@ router.get('/:id', writeOffViewers, writeOffController.getById);
 
 // POST /api/v1/write-offs - Create new write-off
 router.post('/', writeOffViewers, writeOffController.create);
+
+// POST /api/v1/write-offs/bulk - Bulk create from selected units
+router.post('/bulk', writeOffViewers, writeOffController.bulkCreate);
 
 // POST /api/v1/write-offs/:id/approve - Approve pending write-off
 router.post('/:id/approve', writeOffApprovers, writeOffController.approve);

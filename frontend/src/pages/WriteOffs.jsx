@@ -44,26 +44,18 @@ export default function WriteOffs() {
   const [summary, setSummary] = useState(null)
   const [filters, setFilters] = useState({ status: '', reason: '', page: 1 })
 
-  // Create modal state
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [createForm, setCreateForm] = useState({
-    asset_id: '',
-    asset_unit_id: '',
-    reason: 'damaged',
-    reason_detail: '',
-    quantity: 1
-  })
-
-  // Asset search
-  const [assetSearch, setAssetSearch] = useState('')
-  const [assetResults, setAssetResults] = useState([])
-  const [selectedAsset, setSelectedAsset] = useState(null)
-  const [assetUnits, setAssetUnits] = useState([])
-  const [searchingAssets, setSearchingAssets] = useState(false)
+  // Salvage picker modal
+  const [showPicker, setShowPicker] = useState(false)
+  const [salvageUnits, setSalvageUnits] = useState([])
+  const [salvageLoading, setSalvageLoading] = useState(false)
+  const [selectedUnitIds, setSelectedUnitIds] = useState(new Set())
+  const [bulkReason, setBulkReason] = useState('obsolete')
+  const [bulkDetail, setBulkDetail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [salvageSearch, setSalvageSearch] = useState('')
 
   // Action modals
-  const [actionModal, setActionModal] = useState(null) // { type: 'approve'|'reject'|'reverse', writeOff }
+  const [actionModal, setActionModal] = useState(null)
   const [actionReason, setActionReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -87,73 +79,70 @@ export default function WriteOffs() {
 
   useEffect(() => { fetchWriteOffs() }, [fetchWriteOffs])
 
-  // Asset search
-  const searchAssets = useCallback(async (query) => {
-    if (query.length < 2) { setAssetResults([]); return }
-    setSearchingAssets(true)
+  // Fetch salvage/scrapped units
+  const openPicker = async () => {
+    setShowPicker(true)
+    setSalvageLoading(true)
+    setSelectedUnitIds(new Set())
+    setBulkReason('obsolete')
+    setBulkDetail('')
+    setSalvageSearch('')
     try {
-      const res = await axios.get('/api/v1/assets', { params: { search: query, limit: 10 } })
-      setAssetResults(res.data.data?.assets || res.data.data || [])
+      const res = await axios.get('/api/v1/write-offs/salvage-units')
+      setSalvageUnits(res.data.data || [])
     } catch (err) {
-      console.error('Asset search error:', err)
+      console.error('Failed to load salvage units:', err)
+      setSalvageUnits([])
     } finally {
-      setSearchingAssets(false)
+      setSalvageLoading(false)
     }
-  }, [])
+  }
 
-  useEffect(() => {
-    const timer = setTimeout(() => searchAssets(assetSearch), 300)
-    return () => clearTimeout(timer)
-  }, [assetSearch, searchAssets])
+  const toggleUnit = (id) => {
+    setSelectedUnitIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
-  // Load units when serialized asset selected
-  const selectAsset = async (asset) => {
-    setSelectedAsset(asset)
-    setCreateForm(f => ({ ...f, asset_id: asset.id, asset_unit_id: '', quantity: 1 }))
-    setAssetResults([])
-    setAssetSearch(`${asset.asset_tag} - ${asset.make} ${asset.model}`)
-
-    if (asset.is_serialized) {
-      try {
-        const res = await axios.get(`/api/v1/assets/${asset.id}/units`)
-        setAssetUnits(res.data.data?.units || res.data.data || [])
-      } catch (err) {
-        console.error('Failed to load units:', err)
-        setAssetUnits([])
-      }
+  const toggleAll = () => {
+    if (selectedUnitIds.size === filteredSalvage.length) {
+      setSelectedUnitIds(new Set())
     } else {
-      setAssetUnits([])
+      setSelectedUnitIds(new Set(filteredSalvage.map(u => u.id)))
     }
   }
 
-  // Create write-off
-  const handleCreate = async (e) => {
-    e.preventDefault()
-    setCreating(true)
+  // Filter salvage units by search
+  const filteredSalvage = salvageUnits.filter(u => {
+    if (!salvageSearch) return true
+    const q = salvageSearch.toLowerCase()
+    return (u.serial_number || '').toLowerCase().includes(q)
+      || (u.asset_tag || '').toLowerCase().includes(q)
+      || (u.make || '').toLowerCase().includes(q)
+      || (u.model || '').toLowerCase().includes(q)
+  })
+
+  // Submit bulk write-offs
+  const handleBulkSubmit = async () => {
+    if (selectedUnitIds.size === 0) return
+    setSubmitting(true)
     try {
-      await axios.post('/api/v1/write-offs', {
-        asset_id: createForm.asset_id,
-        asset_unit_id: createForm.asset_unit_id || undefined,
-        reason: createForm.reason,
-        reason_detail: createForm.reason_detail || undefined,
-        quantity: selectedAsset?.is_serialized ? 1 : parseInt(createForm.quantity)
+      const res = await axios.post('/api/v1/write-offs/bulk', {
+        unit_ids: [...selectedUnitIds],
+        reason: bulkReason,
+        reason_detail: bulkDetail || undefined
       })
-      setShowCreateModal(false)
-      resetCreateForm()
+      setShowPicker(false)
       fetchWriteOffs()
+      alert(`${res.data.data.count} write-off(s) created successfully`)
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed to create write-off')
+      alert(err.response?.data?.error?.message || 'Failed to create write-offs')
     } finally {
-      setCreating(false)
+      setSubmitting(false)
     }
-  }
-
-  const resetCreateForm = () => {
-    setCreateForm({ asset_id: '', asset_unit_id: '', reason: 'damaged', reason_detail: '', quantity: 1 })
-    setSelectedAsset(null)
-    setAssetSearch('')
-    setAssetResults([])
-    setAssetUnits([])
   }
 
   // Action handlers
@@ -191,7 +180,7 @@ export default function WriteOffs() {
           <p className="text-sm text-gray-500 mt-1">Track and manage inventory shrinkage</p>
         </div>
         <button
-          onClick={() => { resetCreateForm(); setShowCreateModal(true) }}
+          onClick={openPicker}
           className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3v10M3 8h10" /></svg>
@@ -286,14 +275,12 @@ export default function WriteOffs() {
                           <button
                             onClick={() => setActionModal({ type: 'approve', writeOff: wo })}
                             className="text-green-600 hover:text-green-800 text-xs px-2 py-1 rounded hover:bg-green-50"
-                            title="Approve"
                           >
                             Approve
                           </button>
                           <button
                             onClick={() => { setActionModal({ type: 'reject', writeOff: wo }); setActionReason('') }}
                             className="text-red-600 hover:text-red-800 text-xs px-2 py-1 rounded hover:bg-red-50"
-                            title="Reject"
                           >
                             Reject
                           </button>
@@ -303,7 +290,6 @@ export default function WriteOffs() {
                         <button
                           onClick={() => { setActionModal({ type: 'reverse', writeOff: wo }); setActionReason('') }}
                           className="text-orange-600 hover:text-orange-800 text-xs px-2 py-1 rounded hover:bg-orange-50"
-                          title="Reverse"
                         >
                           Reverse
                         </button>
@@ -342,138 +328,155 @@ export default function WriteOffs() {
         )}
       </div>
 
-      {/* Create Modal */}
-      {showCreateModal && (
+      {/* Salvage/Scrapped Picker Modal */}
+      {showPicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold">New Write-Off</h2>
-              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+              <div>
+                <h2 className="text-lg font-semibold">Select Units for Write-Off</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Showing salvage and scrapped units not yet written off</p>
+              </div>
+              <button onClick={() => setShowPicker(false)} className="text-gray-400 hover:text-gray-600">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 5l10 10M15 5L5 15" /></svg>
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="p-6 space-y-4">
-              {/* Asset search */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Asset *</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={assetSearch}
-                    onChange={e => { setAssetSearch(e.target.value); setSelectedAsset(null); setCreateForm(f => ({ ...f, asset_id: '' })) }}
-                    placeholder="Search by tag, make, model..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    required={!selectedAsset}
-                  />
-                  {searchingAssets && <div className="absolute right-3 top-2.5 text-xs text-gray-400">Searching...</div>}
-                  {assetResults.length > 0 && !selectedAsset && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {assetResults.map(a => (
-                        <button
-                          key={a.id}
-                          type="button"
-                          onClick={() => selectAsset(a)}
-                          className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-0"
-                        >
-                          <span className="font-medium">{a.asset_tag}</span>
-                          <span className="text-gray-500 ml-2">{a.make} {a.model}</span>
-                          {a.is_serialized && <span className="text-blue-500 ml-2 text-xs">(Serialized)</span>}
-                          {!a.is_serialized && <span className="text-gray-400 ml-2 text-xs">Qty: {a.quantity}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+            {/* Search + stats bar */}
+            <div className="px-6 py-3 border-b bg-gray-50 flex flex-wrap items-center gap-3 shrink-0">
+              <input
+                type="text"
+                value={salvageSearch}
+                onChange={e => setSalvageSearch(e.target.value)}
+                placeholder="Search by S/N, tag, make, model..."
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[200px]"
+              />
+              <span className="text-xs text-gray-500">
+                {filteredSalvage.length} unit{filteredSalvage.length !== 1 ? 's' : ''} available
+                {selectedUnitIds.size > 0 && <span className="text-red-600 font-medium ml-2">{selectedUnitIds.size} selected</span>}
+              </span>
+            </div>
 
-              {/* Unit selection for serialized */}
-              {selectedAsset?.is_serialized && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
-                  <select
-                    value={createForm.asset_unit_id}
-                    onChange={e => setCreateForm(f => ({ ...f, asset_unit_id: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    required
-                  >
-                    <option value="">Select a unit...</option>
-                    {assetUnits.map(u => (
-                      <option key={u.id} value={u.id}>
-                        S/N: {u.serial_number} {u.cpu ? `| ${u.cpu}` : ''} {u.memory ? `| ${Math.round(u.memory/1024)}GB RAM` : ''} [{u.status}]
-                      </option>
+            {/* Unit list */}
+            <div className="flex-1 overflow-y-auto">
+              {salvageLoading ? (
+                <div className="p-8 text-center text-gray-400">Loading units...</div>
+              ) : filteredSalvage.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">No salvage or scrapped units available for write-off</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left">
+                        <input
+                          type="checkbox"
+                          checked={selectedUnitIds.size === filteredSalvage.length && filteredSalvage.length > 0}
+                          onChange={toggleAll}
+                          className="rounded border-gray-300"
+                        />
+                      </th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Asset</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Serial Number</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Condition</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">Status</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredSalvage.map(u => (
+                      <tr
+                        key={u.id}
+                        className={`hover:bg-gray-50 cursor-pointer ${selectedUnitIds.has(u.id) ? 'bg-red-50' : ''}`}
+                        onClick={() => toggleUnit(u.id)}
+                      >
+                        <td className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedUnitIds.has(u.id)}
+                            onChange={() => toggleUnit(u.id)}
+                            onClick={e => e.stopPropagation()}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="font-medium text-gray-900">{u.asset_tag}</div>
+                          <div className="text-xs text-gray-500">{u.make} {u.model}</div>
+                        </td>
+                        <td className="px-4 py-2 font-mono text-xs">{u.serial_number}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            u.condition_name === 'Salvage' ? 'bg-orange-100 text-orange-800' :
+                            u.condition_name === 'Parts Only' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {u.condition_name || '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            u.status === 'Scrapped' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                          }`}>
+                            {u.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs">
+                          {formatCurrency(u.unit_cost || u.product_cost, u.cost_currency || 'GHS')}
+                        </td>
+                      </tr>
                     ))}
-                  </select>
-                  {assetUnits.length === 0 && <p className="text-xs text-red-500 mt-1">No available units</p>}
-                </div>
+                  </tbody>
+                </table>
               )}
+            </div>
 
-              {/* Quantity for non-serialized */}
-              {selectedAsset && !selectedAsset.is_serialized && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max={selectedAsset.quantity || 1}
-                    value={createForm.quantity}
-                    onChange={e => setCreateForm(f => ({ ...f, quantity: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    required
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Available: {selectedAsset.quantity}</p>
+            {/* Footer: reason + submit */}
+            {filteredSalvage.length > 0 && (
+              <div className="border-t px-6 py-4 bg-gray-50 shrink-0">
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex-1 min-w-[150px]">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Reason *</label>
+                    <select
+                      value={bulkReason}
+                      onChange={e => setBulkReason(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    >
+                      {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Details</label>
+                    <input
+                      type="text"
+                      value={bulkDetail}
+                      onChange={e => setBulkDetail(e.target.value)}
+                      placeholder="Optional notes..."
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowPicker(false)}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleBulkSubmit}
+                      disabled={submitting || selectedUnitIds.size === 0}
+                      className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                    >
+                      {submitting ? 'Creating...' : `Write Off ${selectedUnitIds.size} Unit${selectedUnitIds.size !== 1 ? 's' : ''}`}
+                    </button>
+                  </div>
                 </div>
-              )}
-
-              {/* Reason */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reason *</label>
-                <select
-                  value={createForm.reason}
-                  onChange={e => setCreateForm(f => ({ ...f, reason: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  required
-                >
-                  {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
+                {isApprover && selectedUnitIds.size > 0 && (
+                  <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 text-xs text-blue-700">
+                    These will be auto-approved since you are a {user?.role}.
+                  </div>
+                )}
               </div>
-
-              {/* Detail */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Details</label>
-                <textarea
-                  value={createForm.reason_detail}
-                  onChange={e => setCreateForm(f => ({ ...f, reason_detail: e.target.value }))}
-                  rows={3}
-                  placeholder="Additional details about the write-off..."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-
-              {/* Auto-approve notice */}
-              {isApprover && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
-                  This write-off will be auto-approved since you are a {user?.role}.
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || !createForm.asset_id || (selectedAsset?.is_serialized && !createForm.asset_unit_id)}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                >
-                  {creating ? 'Creating...' : 'Create Write-Off'}
-                </button>
-              </div>
-            </form>
+            )}
           </div>
         </div>
       )}
