@@ -577,17 +577,17 @@ export default function Dashboard() {
               <BarChart
                 layout="vertical"
                 data={top10Data.map((item, idx) => ({
-                  id: item.id || idx,
+                  key: idx,
                   name: [item.make, item.model].filter(Boolean).join(' ') || item.asset_tag || 'Unknown',
+                  searchTerm: item.model || item.make || '',
                   quantity: Number(item.quantity)
                 }))}
                 margin={{ top: 0, right: 40, left: 0, bottom: 0 }}
                 barCategoryGap="20%"
-                style={{ cursor: 'default' }}
+                style={{ cursor: 'pointer' }}
                 onClick={(state) => {
-                  if (state?.activePayload?.[0]?.payload?.id && typeof state.activePayload[0].payload.id === 'number' && state.activePayload[0].payload.id > 0) {
-                    navigate(`/inventory/${state.activePayload[0].payload.id}`)
-                  }
+                  const term = state?.activePayload?.[0]?.payload?.searchTerm
+                  if (term) navigate(`/inventory?search=${encodeURIComponent(term)}`)
                 }}
               >
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
