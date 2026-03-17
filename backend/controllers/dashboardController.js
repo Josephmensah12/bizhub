@@ -200,11 +200,11 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const agingFilter = req.query.aging; // 'under_1y', '1_to_2y', 'over_2y'
   let agingWhere = '';
   if (agingFilter === 'under_1y') {
-    agingWhere = `AND COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '1 year'`;
+    agingWhere = `AND COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '1 year'`;
   } else if (agingFilter === '1_to_2y') {
-    agingWhere = `AND COALESCE(purchase_date, created_at) >= NOW() - INTERVAL '2 years' AND COALESCE(purchase_date, created_at) < NOW() - INTERVAL '1 year'`;
+    agingWhere = `AND COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '2 years' AND COALESCE(a.purchase_date, a.created_at) < NOW() - INTERVAL '1 year'`;
   } else if (agingFilter === 'over_2y') {
-    agingWhere = `AND COALESCE(purchase_date, created_at) < NOW() - INTERVAL '2 years'`;
+    agingWhere = `AND COALESCE(a.purchase_date, a.created_at) < NOW() - INTERVAL '2 years'`;
   }
   const topByQuantity = await Asset.sequelize.query(
     `SELECT make, model,
