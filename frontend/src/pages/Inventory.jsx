@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -181,6 +181,7 @@ function MultiSelectDropdown({ label, options, selected, onChange, onClear }) {
 }
 
 export default function Inventory() {
+  const [searchParams] = useSearchParams();
   const { permissions } = usePermissions();
   const canSeeCost = permissions?.canSeeCost ?? false;
   const canAddInventory = permissions?.canAddInventory ?? false;
@@ -201,7 +202,7 @@ export default function Inventory() {
   const [restoring, setRestoring] = useState(false);
 
   const [filters, setFilters] = useState({
-    search: '',
+    search: searchParams.get('search') || '',
     category: [],      // Multi-select
     assetType: [],     // Multi-select
     status: [],        // Multi-select
