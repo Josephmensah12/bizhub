@@ -4,8 +4,9 @@
  * Inventory write-off management with approval workflow
  */
 
-const { Asset, AssetUnit, User, InventoryWriteOff, ActivityLog, sequelize } = require('../models');
+const { Asset, AssetUnit, User, InventoryWriteOff, Expense, ExpenseCategory, ActivityLog, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const { getExchangeRate } = require('../services/exchangeRateService');
 
 // Async handler wrapper
 const asyncHandler = handler => (req, res, next) => {
@@ -92,6 +93,77 @@ async function restoreInventory(writeOff, t) {
   }
 
   await asset.updateComputedStatus(t);
+}
+
+/**
+ * Create an expense entry from an approved write-off.
+ * The write-off cost flows into the "Inventory Write-Offs" expense category.
+ */
+async function createExpenseFromWriteOff(writeOff, asset, userId, t) {
+  // Find or fallback to the "Inventory Write-Offs" category
+  let category = await ExpenseCategory.findOne({
+    where: { name: 'Inventory Write-Offs' },
+    transaction: t
+  });
+  if (!category) {
+    // Create it if missing (safety net)
+    category = await ExpenseCategory.create({
+      name: 'Inventory Write-Offs',
+      is_sensitive: false,
+      is_active: true,
+      sort_order: 13
+    }, { transaction: t });
+  }
+
+  const currency = writeOff.currency || 'GHS';
+  const amountLocal = writeOff.total_cost_amount || 0;
+  const expenseDate = writeOff.approved_at || new Date();
+  const dateStr = typeof expenseDate === 'string' ? expenseDate : new Date(expenseDate).toISOString().split('T')[0];
+
+  // Get FX rate for USD conversion
+  let fxRate = 1;
+  if (currency !== 'USD') {
+    try {
+      fxRate = await getExchangeRate(currency, 'USD', dateStr);
+    } catch (e) {
+      fxRate = 1; // fallback
+    }
+  }
+  const amountUsd = currency === 'USD' ? amountLocal : amountLocal * fxRate;
+
+  const d = new Date(dateStr);
+  const recognitionPeriod = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+  const assetLabel = asset
+    ? `${asset.asset_tag || ''} ${asset.make || ''} ${asset.model || ''}`.trim()
+    : `Asset #${writeOff.asset_id}`;
+
+  return Expense.create({
+    expense_date: dateStr,
+    recognition_period: recognitionPeriod,
+    category_id: category.id,
+    description: `Write-off ${writeOff.write_off_number}: ${assetLabel} (${writeOff.reason})`,
+    vendor_or_payee: null,
+    amount_local: amountLocal,
+    currency_code: currency,
+    exchange_rate_used: fxRate,
+    amount_usd: Math.round(amountUsd * 100) / 100,
+    expense_type: 'one_time',
+    source_type: 'write_off',
+    write_off_id: writeOff.id,
+    notes: `Auto-generated from write-off ${writeOff.write_off_number}. Qty: ${writeOff.quantity}, reason: ${writeOff.reason}`,
+    created_by: userId
+  }, { transaction: t });
+}
+
+/**
+ * Delete the expense linked to a write-off (used on reverse).
+ */
+async function deleteExpenseForWriteOff(writeOffId, t) {
+  await Expense.destroy({
+    where: { write_off_id: writeOffId },
+    transaction: t
+  });
 }
 
 /**
@@ -304,6 +376,11 @@ exports.create = asyncHandler(async (req, res) => {
     // Update asset computed status
     await asset.updateComputedStatus(t);
 
+    // Auto-approved write-offs flow into expenses immediately
+    if (autoApprove) {
+      await createExpenseFromWriteOff(writeOff, asset, userId, t);
+    }
+
     await t.commit();
 
     // Log activity
@@ -405,16 +482,23 @@ exports.bulkCreate = asyncHandler(async (req, res) => {
         approved_at: autoApprove ? new Date() : null
       }, { transaction: t });
 
-      created.push(writeOff);
+      created.push({ writeOff, asset });
 
       // Update asset computed status
       await asset.updateComputedStatus(t);
     }
 
+    // Auto-approved bulk write-offs flow into expenses
+    if (autoApprove) {
+      for (const { writeOff, asset } of created) {
+        await createExpenseFromWriteOff(writeOff, asset, userId, t);
+      }
+    }
+
     await t.commit();
 
     // Log activity for each
-    for (const wo of created) {
+    for (const { writeOff: wo } of created) {
       await ActivityLog.log({
         actorUserId: userId,
         actionType: 'WRITE_OFF_CREATED',
@@ -427,7 +511,7 @@ exports.bulkCreate = asyncHandler(async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: { count: created.length, writeOffs: created }
+      data: { count: created.length, writeOffs: created.map(c => c.writeOff) }
     });
   } catch (err) {
     if (!t.finished) await t.rollback();
@@ -466,6 +550,9 @@ exports.approve = asyncHandler(async (req, res) => {
     // Recompute asset status (may become 'Written Off')
     const asset = await Asset.findByPk(writeOff.asset_id, { transaction: t });
     if (asset) await asset.updateComputedStatus(t);
+
+    // Create expense entry for the approved write-off cost
+    await createExpenseFromWriteOff(writeOff, asset, req.user.id, t);
 
     await t.commit();
   } catch (err) {
@@ -587,6 +674,9 @@ exports.reverse = asyncHandler(async (req, res) => {
 
     // Restore inventory
     await restoreInventory(writeOff, t);
+
+    // Remove the linked expense
+    await deleteExpenseForWriteOff(writeOff.id, t);
 
     await t.commit();
   } catch (err) {

@@ -62,13 +62,18 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'one_time'
     },
     source_type: {
-      type: DataTypes.ENUM('manual', 'auto_generated_recurring'),
+      type: DataTypes.ENUM('manual', 'auto_generated_recurring', 'write_off'),
       allowNull: false,
       defaultValue: 'manual'
     },
     recurrence_group_id: {
       type: DataTypes.INTEGER,
       allowNull: true
+    },
+    write_off_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Links to inventory_write_offs.id if auto-generated from write-off'
     },
     notes: {
       type: DataTypes.TEXT,
@@ -90,6 +95,7 @@ module.exports = (sequelize, DataTypes) => {
     Expense.belongsTo(models.ExpenseCategory, { foreignKey: 'category_id', as: 'category' });
     Expense.belongsTo(models.User, { foreignKey: 'created_by', as: 'creator' });
     Expense.belongsTo(models.RecurringExpense, { foreignKey: 'recurrence_group_id', as: 'recurringExpense' });
+    Expense.belongsTo(models.InventoryWriteOff, { foreignKey: 'write_off_id', as: 'writeOff' });
   };
 
   return Expense;

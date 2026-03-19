@@ -157,6 +157,7 @@ const navGroups = [
     label: 'SALES',
     items: [
       { name: 'Inventory', path: '/inventory', roles: ['Admin', 'Manager', 'Sales', 'Technician', 'Warehouse'] },
+      { name: 'Write-Offs', path: '/financials/write-offs', roles: ['Admin', 'Manager', 'Warehouse'] },
       {
         name: 'Invoices', path: '/sales/invoices', addPath: '/sales/invoices/new',
         roles: ['Admin', 'Manager', 'Sales'],
@@ -178,7 +179,6 @@ const navGroups = [
     label: 'FINANCIALS',
     items: [
       { name: 'Expenses', path: '/expenses', roles: ['Admin', 'Manager', 'Sales'] },
-      { name: 'Write-Offs', path: '/financials/write-offs', roles: ['Admin', 'Manager', 'Warehouse'] },
       { name: 'Financial Reports', path: '/financial-reports', roles: ['Admin'] },
     ]
   },
