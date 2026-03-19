@@ -31,6 +31,9 @@ const stockTakeRoutes = require('./routes/stockTakeRoutes');
 const conditionStatusRoutes = require('./routes/conditionStatusRoutes');
 const assetUnitRoutes = require('./routes/assetUnitRoutes');
 const writeOffRoutes = require('./routes/writeOffRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
+const expenseCategoryRoutes = require('./routes/expenseCategoryRoutes');
+const financialReportRoutes = require('./routes/financialReportRoutes');
 
 const app = express();
 
@@ -98,6 +101,9 @@ app.use(`${API_BASE}/stock-takes`, stockTakeRoutes);
 app.use(`${API_BASE}/condition-statuses`, conditionStatusRoutes);
 app.use(`${API_BASE}/assets/:assetId/units`, assetUnitRoutes);
 app.use(`${API_BASE}/write-offs`, writeOffRoutes);
+app.use(`${API_BASE}/expenses`, expenseRoutes);
+app.use(`${API_BASE}/expense-categories`, expenseCategoryRoutes);
+app.use(`${API_BASE}/financial-reports`, financialReportRoutes);
 
 // 404 handler
 app.use((req, res) => {

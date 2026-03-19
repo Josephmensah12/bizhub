@@ -43,6 +43,10 @@ export function usePermissions() {
         canAddInventory: ['Admin', 'Manager', 'Warehouse'].includes(role),
         canAccessSettings: role === 'Admin',
         canViewSettings: ['Admin', 'Manager'].includes(role),
+        canAccessFinancialReports: role === 'Admin',
+        canManageExpenses: ['Admin', 'Manager'].includes(role),
+        canCreateExpenses: ['Admin', 'Manager', 'Sales'].includes(role),
+        canViewSensitiveExpenses: role === 'Admin',
         maxDiscountPercent: role === 'Admin' ? null : role === 'Manager' ? 35 : 15,
         accessibleReports: role === 'Admin'
           ? ['sales', 'margins', 'products', 'customers', 'staff', 'inventory', 'my-performance', 'reconciliation']

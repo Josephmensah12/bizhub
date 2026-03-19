@@ -131,6 +131,18 @@ const iconMap = {
       <path d="M7 8l6 6M13 8l-6 6" />
     </svg>
   ),
+  Expenses: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="8" />
+      <path d="M10 6v8M7.5 8.5h4a1.5 1.5 0 010 3h-3a1.5 1.5 0 000 3h4" />
+    </svg>
+  ),
+  'Financial Reports': (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v14h14" />
+      <path d="M7 13l3-4 3 2 4-5" />
+    </svg>
+  ),
 }
 
 // ─── Navigation Structure (grouped) ─────────────────────────
@@ -165,7 +177,9 @@ const navGroups = [
   {
     label: 'FINANCIALS',
     items: [
+      { name: 'Expenses', path: '/expenses', roles: ['Admin', 'Manager', 'Sales'] },
       { name: 'Write-Offs', path: '/financials/write-offs', roles: ['Admin', 'Manager', 'Warehouse'] },
+      { name: 'Financial Reports', path: '/financial-reports', roles: ['Admin'] },
     ]
   },
   {

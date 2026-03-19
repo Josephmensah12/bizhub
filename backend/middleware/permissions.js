@@ -50,6 +50,22 @@ function canAccessSettings(role) {
   return role === 'Admin';
 }
 
+function canAccessFinancialReports(role) {
+  return role === 'Admin';
+}
+
+function canManageExpenses(role) {
+  return ['Admin', 'Manager'].includes(role);
+}
+
+function canCreateExpenses(role) {
+  return ['Admin', 'Manager', 'Sales'].includes(role);
+}
+
+function canViewSensitiveExpenses(role) {
+  return role === 'Admin';
+}
+
 function canViewSettings(role) {
   return ['Admin', 'Manager'].includes(role);
 }
@@ -103,6 +119,10 @@ function buildPermissions(user) {
     canAddInventory: canAddInventory(role),
     canAccessSettings: canAccessSettings(role),
     canViewSettings: canViewSettings(role),
+    canAccessFinancialReports: canAccessFinancialReports(role),
+    canManageExpenses: canManageExpenses(role),
+    canCreateExpenses: canCreateExpenses(role),
+    canViewSensitiveExpenses: canViewSensitiveExpenses(role),
     maxDiscountPercent: maxDiscount,
     accessibleReports: accessibleReports(role)
   };
@@ -198,6 +218,10 @@ module.exports = {
   canAddInventory,
   canAccessSettings,
   canViewSettings,
+  canAccessFinancialReports,
+  canManageExpenses,
+  canCreateExpenses,
+  canViewSensitiveExpenses,
   canAccessReport,
   accessibleReports,
   defaultMaxDiscount,
