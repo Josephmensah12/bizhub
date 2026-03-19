@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 
-function formatCurrency(amount, currency = 'GHS') {
+function formatCurrency(amount, currency = 'GHS', rate = 1) {
   if (amount === null || amount === undefined) return '—'
-  const prefix = amount < 0 ? '-' : ''
-  const abs = Math.abs(parseFloat(amount))
+  const converted = currency === 'USD' ? Number(amount) / rate : Number(amount)
+  const prefix = converted < 0 ? '-' : ''
+  const abs = Math.abs(converted)
   return `${prefix}${currency} ${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
@@ -33,6 +34,8 @@ export default function FinancialReports() {
   const [period, setPeriod] = useState('month')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [currency, setCurrency] = useState('GHS')
+  const [xRate, setXRate] = useState(1)
 
   const [summaryData, setSummaryData] = useState(null)
   const [pnlData, setPnlData] = useState(null)
@@ -42,6 +45,19 @@ export default function FinancialReports() {
   const params = period === 'custom'
     ? { period, startDate, endDate }
     : { period }
+
+  // Shorthand for formatting in active currency
+  const fc = (amount) => formatCurrency(amount, currency, xRate)
+
+  // Fetch exchange rate
+  useEffect(() => {
+    axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS')
+      .then(res => {
+        const rate = res.data?.data?.rate
+        if (rate) setXRate(parseFloat(rate))
+      })
+      .catch(() => {})
+  }, [])
 
   const fetchSummary = useCallback(async () => {
     try {
@@ -89,6 +105,25 @@ export default function FinancialReports() {
           <p className="text-sm text-gray-500 mt-1">Company financial performance overview</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Currency Toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400">1 USD = {xRate.toFixed(2)} GHS</span>
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setCurrency('GHS')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${currency === 'GHS' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                GHS
+              </button>
+              <button
+                onClick={() => setCurrency('USD')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${currency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                USD
+              </button>
+            </div>
+          </div>
+          {/* Period selector */}
           <select value={period} onChange={e => setPeriod(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm">
             {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
@@ -109,31 +144,31 @@ export default function FinancialReports() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Revenue</p>
-            <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(summaryData.cards.revenue.value)}</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">{fc(summaryData.cards.revenue.value)}</p>
             <ChangeIndicator value={summaryData.cards.revenue.change} />
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Expenses</p>
-            <p className="text-xl font-bold text-red-600 mt-1">{formatCurrency(summaryData.cards.expenses.value)}</p>
+            <p className="text-xl font-bold text-red-600 mt-1">{fc(summaryData.cards.expenses.value)}</p>
             <ChangeIndicator value={summaryData.cards.expenses.change} />
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Gross Profit</p>
             <p className={`text-xl font-bold mt-1 ${summaryData.cards.gross_profit.value >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(summaryData.cards.gross_profit.value)}
+              {fc(summaryData.cards.gross_profit.value)}
             </p>
             <ChangeIndicator value={summaryData.cards.gross_profit.change} />
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Net Profit</p>
             <p className={`text-xl font-bold mt-1 ${summaryData.cards.net_profit.value >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(summaryData.cards.net_profit.value)}
+              {fc(summaryData.cards.net_profit.value)}
             </p>
             <ChangeIndicator value={summaryData.cards.net_profit.change} />
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Collected</p>
-            <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(summaryData.cards.collected.value)}</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">{fc(summaryData.cards.collected.value)}</p>
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Net Margin</p>
@@ -174,24 +209,24 @@ export default function FinancialReports() {
                   {/* Revenue */}
                   <tr className="border-b">
                     <td className="py-3 font-semibold text-gray-900">Revenue</td>
-                    <td className="py-3 text-right font-semibold text-gray-900">{formatCurrency(pnlData.summary.total_revenue)}</td>
+                    <td className="py-3 text-right font-semibold text-gray-900">{fc(pnlData.summary.total_revenue)}</td>
                   </tr>
                   <tr className="text-gray-500">
                     <td className="py-2 pl-6">Invoiced ({pnlData.summary.invoice_count} invoices)</td>
-                    <td className="py-2 text-right">{formatCurrency(pnlData.summary.total_revenue)}</td>
+                    <td className="py-2 text-right">{fc(pnlData.summary.total_revenue)}</td>
                   </tr>
 
                   {/* COGS */}
                   <tr className="border-b">
                     <td className="py-3 font-semibold text-gray-900">Cost of Goods Sold</td>
-                    <td className="py-3 text-right font-semibold text-red-600">({formatCurrency(pnlData.summary.cost_of_goods_sold)})</td>
+                    <td className="py-3 text-right font-semibold text-red-600">({fc(pnlData.summary.cost_of_goods_sold)})</td>
                   </tr>
 
                   {/* Gross Profit */}
                   <tr className="border-b bg-gray-50">
                     <td className="py-3 font-bold text-gray-900">Gross Profit</td>
                     <td className={`py-3 text-right font-bold ${pnlData.summary.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(pnlData.summary.gross_profit)}
+                      {fc(pnlData.summary.gross_profit)}
                       <span className="text-xs text-gray-500 ml-2">({pnlData.summary.gross_margin}%)</span>
                     </td>
                   </tr>
@@ -199,7 +234,7 @@ export default function FinancialReports() {
                   {/* Operating Expenses */}
                   <tr className="border-b">
                     <td className="py-3 font-semibold text-gray-900">Operating Expenses</td>
-                    <td className="py-3 text-right font-semibold text-red-600">({formatCurrency(pnlData.summary.total_expenses)})</td>
+                    <td className="py-3 text-right font-semibold text-red-600">({fc(pnlData.summary.total_expenses)})</td>
                   </tr>
                   {pnlData.expense_breakdown.map((cat, i) => (
                     <tr key={i} className="text-gray-500">
@@ -207,7 +242,7 @@ export default function FinancialReports() {
                         {cat.category}
                         {cat.is_sensitive && <span className="ml-2 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">Sensitive</span>}
                       </td>
-                      <td className="py-2 text-right">{formatCurrency(cat.total)}</td>
+                      <td className="py-2 text-right">{fc(cat.total)}</td>
                     </tr>
                   ))}
 
@@ -215,7 +250,7 @@ export default function FinancialReports() {
                   <tr className="border-t-2 border-gray-300 bg-gray-50">
                     <td className="py-4 font-bold text-lg text-gray-900">Net Profit</td>
                     <td className={`py-4 text-right font-bold text-lg ${pnlData.summary.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(pnlData.summary.net_profit)}
+                      {fc(pnlData.summary.net_profit)}
                       <span className="text-xs text-gray-500 ml-2">({pnlData.summary.net_margin}%)</span>
                     </td>
                   </tr>
@@ -246,14 +281,14 @@ export default function FinancialReports() {
                     {pnlData.monthly_breakdown.map((m, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium">{m.month}</td>
-                        <td className="px-4 py-3 text-right">{formatCurrency(m.revenue)}</td>
-                        <td className="px-4 py-3 text-right text-red-600">({formatCurrency(m.cogs)})</td>
+                        <td className="px-4 py-3 text-right">{fc(m.revenue)}</td>
+                        <td className="px-4 py-3 text-right text-red-600">({fc(m.cogs)})</td>
                         <td className={`px-4 py-3 text-right ${m.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(m.gross_profit)}
+                          {fc(m.gross_profit)}
                         </td>
-                        <td className="px-4 py-3 text-right text-red-600">({formatCurrency(m.expenses)})</td>
+                        <td className="px-4 py-3 text-right text-red-600">({fc(m.expenses)})</td>
                         <td className={`px-4 py-3 text-right font-semibold ${m.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(m.net_profit)}
+                          {fc(m.net_profit)}
                         </td>
                       </tr>
                     ))}
@@ -286,7 +321,7 @@ export default function FinancialReports() {
                         <div className="flex justify-between text-sm">
                           <span className="font-medium text-gray-700">{m.month}</span>
                           <span className={`font-semibold ${m.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            Profit: {formatCurrency(m.profit)}
+                            Profit: {fc(m.profit)}
                           </span>
                         </div>
                         <div className="flex gap-1">
@@ -304,8 +339,8 @@ export default function FinancialReports() {
                           </div>
                         </div>
                         <div className="flex gap-4 text-xs text-gray-500">
-                          <span>Revenue: {formatCurrency(m.revenue)}</span>
-                          <span>Expenses: {formatCurrency(m.expenses)}</span>
+                          <span>Revenue: {fc(m.revenue)}</span>
+                          <span>Expenses: {fc(m.expenses)}</span>
                         </div>
                       </div>
                     )
@@ -339,10 +374,10 @@ export default function FinancialReports() {
                       {rveData.comparison.map((m, i) => (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="px-4 py-3 font-medium">{m.month}</td>
-                          <td className="px-4 py-3 text-right text-green-600">{formatCurrency(m.revenue)}</td>
-                          <td className="px-4 py-3 text-right text-red-600">{formatCurrency(m.expenses)}</td>
+                          <td className="px-4 py-3 text-right text-green-600">{fc(m.revenue)}</td>
+                          <td className="px-4 py-3 text-right text-red-600">{fc(m.expenses)}</td>
                           <td className={`px-4 py-3 text-right font-semibold ${m.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(m.profit)}
+                            {fc(m.profit)}
                           </td>
                         </tr>
                       ))}
