@@ -80,7 +80,7 @@ exports.profitAndLoss = asyncHandler(async (req, res) => {
   // ─── Expenses (all categories including sensitive — Admin only) ───
   const expenseResult = await sequelize.query(`
     SELECT
-      COALESCE(SUM(e.amount_usd), 0) as total_expenses,
+      COALESCE(SUM(e.amount_local), 0) as total_expenses,
       COUNT(e.id) as expense_count
     FROM expenses e
     WHERE e.expense_date BETWEEN :startDate AND :endDate
@@ -94,13 +94,13 @@ exports.profitAndLoss = asyncHandler(async (req, res) => {
     SELECT
       ec.name as category_name,
       ec.is_sensitive,
-      COALESCE(SUM(e.amount_usd), 0) as total_usd,
+      COALESCE(SUM(e.amount_local), 0) as total_local,
       COUNT(e.id) as count
     FROM expenses e
     JOIN expense_categories ec ON e.category_id = ec.id
     WHERE e.expense_date BETWEEN :startDate AND :endDate
     GROUP BY ec.id, ec.name, ec.is_sensitive
-    ORDER BY total_usd DESC
+    ORDER BY total_local DESC
   `, {
     replacements: { startDate, endDate },
     type: QueryTypes.SELECT
@@ -127,7 +127,7 @@ exports.profitAndLoss = asyncHandler(async (req, res) => {
   const expenseByMonth = await sequelize.query(`
     SELECT
       e.recognition_period as month,
-      COALESCE(SUM(e.amount_usd), 0) as expenses
+      COALESCE(SUM(e.amount_local), 0) as expenses
     FROM expenses e
     WHERE e.expense_date BETWEEN :startDate AND :endDate
     GROUP BY e.recognition_period
@@ -190,7 +190,7 @@ exports.profitAndLoss = asyncHandler(async (req, res) => {
       expense_breakdown: expenseByCategory.map(c => ({
         category: c.category_name,
         is_sensitive: c.is_sensitive,
-        total_usd: parseFloat(c.total_usd),
+        total: parseFloat(c.total_local),
         count: parseInt(c.count)
       })),
       monthly_breakdown: monthlyBreakdown
@@ -279,7 +279,7 @@ exports.summary = asyncHandler(async (req, res) => {
 
   // Current period expenses
   const exp = await sequelize.query(`
-    SELECT COALESCE(SUM(amount_usd), 0) as expenses
+    SELECT COALESCE(SUM(amount_local), 0) as expenses
     FROM expenses WHERE expense_date BETWEEN :startDate AND :endDate
   `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
 
@@ -302,7 +302,7 @@ exports.summary = asyncHandler(async (req, res) => {
   `, { replacements: { startDate: prevStart, endDate: prevEnd }, type: QueryTypes.SELECT });
 
   const prevExp = await sequelize.query(`
-    SELECT COALESCE(SUM(amount_usd), 0) as expenses
+    SELECT COALESCE(SUM(amount_local), 0) as expenses
     FROM expenses WHERE expense_date BETWEEN :startDate AND :endDate
   `, { replacements: { startDate: prevStart, endDate: prevEnd }, type: QueryTypes.SELECT });
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 
-function formatCurrency(amount, currency = 'USD') {
+function formatCurrency(amount, currency = 'GHS') {
   if (amount === null || amount === undefined) return '—'
   const prefix = amount < 0 ? '-' : ''
   const abs = Math.abs(parseFloat(amount))
@@ -207,7 +207,7 @@ export default function FinancialReports() {
                         {cat.category}
                         {cat.is_sensitive && <span className="ml-2 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">Sensitive</span>}
                       </td>
-                      <td className="py-2 text-right">{formatCurrency(cat.total_usd)}</td>
+                      <td className="py-2 text-right">{formatCurrency(cat.total)}</td>
                     </tr>
                   ))}
 
