@@ -2,20 +2,28 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Add write_off_id column to expenses for linking
-    await queryInterface.addColumn('expenses', 'write_off_id', {
-      type: Sequelize.UUID,
-      allowNull: true,
-      references: { model: 'inventory_write_offs', key: 'id' },
-      onUpdate: 'CASCADE',
-      onDelete: 'SET NULL'
-    });
+    // Add write_off_id column to expenses for linking (skip if already exists from sync)
+    const tableDesc = await queryInterface.describeTable('expenses');
+    if (!tableDesc.write_off_id) {
+      await queryInterface.addColumn('expenses', 'write_off_id', {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: { model: 'inventory_write_offs', key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+      });
+    }
 
-    await queryInterface.addIndex('expenses', ['write_off_id'], {
-      name: 'idx_expenses_write_off_id'
-    });
+    // Add index if not exists
+    try {
+      await queryInterface.addIndex('expenses', ['write_off_id'], {
+        name: 'idx_expenses_write_off_id'
+      });
+    } catch (e) {
+      // Index may already exist
+    }
 
-    // Add 'write_off' to source_type enum
+    // Add 'write_off' to source_type enum (IF NOT EXISTS is idempotent)
     await queryInterface.sequelize.query(`
       ALTER TYPE "enum_expenses_source_type" ADD VALUE IF NOT EXISTS 'write_off';
     `);
