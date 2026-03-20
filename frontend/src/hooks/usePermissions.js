@@ -50,13 +50,7 @@ export function usePermissions() {
         maxDiscountPercent: role === 'Admin' ? null : role === 'Manager' ? 35 : 15,
         accessibleReports: role === 'Admin'
           ? ['sales', 'margins', 'products', 'customers', 'staff', 'inventory', 'my-performance', 'reconciliation']
-          : role === 'Manager'
-            ? ['sales', 'products', 'customers', 'staff', 'inventory', 'my-performance', 'reconciliation']
-            : role === 'Sales'
-              ? ['my-performance']
-              : role === 'Warehouse'
-                ? ['inventory', 'my-performance']
-                : ['my-performance']
+          : ['my-performance']
       }
       cachedPermissions = fallback
       cacheUserId = user.id

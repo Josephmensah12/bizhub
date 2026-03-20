@@ -111,7 +111,7 @@ function App() {
         <Route path="expenses" element={<RoleRoute roles={['Admin', 'Manager', 'Sales']}><Expenses /></RoleRoute>} />
         <Route path="financials/write-offs" element={<RoleRoute roles={['Admin', 'Manager', 'Warehouse']}><WriteOffs /></RoleRoute>} />
         <Route path="financial-reports" element={<RoleRoute roles={['Admin']}><FinancialReports /></RoleRoute>} />
-        <Route path="reports" element={<Reports />} />
+        <Route path="reports" element={<RoleRoute roles={['Admin']}><Reports /></RoleRoute>} />
         <Route path="users" element={<RoleRoute roles={['Admin']}><UserManagement /></RoleRoute>} />
         <Route path="settings/currency" element={<RoleRoute roles={['Admin', 'Manager']}><CurrencySettings /></RoleRoute>} />
         <Route path="settings/company-profile" element={<RoleRoute roles={['Admin', 'Manager']}><CompanyProfile /></RoleRoute>} />

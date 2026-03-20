@@ -185,7 +185,7 @@ const navGroups = [
   {
     label: 'INSIGHTS',
     items: [
-      { name: 'Reports', path: '/reports', roles: ['Admin', 'Manager', 'Sales', 'Warehouse'] },
+      { name: 'Reports', path: '/reports', roles: ['Admin'] },
     ]
   },
   {
