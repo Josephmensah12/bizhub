@@ -356,7 +356,7 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
     { type: sequelize.QueryTypes.SELECT }
   );
 
-  // 2. Current inventory value — excludes Sold, Scrapped, In Repair
+  // 2. Current inventory value — excludes Sold, Written Off, Scrapped, In Repair
   const [[valRow]] = await sequelize.query(
     `SELECT
        COALESCE(SUM(
@@ -368,12 +368,19 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
          END
        ), 0) AS inventory_value
      FROM assets a
-     WHERE a.deleted_at IS NULL AND a.status IN ('In Stock','Processing','Reserved')`
+     WHERE a.deleted_at IS NULL
+       AND a.status IN ('In Stock','Processing','Reserved')
+       AND (
+         a.is_serialized = false AND a.quantity > 0
+         OR a.is_serialized = true AND EXISTS (
+           SELECT 1 FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped')
+         )
+       )`
   );
   const currentInventoryValue = parseFloat(valRow.inventory_value) || 0;
 
   // 3. Cumulative sold value after each month-end (to reconstruct historical inventory)
-  //    Inventory at month-end ≈ current inventory + total sold value after that month
+  //    Inventory at month-end ≈ current inventory + total sold after + total written-off after
   const soldRows = await sequelize.query(
     `SELECT
        TO_CHAR(i.invoice_date, 'YYYY-MM') AS month,
@@ -388,25 +395,48 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
     { type: sequelize.QueryTypes.SELECT }
   );
 
+  // 3b. Write-off value by month (at retail/price for inventory reconstruction)
+  const writeOffRows = await sequelize.query(
+    `SELECT
+       TO_CHAR(wo.approved_at, 'YYYY-MM') AS month,
+       SUM(wo.quantity * COALESCE(
+         CASE WHEN au.id IS NOT NULL THEN COALESCE(au.price_amount, a.price_amount)
+         ELSE a.price_amount END, 0
+       )) AS writeoff_value
+     FROM inventory_write_offs wo
+     JOIN assets a ON wo.asset_id = a.id
+     LEFT JOIN asset_units au ON wo.asset_unit_id = au.id
+     WHERE wo.status = 'APPROVED' AND wo.approved_at IS NOT NULL
+     GROUP BY TO_CHAR(wo.approved_at, 'YYYY-MM')
+     ORDER BY month`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
+
   // Build cumulative sold-after-month lookup (reverse cumulative sum)
+  // Include write-offs as inventory exits (like sales, they reduce inventory)
   const soldByMonth = new Map(soldRows.map(r => [r.month, parseFloat(r.sold_value) || 0]));
-  const allMonths = [...new Set([...revenueRows.map(r => r.month), ...soldRows.map(r => r.month)])].sort();
-  const cumulativeSoldAfter = new Map();
+  const writeOffByMonth = new Map(writeOffRows.map(r => [r.month, parseFloat(r.writeoff_value) || 0]));
+  const allMonths = [...new Set([
+    ...revenueRows.map(r => r.month),
+    ...soldRows.map(r => r.month),
+    ...writeOffRows.map(r => r.month)
+  ])].sort();
+  const cumulativeExitAfter = new Map();
   let cumulative = 0;
   for (let i = allMonths.length - 1; i >= 0; i--) {
     const m = allMonths[i];
-    // Sold value in months AFTER this one contributes to this month's inventory
-    cumulativeSoldAfter.set(m, cumulative);
-    cumulative += soldByMonth.get(m) || 0;
+    cumulativeExitAfter.set(m, cumulative);
+    cumulative += (soldByMonth.get(m) || 0) + (writeOffByMonth.get(m) || 0);
   }
 
   // 4. Build monthly data with reconstructed inventory
   const data = revenueRows.map(r => {
     const revenue = parseFloat(r.revenue) || 0;
-    const soldAfter = cumulativeSoldAfter.get(r.month) || 0;
-    const closingInventory = currentInventoryValue + soldAfter;
-    // Opening = closing of previous month (closing + that month's sold value)
-    const openingInventory = closingInventory + (soldByMonth.get(r.month) || 0);
+    const exitAfter = cumulativeExitAfter.get(r.month) || 0;
+    const closingInventory = currentInventoryValue + exitAfter;
+    // Opening = closing + this month's exits (sold + written off)
+    const monthExits = (soldByMonth.get(r.month) || 0) + (writeOffByMonth.get(r.month) || 0);
+    const openingInventory = closingInventory + monthExits;
     const avgInventory = (openingInventory + closingInventory) / 2;
     const ratio = avgInventory > 0 ? revenue / avgInventory : 0;
     return {
