@@ -145,6 +145,16 @@ module.exports = (sequelize, DataTypes) => {
     void_reason: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    category: {
+      type: DataTypes.STRING(60),
+      allowNull: true,
+      comment: 'Override category when asset_id is NULL (imported items)'
+    },
+    asset_type: {
+      type: DataTypes.STRING(60),
+      allowNull: true,
+      comment: 'Override asset_type when asset_id is NULL (imported items)'
     }
   }, {
     tableName: 'invoice_items',

@@ -186,10 +186,10 @@ exports.topSellers = asyncHandler(async (req, res) => {
 
   const topByQuantity = await sequelize.query(`
     SELECT
-      COALESCE(a.make, 'Unlinked') as make,
-      COALESCE(a.model, 'Unlinked') as model,
-      COALESCE(a.category, 'Unlinked') as category,
-      COALESCE(a.asset_type, 'Unlinked') as asset_type,
+      COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked') as make,
+      COALESCE(a.model, ii.description, 'Unlinked') as model,
+      COALESCE(a.category, ii.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_profit_amount) as total_profit,
@@ -204,7 +204,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY COALESCE(a.make, 'Unlinked'), COALESCE(a.model, 'Unlinked'), COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
+    GROUP BY COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked'), COALESCE(a.model, ii.description, 'Unlinked'), COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY total_sold DESC
     LIMIT :limit
   `, {
@@ -215,10 +215,10 @@ exports.topSellers = asyncHandler(async (req, res) => {
   // Top by revenue
   const topByRevenue = await sequelize.query(`
     SELECT
-      COALESCE(a.make, 'Unlinked') as make,
-      COALESCE(a.model, 'Unlinked') as model,
-      COALESCE(a.category, 'Unlinked') as category,
-      COALESCE(a.asset_type, 'Unlinked') as asset_type,
+      COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked') as make,
+      COALESCE(a.model, ii.description, 'Unlinked') as model,
+      COALESCE(a.category, ii.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_profit_amount) as total_profit,
@@ -232,7 +232,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY COALESCE(a.make, 'Unlinked'), COALESCE(a.model, 'Unlinked'), COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
+    GROUP BY COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked'), COALESCE(a.model, ii.description, 'Unlinked'), COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY total_revenue DESC
     LIMIT :limit
   `, {
@@ -243,8 +243,8 @@ exports.topSellers = asyncHandler(async (req, res) => {
   // Top by category
   const topCategories = await sequelize.query(`
     SELECT
-      COALESCE(a.category, 'Unlinked') as category,
-      COALESCE(a.asset_type, 'Unlinked') as asset_type,
+      COALESCE(a.category, ii.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       COUNT(DISTINCT i.id) as invoice_count,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
@@ -259,7 +259,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
+    GROUP BY COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY total_revenue DESC
   `, {
     replacements: { startDate, endDate },
@@ -672,8 +672,8 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
   // Margin by category
   const marginByCategory = await sequelize.query(`
     SELECT
-      COALESCE(a.category, 'Unlinked') as category,
-      COALESCE(a.asset_type, 'Unlinked') as asset_type,
+      COALESCE(a.category, ii.category, 'Unlinked') as category,
+      COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       SUM(ii.line_total_amount) as revenue,
       SUM(ii.line_cost_amount) as cost,
       SUM(ii.line_profit_amount) as profit,
@@ -688,7 +688,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
       AND i.status != 'CANCELLED'
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
+    GROUP BY COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY profit DESC
   `, {
     replacements: { startDate, endDate },
@@ -740,7 +740,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
   // Margin by model
   const marginByModel = await sequelize.query(`
     SELECT
-      COALESCE(a.make, 'Unlinked') as make, COALESCE(a.model, 'Unlinked') as model, COALESCE(a.category, 'Unlinked') as category, COALESCE(a.asset_type, 'Unlinked') as asset_type,
+      COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked') as make, COALESCE(a.model, ii.description, 'Unlinked') as model, COALESCE(a.category, ii.category, 'Unlinked') as category, COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
       SUM(ii.line_total_amount) as total_revenue,
       SUM(ii.line_cost_amount) as total_cost,
@@ -755,7 +755,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-    GROUP BY COALESCE(a.make, 'Unlinked'), COALESCE(a.model, 'Unlinked'), COALESCE(a.category, 'Unlinked'), COALESCE(a.asset_type, 'Unlinked')
+    GROUP BY COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked'), COALESCE(a.model, ii.description, 'Unlinked'), COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY margin_percent DESC
     LIMIT 20
   `, {
