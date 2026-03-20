@@ -145,7 +145,14 @@ export default function FinancialReports() {
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Revenue</p>
             <p className="text-xl font-bold text-gray-900 mt-1">{fc(summaryData.cards.revenue.value)}</p>
-            <ChangeIndicator value={summaryData.cards.revenue.change} />
+            <div className="flex items-center justify-between mt-1">
+              <ChangeIndicator value={summaryData.cards.revenue.change} />
+              <span className="text-[11px] text-gray-400">
+                {summaryData.cards.revenue.value > 0
+                  ? `${Math.round((summaryData.cards.collected.value / summaryData.cards.revenue.value) * 100)}% collected`
+                  : ''}
+              </span>
+            </div>
           </div>
           <div className="bg-white rounded-xl border p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Expenses</p>
