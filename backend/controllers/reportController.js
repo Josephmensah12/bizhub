@@ -468,7 +468,7 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
         ELSE a.cost_amount * a.quantity END
       ), 0) as total_cost_value
     FROM assets a
-    WHERE a.status = 'In Stock'
+    WHERE a.status IN ('In Stock', 'Processing', 'Reserved', 'In Repair', 'Returned')
       AND a.deleted_at IS NULL
     GROUP BY 1
     ORDER BY MIN(COALESCE(a.purchase_date, a.created_at)) DESC
@@ -488,7 +488,7 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
         COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
       ELSE a.price_amount * a.quantity END as total_retail
     FROM assets a
-    WHERE a.status = 'In Stock'
+    WHERE a.status IN ('In Stock', 'Processing', 'Reserved', 'In Repair', 'Returned')
       AND a.deleted_at IS NULL
     ORDER BY COALESCE(a.purchase_date, a.created_at) ASC
     LIMIT 20
@@ -513,7 +513,7 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       ), 0) as cost_value,
       AVG(EXTRACT(DAY FROM NOW() - COALESCE(a.purchase_date, a.created_at))) as avg_days_in_stock
     FROM assets a
-    WHERE a.status = 'In Stock'
+    WHERE a.status IN ('In Stock', 'Processing', 'Reserved', 'In Repair', 'Returned')
       AND a.deleted_at IS NULL
     GROUP BY a.category, a.asset_type
     ORDER BY retail_value DESC
@@ -591,7 +591,7 @@ exports.lowStockReport = asyncHandler(async (req, res) => {
     JOIN invoice_items ii ON ii.asset_id = a.id
     JOIN invoices i ON ii.invoice_id = i.id
     WHERE a.quantity = 0
-      AND a.status != 'Sold'
+      AND a.status NOT IN ('Sold', 'Written Off')
       AND a.deleted_at IS NULL
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
@@ -1131,7 +1131,7 @@ exports.inventoryValuation = asyncHandler(async (req, res) => {
   // Get all non-sold assets with their condition status
   const assets = await Asset.findAll({
     where: {
-      status: { [Op.notIn]: ['Sold'] },
+      status: { [Op.notIn]: ['Sold', 'Written Off'] },
       deleted_at: null
     },
     include: [{
