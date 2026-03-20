@@ -61,17 +61,29 @@ function getGranularity(startDate, endDate) {
 exports.profitAndLoss = asyncHandler(async (req, res) => {
   const { startDate, endDate } = parseDateRange(req.query);
 
-  // ─── Revenue (from PAID / PARTIALLY_PAID invoices in period) ───
+  // ─── Revenue (from non-cancelled invoices in period) ───
   const revenueResult = await sequelize.query(`
     SELECT
       COALESCE(SUM(total_amount), 0) as total_revenue,
-      COALESCE(SUM(amount_paid), 0) as collected_revenue,
       COALESCE(SUM(total_cost_amount), 0) as cost_of_goods_sold,
       COUNT(*) as invoice_count
     FROM invoices
     WHERE invoice_date BETWEEN :startDate AND :endDate
       AND status != 'CANCELLED'
       AND is_deleted = false
+  `, {
+    replacements: { startDate, endDate },
+    type: QueryTypes.SELECT
+  });
+
+  // ─── Collected (actual payments received in period, by payment_date) ───
+  const collectedResult = await sequelize.query(`
+    SELECT
+      COALESCE(SUM(CASE WHEN p.transaction_type = 'PAYMENT' THEN p.amount ELSE 0 END), 0) -
+      COALESCE(SUM(CASE WHEN p.transaction_type = 'REFUND' THEN p.amount ELSE 0 END), 0) as collected_revenue
+    FROM invoice_payments p
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND p.voided_at IS NULL
   `, {
     replacements: { startDate, endDate },
     type: QueryTypes.SELECT
@@ -138,7 +150,7 @@ exports.profitAndLoss = asyncHandler(async (req, res) => {
   });
 
   const totalRevenue = parseFloat(revenueResult[0].total_revenue) || 0;
-  const collectedRevenue = parseFloat(revenueResult[0].collected_revenue) || 0;
+  const collectedRevenue = parseFloat(collectedResult[0].collected_revenue) || 0;
   const cogs = parseFloat(revenueResult[0].cost_of_goods_sold) || 0;
   const totalExpenses = parseFloat(expenseResult[0].total_expenses) || 0;
   const grossProfit = totalRevenue - cogs;
@@ -270,11 +282,20 @@ exports.summary = asyncHandler(async (req, res) => {
   const rev = await sequelize.query(`
     SELECT
       COALESCE(SUM(total_amount), 0) as revenue,
-      COALESCE(SUM(total_cost_amount), 0) as cogs,
-      COALESCE(SUM(amount_paid), 0) as collected
+      COALESCE(SUM(total_cost_amount), 0) as cogs
     FROM invoices
     WHERE invoice_date BETWEEN :startDate AND :endDate
       AND status != 'CANCELLED' AND is_deleted = false
+  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+
+  // Current period collected (actual payments by payment_date)
+  const col = await sequelize.query(`
+    SELECT
+      COALESCE(SUM(CASE WHEN p.transaction_type = 'PAYMENT' THEN p.amount ELSE 0 END), 0) -
+      COALESCE(SUM(CASE WHEN p.transaction_type = 'REFUND' THEN p.amount ELSE 0 END), 0) as collected
+    FROM invoice_payments p
+    WHERE p.payment_date BETWEEN :startDate AND :endDate
+      AND p.voided_at IS NULL
   `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
 
   // Current period expenses
@@ -285,7 +306,7 @@ exports.summary = asyncHandler(async (req, res) => {
 
   const revenue = parseFloat(rev[0].revenue) || 0;
   const cogs = parseFloat(rev[0].cogs) || 0;
-  const collected = parseFloat(rev[0].collected) || 0;
+  const collected = parseFloat(col[0].collected) || 0;
   const expenses = parseFloat(exp[0].expenses) || 0;
   const grossProfit = revenue - cogs;
   const netProfit = grossProfit - expenses;
