@@ -470,6 +470,12 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
     FROM assets a
     WHERE a.status IN ('In Stock', 'Processing', 'Reserved', 'In Repair', 'Returned')
       AND a.deleted_at IS NULL
+      AND (
+        a.is_serialized = false AND a.quantity > 0
+        OR a.is_serialized = true AND EXISTS (
+          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')
+        )
+      )
     GROUP BY 1
     ORDER BY MIN(COALESCE(a.purchase_date, a.created_at)) DESC
   `, { type: QueryTypes.SELECT });
@@ -490,6 +496,12 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
     FROM assets a
     WHERE a.status IN ('In Stock', 'Processing', 'Reserved', 'In Repair', 'Returned')
       AND a.deleted_at IS NULL
+      AND (
+        a.is_serialized = false AND a.quantity > 0
+        OR a.is_serialized = true AND EXISTS (
+          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')
+        )
+      )
     ORDER BY COALESCE(a.purchase_date, a.created_at) ASC
     LIMIT 20
   `, { type: QueryTypes.SELECT });
@@ -515,6 +527,12 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
     FROM assets a
     WHERE a.status IN ('In Stock', 'Processing', 'Reserved', 'In Repair', 'Returned')
       AND a.deleted_at IS NULL
+      AND (
+        a.is_serialized = false AND a.quantity > 0
+        OR a.is_serialized = true AND EXISTS (
+          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')
+        )
+      )
     GROUP BY a.category, a.asset_type
     ORDER BY retail_value DESC
   `, { type: QueryTypes.SELECT });
