@@ -448,11 +448,16 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
     };
   });
 
+  // Total write-off value for transparency
+  let totalWriteOffValue = 0;
+  for (const [, v] of writeOffByMonth) totalWriteOffValue += v;
+
   res.json({
     success: true,
     data: {
       months: data,
-      current_inventory_value: parseFloat(currentInventoryValue.toFixed(2))
+      current_inventory_value: parseFloat(currentInventoryValue.toFixed(2)),
+      total_writeoff_value: parseFloat(totalWriteOffValue.toFixed(2))
     }
   });
 });
