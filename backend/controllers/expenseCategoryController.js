@@ -34,15 +34,24 @@ exports.list = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/v1/expense-categories
- * Create a new category (Admin only).
+ * Create a new category (Admin & Manager).
+ * Only Admin can set is_sensitive = true.
  */
 exports.create = asyncHandler(async (req, res) => {
   const { name, is_sensitive, is_active, sort_order } = req.body;
+  const isAdmin = req.user.role === 'Admin';
 
   if (!name || !name.trim()) {
     return res.status(400).json({
       success: false,
       error: { code: 'VALIDATION_ERROR', message: 'Category name is required' }
+    });
+  }
+
+  if (is_sensitive && !isAdmin) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Only Admin can create sensitive categories' }
     });
   }
 
@@ -58,7 +67,8 @@ exports.create = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/v1/expense-categories/:id
- * Update a category (Admin only).
+ * Update a category (Admin & Manager).
+ * Only Admin can modify is_sensitive flag.
  */
 exports.update = asyncHandler(async (req, res) => {
   const category = await ExpenseCategory.findByPk(req.params.id);
@@ -69,10 +79,19 @@ exports.update = asyncHandler(async (req, res) => {
     });
   }
 
+  const isAdmin = req.user.role === 'Admin';
   const { name, is_sensitive, is_active, sort_order } = req.body;
   const updates = {};
   if (name !== undefined) updates.name = name.trim();
-  if (is_sensitive !== undefined) updates.is_sensitive = is_sensitive;
+  if (is_sensitive !== undefined) {
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Only Admin can modify the sensitive flag' }
+      });
+    }
+    updates.is_sensitive = is_sensitive;
+  }
   if (is_active !== undefined) updates.is_active = is_active;
   if (sort_order !== undefined) updates.sort_order = sort_order;
 

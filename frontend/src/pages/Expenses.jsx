@@ -301,6 +301,146 @@ function RecurringModal({ open, onClose, onSaved, categories }) {
   )
 }
 
+// ─── Category Management Panel ──────────────────────────────
+function CategoryManager({ categories, isAdmin, onCategoriesChanged }) {
+  const [newName, setNewName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [editName, setEditName] = useState('')
+
+  const handleAdd = async (e) => {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setSaving(true)
+    setError('')
+    try {
+      await axios.post('/api/v1/expense-categories', { name: newName.trim() })
+      setNewName('')
+      onCategoriesChanged()
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Failed to add category')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async (id) => {
+    if (!editName.trim()) return
+    try {
+      await axios.patch(`/api/v1/expense-categories/${id}`, { name: editName.trim() })
+      setEditingId(null)
+      setEditName('')
+      onCategoriesChanged()
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to update category')
+    }
+  }
+
+  const handleDeactivate = async (id) => {
+    if (!window.confirm('Deactivate this category? It will no longer appear in dropdowns.')) return
+    try {
+      await axios.delete(`/api/v1/expense-categories/${id}`)
+      onCategoriesChanged()
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to deactivate category')
+    }
+  }
+
+  const handleReactivate = async (id) => {
+    try {
+      await axios.patch(`/api/v1/expense-categories/${id}`, { is_active: true })
+      onCategoriesChanged()
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Failed to reactivate category')
+    }
+  }
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">Manage Expense Categories</h2>
+
+      {/* Add new category */}
+      <form onSubmit={handleAdd} className="flex gap-3 mb-6">
+        <input
+          type="text"
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          placeholder="New category name..."
+          className="flex-1 border rounded-lg px-3 py-2 text-sm max-w-xs"
+          required
+        />
+        <button type="submit" disabled={saving}
+          className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+          {saving ? 'Adding...' : 'Add Category'}
+        </button>
+      </form>
+      {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
+
+      {/* Categories list */}
+      <div className="bg-white rounded-xl border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
+              {isAdmin && <th className="text-left px-4 py-3 font-medium text-gray-500">Sensitive</th>}
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {categories.length === 0 ? (
+              <tr><td colSpan={isAdmin ? 4 : 3} className="text-center py-8 text-gray-400">No categories</td></tr>
+            ) : categories.map(cat => (
+              <tr key={cat.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3">
+                  {editingId === cat.id ? (
+                    <div className="flex gap-2">
+                      <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                        className="border rounded px-2 py-1 text-sm flex-1" autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') handleUpdate(cat.id); if (e.key === 'Escape') setEditingId(null) }} />
+                      <button onClick={() => handleUpdate(cat.id)} className="text-xs text-primary-600 hover:underline">Save</button>
+                      <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">Cancel</button>
+                    </div>
+                  ) : (
+                    <span className="text-gray-900">{cat.name}</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  }`}>{cat.is_active ? 'Active' : 'Inactive'}</span>
+                </td>
+                {isAdmin && (
+                  <td className="px-4 py-3">
+                    {cat.is_sensitive && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Sensitive</span>}
+                  </td>
+                )}
+                <td className="px-4 py-3">
+                  <div className="flex gap-2 justify-end">
+                    {editingId !== cat.id && (
+                      <button onClick={() => { setEditingId(cat.id); setEditName(cat.name) }}
+                        className="text-xs text-primary-600 hover:underline">Rename</button>
+                    )}
+                    {isAdmin && cat.is_active && (
+                      <button onClick={() => handleDeactivate(cat.id)}
+                        className="text-xs text-red-600 hover:underline">Deactivate</button>
+                    )}
+                    {isAdmin && !cat.is_active && (
+                      <button onClick={() => handleReactivate(cat.id)}
+                        className="text-xs text-green-600 hover:underline">Reactivate</button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Expenses Page ──────────────────────────────────────
 export default function Expenses() {
   const { user } = useAuth()
@@ -326,6 +466,17 @@ export default function Expenses() {
   const [showExpenseModal, setShowExpenseModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [showRecurringModal, setShowRecurringModal] = useState(false)
+
+  // Category management: fetch all (including inactive) for the Categories tab
+  const [allCategories, setAllCategories] = useState([])
+  const fetchAllCategories = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/v1/expense-categories')
+      setAllCategories(res.data.data.categories)
+    } catch (err) {
+      console.error('Failed to load all categories:', err)
+    }
+  }, [])
 
   // Analytics period
   const [analyticsPeriod, setAnalyticsPeriod] = useState('month')
@@ -383,7 +534,8 @@ export default function Expenses() {
   useEffect(() => {
     if (activeTab === 'recurring') fetchRecurring()
     if (activeTab === 'analytics') fetchAnalytics()
-  }, [activeTab, fetchRecurring, fetchAnalytics])
+    if (activeTab === 'categories') fetchAllCategories()
+  }, [activeTab, fetchRecurring, fetchAnalytics, fetchAllCategories])
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this expense?')) return
@@ -420,7 +572,8 @@ export default function Expenses() {
   const tabs = [
     { key: 'list', label: 'Expenses' },
     ...(canManage ? [{ key: 'recurring', label: 'Recurring' }] : []),
-    { key: 'analytics', label: 'Analytics' }
+    { key: 'analytics', label: 'Analytics' },
+    ...(canManage ? [{ key: 'categories', label: 'Categories' }] : [])
   ]
 
   return (
@@ -745,6 +898,15 @@ export default function Expenses() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Categories Tab */}
+      {activeTab === 'categories' && canManage && (
+        <CategoryManager
+          categories={allCategories}
+          isAdmin={isAdmin}
+          onCategoriesChanged={() => { fetchAllCategories(); fetchCategories() }}
+        />
       )}
 
       {/* Modals */}

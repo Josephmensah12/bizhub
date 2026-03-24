@@ -8,10 +8,12 @@ router.use(authenticate);
 // All authenticated users can list (filtered by role)
 router.get('/', expenseCategoryController.list);
 
-// Admin only: create, update, delete
-const adminOnly = requireRole(['Admin']);
-router.post('/', adminOnly, expenseCategoryController.create);
-router.patch('/:id', adminOnly, expenseCategoryController.update);
-router.delete('/:id', adminOnly, expenseCategoryController.remove);
+// Admin & Manager: create, update
+const adminOrManager = requireRole(['Admin', 'Manager']);
+router.post('/', adminOrManager, expenseCategoryController.create);
+router.patch('/:id', adminOrManager, expenseCategoryController.update);
+
+// Admin only: delete (deactivate)
+router.delete('/:id', requireRole(['Admin']), expenseCategoryController.remove);
 
 module.exports = router;
