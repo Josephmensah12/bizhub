@@ -359,17 +359,13 @@ module.exports = (sequelize, DataTypes) => {
           { replacements: { assetId: this.id }, ...queryOptions }
         );
         if (parseInt(availUnits.cnt) > 0) {
-          // Still has available units — check for active invoices too
-          const [activeResult] = await sequelize.query(
-            `SELECT COUNT(*) AS cnt
-             FROM invoice_items ii
-             JOIN invoices i ON ii.invoice_id = i.id
-             WHERE ii.asset_id = :assetId
-               AND i.status NOT IN ('CANCELLED', 'PAID')
-               AND ii.voided_at IS NULL`,
+          // Check if any units are truly Available (not just Reserved on open invoices)
+          const [freeUnits] = await sequelize.query(
+            `SELECT COUNT(*) AS cnt FROM asset_units
+             WHERE asset_id = :assetId AND status = 'Available'`,
             { replacements: { assetId: this.id }, ...queryOptions }
           );
-          return parseInt(activeResult.cnt) > 0 ? 'Processing' : 'In Stock';
+          return parseInt(freeUnits.cnt) > 0 ? 'In Stock' : 'Processing';
         }
       }
       return 'Sold';
