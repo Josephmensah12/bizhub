@@ -237,14 +237,15 @@ exports.start = asyncHandler(async (req, res) => {
     });
   }
 
-  // For serialized assets, compute expected quantity excluding Sold units
+  // For serialized assets, compute expected quantity excluding Sold and Written Off units
+  // Note: Scrapped units are still physically present and should be counted
   const serializedIds = assets.filter(a => a.is_serialized).map(a => a.id);
   let unitCountMap = {};
   if (serializedIds.length > 0) {
     const [rows] = await sequelize.query(
       `SELECT asset_id, COUNT(*) AS cnt
          FROM asset_units
-        WHERE asset_id IN (:ids) AND status != 'Sold'
+        WHERE asset_id IN (:ids) AND status NOT IN ('Sold', 'Written Off')
         GROUP BY asset_id`,
       { replacements: { ids: serializedIds } }
     );
@@ -1106,6 +1107,13 @@ exports.addScan = asyncHandler(async (req, res) => {
 
   const asset = unit.product;
 
+  // Warn if unit has been sold or written off — it should not be in physical inventory
+  const unitWarning = unit.status === 'Sold'
+    ? { code: 'SOLD_UNIT_SCANNED', message: `Warning: ${unit.serial_number} is marked as SOLD. This unit should not be in stock.` }
+    : unit.status === 'Written Off'
+      ? { code: 'WRITTEN_OFF_UNIT_SCANNED', message: `Warning: ${unit.serial_number} has been WRITTEN OFF. This unit should not be in stock.` }
+      : null;
+
   // Find the stock take item for this asset
   const item = await StockTakeItem.findOne({
     where: { stock_take_id: stockTake.id, asset_id: asset.id }
@@ -1221,7 +1229,7 @@ exports.addScan = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    data: { scan: scanData, item: itemData, batch: activeBatch.toJSON(), new_batch_created: newBatchCreated },
+    data: { scan: scanData, item: itemData, batch: activeBatch.toJSON(), new_batch_created: newBatchCreated, warning: unitWarning },
     message: `Scanned: ${sn} → ${asset.make} ${asset.model}`
   });
 });

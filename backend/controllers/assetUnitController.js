@@ -375,6 +375,7 @@ exports.summary = asyncHandler(async (req, res) => {
       case 'Sold': summary.sold = count; break;
       case 'In Repair': summary.in_repair = count; break;
       case 'Scrapped': summary.scrapped = count; break;
+      case 'Written Off': summary.written_off = count; break;
     }
   }
 

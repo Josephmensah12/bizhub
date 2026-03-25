@@ -355,7 +355,7 @@ module.exports = (sequelize, DataTypes) => {
       if (this.is_serialized) {
         const [availUnits] = await sequelize.query(
           `SELECT COUNT(*) AS cnt FROM asset_units
-           WHERE asset_id = :assetId AND status NOT IN ('Sold', 'Scrapped')`,
+           WHERE asset_id = :assetId AND status NOT IN ('Sold', 'Scrapped', 'Written Off')`,
           { replacements: { assetId: this.id }, ...queryOptions }
         );
         if (parseInt(availUnits.cnt) > 0) {
@@ -390,16 +390,16 @@ module.exports = (sequelize, DataTypes) => {
       return 'Processing';
     }
 
-    // Check if asset is fully written off (all units scrapped, none sold)
+    // Check if asset is fully written off (all units written off or scrapped, none active)
     if (this.is_serialized) {
       const [totalUnits] = await sequelize.query(
         `SELECT COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE status = 'Scrapped') AS scrapped
+                COUNT(*) FILTER (WHERE status IN ('Scrapped', 'Written Off')) AS disposed
          FROM asset_units WHERE asset_id = :assetId`,
         { replacements: { assetId: this.id }, ...queryOptions }
       );
-      if (parseInt(totalUnits.total) > 0 && parseInt(totalUnits.total) === parseInt(totalUnits.scrapped)) {
-        // All units scrapped — check if any have write-offs (vs sold+returned)
+      if (parseInt(totalUnits.total) > 0 && parseInt(totalUnits.total) === parseInt(totalUnits.disposed)) {
+        // All units disposed — check if any have write-offs
         const [woCount] = await sequelize.query(
           `SELECT COUNT(*) AS cnt FROM inventory_write_offs
            WHERE asset_id = :assetId AND status IN ('APPROVED', 'PENDING')`,

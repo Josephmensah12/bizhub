@@ -3,9 +3,17 @@ import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import { usePermissions } from '../hooks/usePermissions'
 
-function formatCurrency(amount, currency = 'USD') {
+function formatCurrencyRaw(amount, currency = 'USD') {
   if (amount === null || amount === undefined) return '—'
   return `${currency} ${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function convertAndFormat(amount, fromCurrency, displayCurrency, xRate) {
+  if (amount === null || amount === undefined) return '—'
+  let val = parseFloat(amount)
+  if (fromCurrency === 'GHS' && displayCurrency === 'USD') val = val / xRate
+  else if (fromCurrency === 'USD' && displayCurrency === 'GHS') val = val * xRate
+  return `${displayCurrency} ${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function formatDate(d) {
@@ -449,6 +457,18 @@ export default function Expenses() {
   const canCreate = ['Admin', 'Manager', 'Sales'].includes(user?.role)
   const canManage = ['Admin', 'Manager'].includes(user?.role)
 
+  // Currency toggle
+  const [displayCurrency, setDisplayCurrency] = useState('GHS')
+  const [xRate, setXRate] = useState(1)
+
+  useEffect(() => {
+    axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS')
+      .then(res => setXRate((res.data.data.rate || 1) + 1.0))
+      .catch(() => setXRate(15.5))
+  }, [])
+
+  const fc = (amount, fromCurrency) => convertAndFormat(amount, fromCurrency, displayCurrency, xRate)
+
   // State
   const [activeTab, setActiveTab] = useState('list')
   const [expenses, setExpenses] = useState([])
@@ -584,7 +604,20 @@ export default function Expenses() {
           <h1 className="text-2xl font-bold text-gray-900">Expenses</h1>
           <p className="text-sm text-gray-500 mt-1">Track and manage business expenses</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400">1 USD = {xRate.toFixed(2)} GHS</span>
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+              <button onClick={() => setDisplayCurrency('GHS')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'GHS' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                GHS
+              </button>
+              <button onClick={() => setDisplayCurrency('USD')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                USD
+              </button>
+            </div>
+          </div>
           {canManage && (
             <button onClick={() => setShowRecurringModal(true)}
               className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700">
@@ -619,12 +652,18 @@ export default function Expenses() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div className="bg-white rounded-xl border p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider">Total (USD)</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totals.total_usd, 'USD')}</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wider">Total ({displayCurrency})</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {displayCurrency === 'USD' ? fc(totals.total_usd, 'USD') : fc(totals.total_local, 'GHS')}
+              </p>
             </div>
             <div className="bg-white rounded-xl border p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider">Total (Local)</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totals.total_local, 'GHS')}</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wider">Avg per Expense</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {displayCurrency === 'USD'
+                  ? fc(totals.count > 0 ? totals.total_usd / totals.count : 0, 'USD')
+                  : fc(totals.count > 0 ? totals.total_local / totals.count : 0, 'GHS')}
+              </p>
             </div>
             <div className="bg-white rounded-xl border p-4">
               <p className="text-xs text-gray-500 uppercase tracking-wider">Expense Count</p>
@@ -665,8 +704,7 @@ export default function Expenses() {
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Category</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Description</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Vendor</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">Amount</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-500">USD</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-500">Amount ({displayCurrency})</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Type</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">By</th>
                     <th className="px-4 py-3"></th>
@@ -674,9 +712,9 @@ export default function Expenses() {
                 </thead>
                 <tbody className="divide-y">
                   {loading ? (
-                    <tr><td colSpan="9" className="text-center py-12 text-gray-400">Loading...</td></tr>
+                    <tr><td colSpan="8" className="text-center py-12 text-gray-400">Loading...</td></tr>
                   ) : expenses.length === 0 ? (
-                    <tr><td colSpan="9" className="text-center py-12 text-gray-400">No expenses found</td></tr>
+                    <tr><td colSpan="8" className="text-center py-12 text-gray-400">No expenses found</td></tr>
                   ) : expenses.map(exp => (
                     <tr key={exp.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap">{formatDate(exp.expense_date)}</td>
@@ -687,8 +725,9 @@ export default function Expenses() {
                       </td>
                       <td className="px-4 py-3 max-w-[200px] truncate">{exp.description}</td>
                       <td className="px-4 py-3 text-gray-500">{exp.vendor_or_payee || '—'}</td>
-                      <td className="px-4 py-3 text-right font-medium">{formatCurrency(exp.amount_local, exp.currency_code)}</td>
-                      <td className="px-4 py-3 text-right text-gray-500">{formatCurrency(exp.amount_usd, 'USD')}</td>
+                      <td className="px-4 py-3 text-right font-medium">
+                        {displayCurrency === 'USD' ? fc(exp.amount_usd, 'USD') : fc(exp.amount_local, exp.currency_code || 'GHS')}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`text-xs ${exp.source_type === 'auto_generated_recurring' ? 'text-purple-600' : 'text-gray-500'}`}>
                           {exp.source_type === 'auto_generated_recurring' ? 'Auto' : exp.expense_type === 'fixed_recurring' ? 'Recurring' : 'One-time'}
@@ -768,7 +807,7 @@ export default function Expenses() {
                     <td className="px-4 py-3">{r.category?.name || '—'}</td>
                     <td className="px-4 py-3">{r.description}</td>
                     <td className="px-4 py-3 text-gray-500">{r.vendor_or_payee || '—'}</td>
-                    <td className="px-4 py-3 text-right font-medium">{formatCurrency(r.amount_local, r.currency_code)}</td>
+                    <td className="px-4 py-3 text-right font-medium">{fc(r.amount_local, r.currency_code || 'GHS')}</td>
                     <td className="px-4 py-3">{formatDate(r.start_date)}</td>
                     <td className="px-4 py-3">{r.end_date ? formatDate(r.end_date) : 'Indefinite'}</td>
                     <td className="px-4 py-3 text-gray-500">{r.last_generated_period || '—'}</td>
@@ -811,16 +850,16 @@ export default function Expenses() {
               {/* Summary cards */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div className="bg-white rounded-xl border p-4">
-                  <p className="text-xs text-gray-500 uppercase">Total Expenses (USD)</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(analytics.summary.total_usd, 'USD')}</p>
+                  <p className="text-xs text-gray-500 uppercase">Total Expenses ({displayCurrency})</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{fc(analytics.summary.total_usd, 'USD')}</p>
                 </div>
                 <div className="bg-white rounded-xl border p-4">
                   <p className="text-xs text-gray-500 uppercase">Expense Count</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">{analytics.summary.count}</p>
                 </div>
                 <div className="bg-white rounded-xl border p-4">
-                  <p className="text-xs text-gray-500 uppercase">Avg per Expense (USD)</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(analytics.summary.avg_usd, 'USD')}</p>
+                  <p className="text-xs text-gray-500 uppercase">Avg per Expense ({displayCurrency})</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{fc(analytics.summary.avg_usd, 'USD')}</p>
                 </div>
                 <div className="bg-white rounded-xl border p-4">
                   <p className="text-xs text-gray-500 uppercase">Categories</p>
@@ -838,7 +877,7 @@ export default function Expenses() {
                       <div key={i}>
                         <div className="flex justify-between text-sm mb-1">
                           <span className="text-gray-700">{cat.category_name}</span>
-                          <span className="font-medium">{formatCurrency(cat.total_usd, 'USD')} ({pct.toFixed(1)}%)</span>
+                          <span className="font-medium">{fc(cat.total_usd, 'USD')} ({pct.toFixed(1)}%)</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                           <div className="bg-primary-500 h-2 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
@@ -864,7 +903,7 @@ export default function Expenses() {
                           <div className="bg-blue-500 h-4 rounded-full"
                             style={{ width: `${Math.min((m.total_usd / Math.max(...analytics.monthly_trend.map(t => t.total_usd))) * 100, 100)}%` }} />
                         </div>
-                        <span className="text-sm font-medium w-28 text-right">{formatCurrency(m.total_usd, 'USD')}</span>
+                        <span className="text-sm font-medium w-28 text-right">{fc(m.total_usd, 'USD')}</span>
                       </div>
                     ))}
                   </div>
@@ -879,7 +918,7 @@ export default function Expenses() {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left py-2 text-gray-500">Vendor</th>
-                        <th className="text-right py-2 text-gray-500">Total (USD)</th>
+                        <th className="text-right py-2 text-gray-500">Total ({displayCurrency})</th>
                         <th className="text-right py-2 text-gray-500">Count</th>
                       </tr>
                     </thead>
@@ -887,7 +926,7 @@ export default function Expenses() {
                       {analytics.top_vendors.map((v, i) => (
                         <tr key={i}>
                           <td className="py-2">{v.vendor}</td>
-                          <td className="py-2 text-right font-medium">{formatCurrency(v.total_usd, 'USD')}</td>
+                          <td className="py-2 text-right font-medium">{fc(v.total_usd, 'USD')}</td>
                           <td className="py-2 text-right text-gray-500">{v.expense_count}</td>
                         </tr>
                       ))}

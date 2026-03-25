@@ -244,6 +244,7 @@ exports.getById = asyncHandler(async (req, res) => {
         case 'Sold': unitSummary.sold++; break;
         case 'In Repair': unitSummary.in_repair++; break;
         case 'Scrapped': unitSummary.scrapped++; break;
+        case 'Written Off': unitSummary.written_off++; break;
       }
     }
 

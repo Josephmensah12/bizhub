@@ -462,12 +462,12 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       COALESCE(SUM(a.quantity), 0) as total_units,
       COALESCE(SUM(
         CASE WHEN a.is_serialized THEN
-          COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+          COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')), 0)
         ELSE a.price_amount * a.quantity END
       ), 0) as total_retail_value,
       COALESCE(SUM(
         CASE WHEN a.is_serialized THEN
-          COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+          COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')), 0)
         ELSE a.cost_amount * a.quantity END
       ), 0) as total_cost_value
     FROM assets a
@@ -476,7 +476,7 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       AND (
         a.is_serialized = false AND a.quantity > 0
         OR a.is_serialized = true AND EXISTS (
-          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')
+          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')
         )
       )
     GROUP BY 1
@@ -491,10 +491,10 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       COALESCE(a.purchase_date, a.created_at) as stock_date,
       EXTRACT(DAY FROM NOW() - COALESCE(a.purchase_date, a.created_at)) as days_in_stock,
       CASE WHEN a.is_serialized THEN
-        COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+        COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')), 0)
       ELSE a.cost_amount * a.quantity END as total_cost,
       CASE WHEN a.is_serialized THEN
-        COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+        COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')), 0)
       ELSE a.price_amount * a.quantity END as total_retail
     FROM assets a
     WHERE a.status IN ('In Stock', 'Processing', 'Reserved', 'In Repair', 'Returned')
@@ -502,7 +502,7 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       AND (
         a.is_serialized = false AND a.quantity > 0
         OR a.is_serialized = true AND EXISTS (
-          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')
+          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')
         )
       )
     ORDER BY COALESCE(a.purchase_date, a.created_at) ASC
@@ -518,12 +518,12 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       SUM(a.quantity) as total_units,
       COALESCE(SUM(
         CASE WHEN a.is_serialized THEN
-          COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+          COALESCE((SELECT SUM(COALESCE(au.price_amount, a.price_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')), 0)
         ELSE a.price_amount * a.quantity END
       ), 0) as retail_value,
       COALESCE(SUM(
         CASE WHEN a.is_serialized THEN
-          COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')), 0)
+          COALESCE((SELECT SUM(COALESCE(au.cost_amount, a.cost_amount)) FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')), 0)
         ELSE a.cost_amount * a.quantity END
       ), 0) as cost_value,
       AVG(EXTRACT(DAY FROM NOW() - COALESCE(a.purchase_date, a.created_at))) as avg_days_in_stock
@@ -533,7 +533,7 @@ exports.inventoryAgingReport = asyncHandler(async (req, res) => {
       AND (
         a.is_serialized = false AND a.quantity > 0
         OR a.is_serialized = true AND EXISTS (
-          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped')
+          SELECT 1 FROM asset_units au WHERE au.asset_id = a.id AND au.status NOT IN ('Sold', 'Scrapped', 'Written Off')
         )
       )
     GROUP BY a.category, a.asset_type
@@ -1174,7 +1174,7 @@ exports.inventoryValuation = asyncHandler(async (req, res) => {
     const units = await AssetUnit.findAll({
       where: {
         asset_id: { [Op.in]: serializedAssetIds },
-        status: { [Op.notIn]: ['Sold', 'Scrapped'] }
+        status: { [Op.notIn]: ['Sold', 'Scrapped', 'Written Off'] }
       },
       include: [{
         model: ConditionStatus,

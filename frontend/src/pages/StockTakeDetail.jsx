@@ -330,8 +330,14 @@ export default function StockTakeDetail() {
           setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500'), 3000)
         }
       } else {
-        const { scan, item, batch, new_batch_created } = res.data.data
+        const { scan, item, batch, new_batch_created, warning } = res.data.data
         const batchNum = scan.batch_number || batch?.batch_number
+
+        // Alert user if a sold or scrapped unit was scanned
+        if (warning) {
+          addToast('error', warning.message)
+        }
+
         addToast('success', `Scanned: ${scan.unit?.serial_number || serial} -> ${item.asset?.make} ${item.asset?.model} (${item.scan_count}/${item.expected_quantity})`)
 
         if (new_batch_created) {

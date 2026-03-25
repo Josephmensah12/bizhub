@@ -209,7 +209,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const topByQuantity = await Asset.sequelize.query(
     `SELECT make, model,
             SUM(CASE WHEN is_serialized THEN
-              (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped'))
+              (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','Written Off'))
             ELSE a.quantity END) AS quantity
      FROM assets a
      WHERE a.deleted_at IS NULL AND a.status = 'In Stock' ${agingWhere}
@@ -305,7 +305,7 @@ exports.getCategoryBreakdown = asyncHandler(async (req, res) => {
             COUNT(*) AS product_count,
             COALESCE(SUM(
               CASE WHEN a.is_serialized THEN
-                (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped'))
+                (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','Written Off'))
               ELSE a.quantity END
             ), 0) AS unit_count
      FROM assets a
@@ -362,7 +362,7 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
        COALESCE(SUM(
          CASE WHEN a.is_serialized THEN
            (SELECT COALESCE(SUM(COALESCE(u.price_amount, a.price_amount)), 0)
-            FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','In Repair'))
+            FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','Written Off','In Repair'))
          ELSE
            a.quantity * COALESCE(a.price_amount, 0)
          END
@@ -373,7 +373,7 @@ exports.getConversionEfficiency = asyncHandler(async (req, res) => {
        AND (
          a.is_serialized = false AND a.quantity > 0
          OR a.is_serialized = true AND EXISTS (
-           SELECT 1 FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped')
+           SELECT 1 FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','Written Off')
          )
        )`
   );

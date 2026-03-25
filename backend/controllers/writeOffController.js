@@ -331,8 +331,8 @@ exports.create = asyncHandler(async (req, res) => {
 
       unitCost = parseFloat(unit.cost_amount) || unitCost;
 
-      // Deduct inventory immediately: set unit to Scrapped
-      unit.status = 'Scrapped';
+      // Deduct inventory immediately: set unit to Written Off
+      unit.status = 'Written Off';
       await unit.save({ transaction: t });
     } else {
       // Non-serialized: validate quantity
@@ -460,9 +460,9 @@ exports.bulkCreate = asyncHandler(async (req, res) => {
       const unitCost = parseFloat(unit.cost_amount) || parseFloat(asset.cost_amount) || 0;
       const writeOffNumber = await generateWriteOffNumber(i);
 
-      // Set unit to Scrapped if not already
-      if (unit.status !== 'Scrapped') {
-        unit.status = 'Scrapped';
+      // Set unit to Written Off if not already
+      if (unit.status !== 'Written Off') {
+        unit.status = 'Written Off';
         await unit.save({ transaction: t });
       }
 
