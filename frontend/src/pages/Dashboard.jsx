@@ -184,6 +184,8 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [agingFilter, setAgingFilter] = useState(null)
   const [filteredTop10, setFilteredTop10] = useState(null)
+  const [categoryFilter, setCategoryFilter] = useState(null)
+  const [filteredAging, setFilteredAging] = useState(null)
   const [currency, setCurrency] = useState('GHS')
   const [xRate, setXRate] = useState(1) // GHS per USD
   const [categoryData, setCategoryData] = useState(null)
@@ -238,7 +240,7 @@ export default function Dashboard() {
     )
   }
 
-  const agingData = metrics?.aging_stock || {}
+  const agingData = filteredAging || metrics?.aging_stock || {}
   const agingMax = Math.max(agingData.under_1y || 0, agingData['1_to_2y'] || 0, agingData.over_2y || 0, 1)
 
   const AGING_BUCKETS = [
@@ -250,18 +252,24 @@ export default function Dashboard() {
   async function handleAgingClick(key) {
     const next = agingFilter === key ? null : key
     setAgingFilter(next)
-    if (next) {
-      try {
-        const [metricsRes, catRes] = await Promise.all([
-          axios.get(`/api/v1/dashboard/metrics?aging=${next}`),
-          axios.get(`/api/v1/dashboard/category-breakdown?aging=${next}`)
-        ])
-        setFilteredTop10(metricsRes.data.data.top_by_quantity)
-        setCategoryData(catRes.data.data)
-      } catch { setFilteredTop10(null) }
-    } else {
+    const params = new URLSearchParams()
+    if (next) params.set('aging', next)
+    if (categoryFilter) params.set('category', categoryFilter)
+    const qs = params.toString()
+    try {
+      const [metricsRes, catRes] = await Promise.all([
+        axios.get(`/api/v1/dashboard/metrics${qs ? '?' + qs : ''}`),
+        axios.get(`/api/v1/dashboard/category-breakdown${next ? '?aging=' + next : ''}`)
+      ])
+      setFilteredTop10(metricsRes.data.data.top_by_quantity)
+      setCategoryData(catRes.data.data)
+      if (categoryFilter) setFilteredAging(metricsRes.data.data.aging_stock)
+    } catch {
       setFilteredTop10(null)
-      // Restore unfiltered category data
+    }
+    if (!next && !categoryFilter) {
+      setFilteredTop10(null)
+      setFilteredAging(null)
       try {
         const catRes = await axios.get('/api/v1/dashboard/category-breakdown')
         setCategoryData(catRes.data.data)
@@ -269,8 +277,37 @@ export default function Dashboard() {
     }
   }
 
+  async function handleCategoryClick(catName) {
+    const next = categoryFilter === catName ? null : catName
+    setCategoryFilter(next)
+    if (next) {
+      try {
+        const params = new URLSearchParams({ category: next })
+        if (agingFilter) params.set('aging', agingFilter)
+        const metricsRes = await axios.get(`/api/v1/dashboard/metrics?${params}`)
+        setFilteredTop10(metricsRes.data.data.top_by_quantity)
+        setFilteredAging(metricsRes.data.data.aging_stock)
+      } catch { setFilteredTop10(null); setFilteredAging(null) }
+    } else {
+      setFilteredAging(null)
+      // Refetch with just aging filter if active
+      if (agingFilter) {
+        try {
+          const metricsRes = await axios.get(`/api/v1/dashboard/metrics?aging=${agingFilter}`)
+          setFilteredTop10(metricsRes.data.data.top_by_quantity)
+        } catch { setFilteredTop10(null) }
+      } else {
+        setFilteredTop10(null)
+      }
+    }
+  }
+
   const top10Data = filteredTop10 ?? metrics?.top_by_quantity
-  const top10Label = agingFilter ? `Top 10 Items — ${AGING_BUCKETS.find(b => b.key === agingFilter)?.label}` : 'Top 10 Items by Quantity'
+  const activeFilters = [
+    agingFilter && AGING_BUCKETS.find(b => b.key === agingFilter)?.label,
+    categoryFilter
+  ].filter(Boolean)
+  const top10Label = activeFilters.length > 0 ? `Top 10 Items — ${activeFilters.join(' / ')}` : 'Top 10 Items by Quantity'
 
   // Shorthand: format any GHS amount in the active display currency (for non-sales values)
   const fc = (amount) => formatCurrency(amount, currency, xRate)
@@ -431,7 +468,17 @@ export default function Dashboard() {
 
         {/* Aging Stock Donut */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-2">Aging Stock</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-base font-semibold text-gray-900">
+              Aging Stock
+              {categoryFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {categoryFilter}</span>}
+            </h2>
+            {categoryFilter && (
+              <button onClick={() => handleCategoryClick(categoryFilter)} className="text-xs text-gray-500 hover:text-gray-700">
+                Clear
+              </button>
+            )}
+          </div>
           <p className="text-xs text-gray-400 mb-4">Click a segment to filter charts below</p>
           {(() => {
             const DONUT_COLORS = { under_1y: '#22c55e', '1_to_2y': '#eab308', over_2y: '#ef4444' }
@@ -504,11 +551,14 @@ export default function Dashboard() {
                 Inventory by Category
                 {agingFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {AGING_BUCKETS.find(b => b.key === agingFilter)?.label}</span>}
               </h2>
-              <p className="text-xs text-gray-400 mt-0.5">Unit count per asset type</p>
+              <p className="text-xs text-gray-400 mt-0.5">Click a category to filter aging stock &amp; top 10</p>
             </div>
-            {agingFilter && (
-              <button onClick={() => handleAgingClick(agingFilter)} className="text-xs text-gray-500 hover:text-gray-700">
-                Clear filter
+            {(agingFilter || categoryFilter) && (
+              <button onClick={() => {
+                if (agingFilter) handleAgingClick(agingFilter)
+                if (categoryFilter) handleCategoryClick(categoryFilter)
+              }} className="text-xs text-gray-500 hover:text-gray-700">
+                Clear filters
               </button>
             )}
           </div>
@@ -546,12 +596,17 @@ export default function Dashboard() {
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 pt-3 border-t border-gray-100">
                   {categoryData.map((cat, i) => {
                     const total = cat.children.reduce((s, c) => s + c.size, 0)
+                    const isActive = categoryFilter === cat.name
                     return (
-                      <div key={cat.name} className="flex items-center gap-1.5 text-xs">
+                      <button
+                        key={cat.name}
+                        onClick={() => handleCategoryClick(cat.name)}
+                        className={`flex items-center gap-1.5 text-xs transition-opacity ${categoryFilter && !isActive ? 'opacity-40' : ''}`}
+                      >
                         <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: TREEMAP_COLORS[i % TREEMAP_COLORS.length] }} />
-                        <span className="text-gray-600">{cat.name}</span>
+                        <span className={`${isActive ? 'text-gray-900 font-semibold' : 'text-gray-600'}`}>{cat.name}</span>
                         <span className="font-semibold text-gray-900">{total}</span>
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
@@ -566,9 +621,12 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-base font-semibold text-gray-900">{top10Label}</h2>
-            {agingFilter && (
-              <button onClick={() => { setAgingFilter(null); setFilteredTop10(null) }} className="text-xs text-gray-500 hover:text-gray-700">
-                Clear filter
+            {(agingFilter || categoryFilter) && (
+              <button onClick={() => { setAgingFilter(null); setCategoryFilter(null); setFilteredTop10(null); setFilteredAging(null)
+                // Restore unfiltered category data
+                axios.get('/api/v1/dashboard/category-breakdown').then(r => setCategoryData(r.data.data)).catch(() => {})
+              }} className="text-xs text-gray-500 hover:text-gray-700">
+                Clear filters
               </button>
             )}
           </div>
@@ -600,7 +658,7 @@ export default function Dashboard() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-gray-400 py-4 text-center">{agingFilter ? 'No items in this age range' : 'No inventory data'}</p>
+            <p className="text-sm text-gray-400 py-4 text-center">{(agingFilter || categoryFilter) ? 'No items matching filters' : 'No inventory data'}</p>
           )}
         </div>
       </div>

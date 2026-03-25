@@ -40,19 +40,22 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   }) || 0;
 
   // Aging stock: <1 year, 1-2 years, >2 years (using purchase_date with created_at fallback)
+  // Optionally filtered by category
+  const agingCategoryFilter = req.query.category;
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
   const ageDateExpr = sequelize.literal("COALESCE(purchase_date, created_at)");
+  const agingBaseWhere = { status: 'In Stock', ...(agingCategoryFilter ? { category: agingCategoryFilter } : {}) };
 
   const agingUnder1y = (await Asset.sum('quantity', {
-    where: { status: 'In Stock', [Op.and]: sequelize.where(ageDateExpr, { [Op.gte]: oneYearAgo }) }
+    where: { ...agingBaseWhere, [Op.and]: sequelize.where(ageDateExpr, { [Op.gte]: oneYearAgo }) }
   })) || 0;
   const aging1to2y = (await Asset.sum('quantity', {
     where: {
-      status: 'In Stock',
+      ...agingBaseWhere,
       [Op.and]: [
         sequelize.where(ageDateExpr, { [Op.gte]: twoYearsAgo }),
         sequelize.where(ageDateExpr, { [Op.lt]: oneYearAgo })
@@ -60,7 +63,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     }
   })) || 0;
   const agingOver2y = (await Asset.sum('quantity', {
-    where: { status: 'In Stock', [Op.and]: sequelize.where(ageDateExpr, { [Op.lt]: twoYearsAgo }) }
+    where: { ...agingBaseWhere, [Op.and]: sequelize.where(ageDateExpr, { [Op.lt]: twoYearsAgo }) }
   })) || 0;
 
   // --- Sales metrics (today) ---
@@ -196,8 +199,9 @@ exports.getMetrics = asyncHandler(async (req, res) => {
     }
   );
 
-  // Top 10 items by quantity — optionally filtered by aging bucket
+  // Top 10 items by quantity — optionally filtered by aging bucket and/or category
   const agingFilter = req.query.aging; // 'under_1y', '1_to_2y', 'over_2y'
+  const categoryFilter = req.query.category; // e.g. 'Computer'
   let agingWhere = '';
   if (agingFilter === 'under_1y') {
     agingWhere = `AND COALESCE(a.purchase_date, a.created_at) >= NOW() - INTERVAL '1 year'`;
@@ -206,17 +210,21 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   } else if (agingFilter === 'over_2y') {
     agingWhere = `AND COALESCE(a.purchase_date, a.created_at) < NOW() - INTERVAL '2 years'`;
   }
+  let categoryWhere = '';
+  if (categoryFilter) {
+    categoryWhere = `AND a.category = :category`;
+  }
   const topByQuantity = await Asset.sequelize.query(
     `SELECT make, model,
             SUM(CASE WHEN is_serialized THEN
               (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','Written Off'))
             ELSE a.quantity END) AS quantity
      FROM assets a
-     WHERE a.deleted_at IS NULL AND a.status = 'In Stock' ${agingWhere}
+     WHERE a.deleted_at IS NULL AND a.status = 'In Stock' ${agingWhere} ${categoryWhere}
      GROUP BY make, model
      ORDER BY quantity DESC
      LIMIT 10`,
-    { type: Asset.sequelize.QueryTypes.SELECT }
+    { type: Asset.sequelize.QueryTypes.SELECT, replacements: categoryFilter ? { category: categoryFilter } : {} }
   );
 
   // Build response
