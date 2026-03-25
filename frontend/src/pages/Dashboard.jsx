@@ -252,28 +252,32 @@ export default function Dashboard() {
   async function handleAgingClick(key) {
     const next = agingFilter === key ? null : key
     setAgingFilter(next)
-    const params = new URLSearchParams()
-    if (next) params.set('aging', next)
-    if (categoryFilter) params.set('category', categoryFilter)
-    const qs = params.toString()
-    try {
-      const [metricsRes, catRes] = await Promise.all([
-        axios.get(`/api/v1/dashboard/metrics${qs ? '?' + qs : ''}`),
-        axios.get(`/api/v1/dashboard/category-breakdown${next ? '?aging=' + next : ''}`)
-      ])
-      setFilteredTop10(metricsRes.data.data.top_by_quantity)
-      setCategoryData(catRes.data.data)
-      if (categoryFilter) setFilteredAging(metricsRes.data.data.aging_stock)
-    } catch {
-      setFilteredTop10(null)
-    }
+
     if (!next && !categoryFilter) {
+      // Clearing all filters — restore defaults
       setFilteredTop10(null)
       setFilteredAging(null)
       try {
         const catRes = await axios.get('/api/v1/dashboard/category-breakdown')
         setCategoryData(catRes.data.data)
       } catch {}
+      return
+    }
+
+    const params = new URLSearchParams()
+    if (next) params.set('aging', next)
+    if (categoryFilter) params.set('category', categoryFilter)
+    try {
+      const [metricsRes, catRes] = await Promise.all([
+        axios.get(`/api/v1/dashboard/metrics?${params}`),
+        axios.get(`/api/v1/dashboard/category-breakdown${next ? '?aging=' + next : ''}`)
+      ])
+      setFilteredTop10(metricsRes.data.data.top_by_quantity)
+      setCategoryData(catRes.data.data)
+      if (categoryFilter) setFilteredAging(metricsRes.data.data.aging_stock)
+      else setFilteredAging(null)
+    } catch {
+      setFilteredTop10(null)
     }
   }
 
@@ -554,9 +558,9 @@ export default function Dashboard() {
               <p className="text-xs text-gray-400 mt-0.5">Click a category to filter aging stock &amp; top 10</p>
             </div>
             {(agingFilter || categoryFilter) && (
-              <button onClick={() => {
-                if (agingFilter) handleAgingClick(agingFilter)
-                if (categoryFilter) handleCategoryClick(categoryFilter)
+              <button onClick={async () => {
+                setAgingFilter(null); setCategoryFilter(null); setFilteredTop10(null); setFilteredAging(null)
+                try { const r = await axios.get('/api/v1/dashboard/category-breakdown'); setCategoryData(r.data.data) } catch {}
               }} className="text-xs text-gray-500 hover:text-gray-700">
                 Clear filters
               </button>
@@ -622,9 +626,9 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-base font-semibold text-gray-900">{top10Label}</h2>
             {(agingFilter || categoryFilter) && (
-              <button onClick={() => { setAgingFilter(null); setCategoryFilter(null); setFilteredTop10(null); setFilteredAging(null)
-                // Restore unfiltered category data
-                axios.get('/api/v1/dashboard/category-breakdown').then(r => setCategoryData(r.data.data)).catch(() => {})
+              <button onClick={async () => {
+                setAgingFilter(null); setCategoryFilter(null); setFilteredTop10(null); setFilteredAging(null)
+                try { const r = await axios.get('/api/v1/dashboard/category-breakdown'); setCategoryData(r.data.data) } catch {}
               }} className="text-xs text-gray-500 hover:text-gray-700">
                 Clear filters
               </button>
