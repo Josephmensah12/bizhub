@@ -321,7 +321,7 @@ function MarginsTab({ data, loading }) {
 
       {/* Margin Trend */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Margin Trend</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Margin Trend</h3>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={trend}>
             <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />

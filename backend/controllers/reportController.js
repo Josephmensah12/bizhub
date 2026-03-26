@@ -720,8 +720,8 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     type: QueryTypes.SELECT
   });
 
-  // Margin trend over time (daily or monthly based on range)
-  const marginGranularity = getGranularity(startDate, endDate);
+  // Margin trend over time — always monthly
+  const marginGranularity = 'monthly';
   const marginTrendExpr = trendGroupExpr(marginGranularity);
   const marginTrend = await sequelize.query(`
     SELECT
