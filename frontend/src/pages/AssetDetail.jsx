@@ -89,12 +89,25 @@ export default function AssetDetail() {
 
       const fmtGHS = (v) => `₵${parseFloat(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const fmtUSD = (v) => `$${parseFloat(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const fmtCur = (v, cur) => cur === 'USD' ? fmtUSD(v) : fmtGHS(v);
+      const fmtAlt = (v, cur) => cur === 'USD' ? fmtGHS(v) : fmtUSD(v);
       const rate = asset.purchase_exchange_rate && asset.purchase_exchange_rate > 0 ? asset.purchase_exchange_rate : null;
+      const cCur = asset.cost_currency || 'GHS';
+      const pCur = asset.price_currency || 'GHS';
+
+      // Convert amount to GHS for consistent profit calculations
+      const toGHS = (v, cur) => cur === 'USD' && rate ? v * rate : v;
+      const fromGHS = (v, cur) => cur === 'USD' && rate ? v / rate : v;
 
       // Cost
       if (asset.cost_amount) {
         const cost = parseFloat(asset.cost_amount);
-        setCostDisplay(rate ? `${fmtGHS(cost)}  ·  ${fmtUSD(cost / rate)}` : fmtGHS(cost));
+        if (rate) {
+          const alt = cCur === 'USD' ? cost * rate : cost / rate;
+          setCostDisplay(`${fmtCur(cost, cCur)}  ·  ${fmtAlt(alt, cCur)}`);
+        } else {
+          setCostDisplay(fmtCur(cost, cCur));
+        }
       } else {
         setCostDisplay('—');
       }
@@ -102,17 +115,24 @@ export default function AssetDetail() {
       // Selling Price
       if (asset.price_amount) {
         const price = parseFloat(asset.price_amount);
-        setPriceDisplay(rate ? `${fmtGHS(price)}  ·  ${fmtUSD(price / rate)}` : fmtGHS(price));
+        if (rate) {
+          const alt = pCur === 'USD' ? price * rate : price / rate;
+          setPriceDisplay(`${fmtCur(price, pCur)}  ·  ${fmtAlt(alt, pCur)}`);
+        } else {
+          setPriceDisplay(fmtCur(price, pCur));
+        }
       } else {
         setPriceDisplay('—');
       }
 
-      // Profit and markup (GHS-based)
+      // Profit and markup — normalize both to GHS for comparison
       const cost = parseFloat(asset.cost_amount) || 0;
       const price = parseFloat(asset.price_amount) || 0;
       if (cost > 0 && price > 0) {
-        const profitGHS = price - cost;
-        const markup = ((profitGHS / cost) * 100).toFixed(1);
+        const costGHS = toGHS(cost, cCur);
+        const priceGHS = toGHS(price, pCur);
+        const profitGHS = priceGHS - costGHS;
+        const markup = ((profitGHS / costGHS) * 100).toFixed(1);
         const profitStr = rate
           ? `${fmtGHS(profitGHS)}  ·  ${fmtUSD(profitGHS / rate)}`
           : fmtGHS(profitGHS);
@@ -903,12 +923,16 @@ export default function AssetDetail() {
                         <td className="py-2 pr-3">{unit.effective_price != null ? (() => {
                             const r = unit.purchase_exchange_rate || asset?.purchase_exchange_rate;
                             const p = parseFloat(unit.effective_price);
+                            const pCur = asset?.price_currency || 'GHS';
+                            if (pCur === 'USD') return r ? `$${p.toFixed(0)} · ₵${(p * r).toFixed(0)}` : `$${p.toFixed(2)}`;
                             return r ? `₵${p.toFixed(0)} · $${(p / r).toFixed(0)}` : `₵${p.toFixed(2)}`;
                           })() : '—'}</td>
                         {canSeeCost && <td className="py-2 pr-3">
                           {unit.effective_cost != null ? (() => {
                             const r = unit.purchase_exchange_rate || asset?.purchase_exchange_rate;
                             const c = parseFloat(unit.effective_cost);
+                            const cCur = asset?.cost_currency || 'GHS';
+                            if (cCur === 'USD') return r ? `$${c.toFixed(0)} · ₵${(c * r).toFixed(0)}` : `$${c.toFixed(2)}`;
                             return r ? `₵${c.toFixed(0)} · $${(c / r).toFixed(0)}` : `₵${c.toFixed(2)}`;
                           })() : '—'}
                         </td>}
