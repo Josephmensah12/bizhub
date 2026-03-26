@@ -63,6 +63,8 @@ exports.list = asyncHandler(async (req, res) => {
     const data = u.toJSON();
     data.effective_price = data.price_amount !== null ? data.price_amount : productPrice;
     data.effective_cost = data.cost_amount !== null ? data.cost_amount : productCost;
+    data.effective_cost_currency = data.cost_currency || asset.cost_currency || 'USD';
+    data.effective_price_currency = data.price_currency || asset.price_currency || 'GHS';
     return data;
   });
 
@@ -102,7 +104,7 @@ exports.create = asyncHandler(async (req, res) => {
     });
   }
 
-  const { serial_number, cpu, cpu_model, memory, storage, cost_amount, price_amount, condition_status_id, purchase_date, notes } = req.body;
+  const { serial_number, cpu, cpu_model, memory, storage, cost_amount, price_amount, cost_currency, price_currency, condition_status_id, purchase_date, notes } = req.body;
 
   if (!serial_number || serial_number.trim() === '') {
     return res.status(400).json({
@@ -128,7 +130,9 @@ exports.create = asyncHandler(async (req, res) => {
     memory: memory ? parseInt(memory) : null,
     storage: storage ? parseInt(storage) : null,
     cost_amount: cost_amount !== undefined && cost_amount !== null && cost_amount !== '' ? parseFloat(cost_amount) : null,
+    cost_currency: cost_currency || null,
     price_amount: price_amount !== undefined && price_amount !== null && price_amount !== '' ? parseFloat(price_amount) : null,
+    price_currency: price_currency || null,
     condition_status_id: condition_status_id || asset.condition_status_id || null,
     purchase_date: purchase_date || null,
     notes: notes || null
@@ -210,7 +214,9 @@ exports.bulkCreate = asyncHandler(async (req, res) => {
       memory: u.memory ? parseInt(u.memory) : null,
       storage: u.storage ? parseInt(u.storage) : null,
       cost_amount: u.cost_amount !== undefined && u.cost_amount !== null && u.cost_amount !== '' ? parseFloat(u.cost_amount) : null,
+      cost_currency: u.cost_currency || null,
       price_amount: u.price_amount !== undefined && u.price_amount !== null && u.price_amount !== '' ? parseFloat(u.price_amount) : null,
+      price_currency: u.price_currency || null,
       condition_status_id: u.condition_status_id || asset.condition_status_id || null,
       purchase_date: u.purchase_date || null,
       notes: u.notes || null
@@ -248,7 +254,7 @@ exports.update = asyncHandler(async (req, res) => {
     });
   }
 
-  const { serial_number, cpu, cpu_model, memory, storage, cost_amount, price_amount, condition_status_id, status, purchase_date, notes, repair_notes } = req.body;
+  const { serial_number, cpu, cpu_model, memory, storage, cost_amount, price_amount, cost_currency, price_currency, condition_status_id, status, purchase_date, notes, repair_notes } = req.body;
 
   // If changing serial number, check uniqueness
   if (serial_number !== undefined && serial_number.trim() !== unit.serial_number) {
@@ -269,7 +275,9 @@ exports.update = asyncHandler(async (req, res) => {
   if (memory !== undefined) unit.memory = memory ? parseInt(memory) : null;
   if (storage !== undefined) unit.storage = storage ? parseInt(storage) : null;
   if (cost_amount !== undefined) unit.cost_amount = cost_amount !== null && cost_amount !== '' ? parseFloat(cost_amount) : null;
+  if (cost_currency !== undefined) unit.cost_currency = cost_currency || null;
   if (price_amount !== undefined) unit.price_amount = price_amount !== null && price_amount !== '' ? parseFloat(price_amount) : null;
+  if (price_currency !== undefined) unit.price_currency = price_currency || null;
   if (condition_status_id !== undefined) unit.condition_status_id = condition_status_id || null;
   if (status !== undefined) unit.status = status;
   if (purchase_date !== undefined) unit.purchase_date = purchase_date || null;

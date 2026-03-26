@@ -599,9 +599,9 @@ exports.addItem = asyncHandler(async (req, res) => {
       const unitEffectivePrice = unit.price_amount !== null ? parseFloat(unit.price_amount) : (parseFloat(asset.price_amount) || 0);
       const sellingPrice = _unitPrice !== undefined ? parseFloat(_unitPrice) : unitEffectivePrice;
 
-      // Calculate cost
+      // Calculate cost — use unit-level currency if set, otherwise fall back to asset currency
       let unitCost = unit.cost_amount !== null ? parseFloat(unit.cost_amount) : (parseFloat(asset.cost_amount) || 0);
-      const originalCostCurrency = asset.cost_currency || 'USD';
+      const originalCostCurrency = unit.cost_currency || asset.cost_currency || 'USD';
       const originalCostAmount = unitCost;
 
       if (originalCostCurrency !== invoice.currency && unitCost > 0) {

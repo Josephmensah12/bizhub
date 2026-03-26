@@ -923,7 +923,7 @@ export default function AssetDetail() {
                         <td className="py-2 pr-3">{unit.effective_price != null ? (() => {
                             const r = unit.purchase_exchange_rate || asset?.purchase_exchange_rate;
                             const p = parseFloat(unit.effective_price);
-                            const pCur = asset?.price_currency || 'GHS';
+                            const pCur = unit.effective_price_currency || unit.price_currency || asset?.price_currency || 'GHS';
                             if (pCur === 'USD') return r ? `$${p.toFixed(0)} · ₵${(p * r).toFixed(0)}` : `$${p.toFixed(2)}`;
                             return r ? `₵${p.toFixed(0)} · $${(p / r).toFixed(0)}` : `₵${p.toFixed(2)}`;
                           })() : '—'}</td>
@@ -931,7 +931,7 @@ export default function AssetDetail() {
                           {unit.effective_cost != null ? (() => {
                             const r = unit.purchase_exchange_rate || asset?.purchase_exchange_rate;
                             const c = parseFloat(unit.effective_cost);
-                            const cCur = asset?.cost_currency || 'GHS';
+                            const cCur = unit.effective_cost_currency || unit.cost_currency || asset?.cost_currency || 'GHS';
                             if (cCur === 'USD') return r ? `$${c.toFixed(0)} · ₵${(c * r).toFixed(0)}` : `$${c.toFixed(2)}`;
                             return r ? `₵${c.toFixed(0)} · $${(c / r).toFixed(0)}` : `₵${c.toFixed(2)}`;
                           })() : '—'}

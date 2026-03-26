@@ -60,6 +60,18 @@ module.exports = (sequelize, DataTypes) => {
         return val === null ? null : parseFloat(val);
       }
     },
+    cost_currency: {
+      type: DataTypes.STRING(3),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Unit-level cost currency override — falls back to product cost_currency if null'
+    },
+    price_currency: {
+      type: DataTypes.STRING(3),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Unit-level price currency override — falls back to product price_currency if null'
+    },
     condition_status_id: {
       type: DataTypes.INTEGER,
       allowNull: true,
