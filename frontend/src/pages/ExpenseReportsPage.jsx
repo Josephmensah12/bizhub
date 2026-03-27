@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 function formatCurrencyRaw(amount, currency = 'USD') {
   if (amount === null || amount === undefined) return '—'
@@ -29,6 +30,7 @@ export default function ExpenseReportsPage() {
   const [loading, setLoading] = useState(true)
   const [catFilter, setCatFilter] = useState(null)
   const [vendorFilter, setVendorFilter] = useState(null)
+  const [monthFilter, setMonthFilter] = useState(null)
 
   useEffect(() => {
     axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS')
@@ -36,13 +38,27 @@ export default function ExpenseReportsPage() {
       .catch(() => setXRate(15.5))
   }, [])
 
+  const [fullData, setFullData] = useState(null)
+
   useEffect(() => {
     setLoading(true)
     axios.get('/api/v1/expenses/reports', { params: { period } })
-      .then(res => setData(res.data.data))
+      .then(res => { setData(res.data.data); setFullData(res.data.data) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [period])
+
+  // When a month is clicked on the trend chart, fetch that month's category breakdown
+  useEffect(() => {
+    if (!monthFilter || !fullData) return
+    const monthStart = new Date(monthFilter)
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0)
+    axios.get('/api/v1/expenses/reports', { params: { period: 'custom', dateFrom: monthStart.toISOString().slice(0,10), dateTo: monthEnd.toISOString().slice(0,10) } })
+      .then(res => {
+        setData(prev => ({ ...prev, by_category: res.data.data.by_category, largest_expenses: res.data.data.largest_expenses, top_vendors: res.data.data.top_vendors }))
+      })
+      .catch(() => {})
+  }, [monthFilter, fullData])
 
   const fc = (amount, fromCurrency) => convertAndFormat(amount, fromCurrency, displayCurrency, xRate)
   const fmtLocal = (v) => `GHS ${parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
@@ -72,14 +88,14 @@ export default function ExpenseReportsPage() {
             <button onClick={() => setDisplayCurrency('USD')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>USD</button>
           </div>
-          <select value={period} onChange={e => { setPeriod(e.target.value); setCatFilter(null); setVendorFilter(null) }}
+          <select value={period} onChange={e => { setPeriod(e.target.value); setCatFilter(null); setVendorFilter(null); setMonthFilter(null) }}
             className="border rounded-lg px-3 py-1.5 text-sm">
             <option value="month">This Month</option>
             <option value="quarter">This Quarter</option>
             <option value="year">This Year</option>
           </select>
-          {(catFilter || vendorFilter) && (
-            <button onClick={() => { setCatFilter(null); setVendorFilter(null) }}
+          {(catFilter || vendorFilter || monthFilter) && (
+            <button onClick={() => { setCatFilter(null); setVendorFilter(null); setMonthFilter(null); setData(fullData) }}
               className="text-xs text-gray-500 hover:text-gray-700">Clear filters</button>
           )}
         </div>
@@ -115,30 +131,50 @@ export default function ExpenseReportsPage() {
       {/* 2 & 3: Monthly Trend + Category */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl border p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Monthly Expense Trend</h3>
-          <div className="space-y-2">
-            {monthly_trend.map((m, i) => {
-              const maxExp = Math.max(...monthly_trend.map(t => t.expenses_local), 1)
-              const expPct = (m.expenses_local / maxExp) * 100
-              const revPct = m.revenue > 0 ? Math.min((m.expenses_local / m.revenue) * 100, 100) : 0
-              const label = new Date(m.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-              return (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500 w-14 shrink-0">{label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-3 relative overflow-hidden">
-                    <div className="h-full bg-purple-500 rounded-full" style={{ width: `${Math.max(expPct, 2)}%` }} />
-                  </div>
-                  <span className="text-xs font-medium w-20 text-right">{fmtLocal(m.expenses_local)}</span>
-                  <span className={`text-[10px] w-10 text-right ${revPct > 30 ? 'text-red-500' : 'text-green-500'}`}>{revPct.toFixed(0)}%</span>
-                </div>
-              )
-            })}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Monthly Expense Trend
+              {monthFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {new Date(monthFilter).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>}
+            </h3>
+            {monthFilter && <button onClick={() => { setMonthFilter(null); setData(fullData) }} className="text-xs text-gray-500 hover:text-gray-700">Clear</button>}
           </div>
-          <p className="text-[10px] text-gray-400 mt-2">Purple bar = expense amount. % = expense-to-revenue ratio.</p>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={monthly_trend.map(m => ({
+              ...m,
+              label: new Date(m.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+              ratio: m.revenue > 0 ? (m.expenses_local / m.revenue * 100) : 0
+            }))}
+              onClick={(state) => {
+                if (state?.activePayload?.[0]?.payload?.month) {
+                  const clicked = state.activePayload[0].payload.month
+                  setMonthFilter(prev => prev === clicked ? null : clicked)
+                  if (monthFilter === clicked) setData(fullData)
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="amt" tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} stroke="#7c3aed" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="pct" orientation="right" tickFormatter={v => `${v.toFixed(0)}%`} stroke="#10b981" fontSize={11} tickLine={false} axisLine={false} />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                formatter={(value, name) => name === 'Expenses' ? [fmtLocal(value), name] : [`${value.toFixed(1)}%`, name]}
+                labelFormatter={l => l}
+              />
+              <Legend />
+              <Line yAxisId="amt" type="monotone" dataKey="expenses_local" stroke="#7c3aed" strokeWidth={2.5} name="Expenses" dot={{ r: 4, cursor: 'pointer' }} activeDot={{ r: 6, strokeWidth: 2 }} />
+              <Line yAxisId="pct" type="monotone" dataKey="ratio" stroke="#10b981" strokeWidth={2} strokeDasharray="5 3" name="% of Revenue" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+          <p className="text-[10px] text-gray-400 mt-2">Click a data point to filter categories below by that month.</p>
         </div>
 
         <div className="bg-white rounded-xl border p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Expenses by Category</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">
+            Expenses by Category
+            {monthFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {new Date(monthFilter).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>}
+          </h3>
           {by_category.length > 0 ? (
             <div className="space-y-2">
               {by_category.map((cat, i) => {
