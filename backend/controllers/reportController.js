@@ -1300,15 +1300,23 @@ exports.inventoryValuation = asyncHandler(async (req, res) => {
     }
   }
 
-  // Convert byCondition to array, merge 'none' into default if applicable
-  const byConditionArray = Object.entries(byCondition)
-    .filter(([, v]) => v.count > 0)
-    .map(([, v]) => ({
-      condition: v.condition,
-      color: v.color,
-      count: v.count,
-      valuation: Math.round(v.valuation * 100) / 100
-    }));
+  // Merge Grade A, Grade B, Grade C, Good into "Working" for display
+  const WORKING_CONDITIONS = ['Grade A', 'Grade B', 'Grade C', 'Good'];
+  const WORKING_COLOR = '#22c55e';
+
+  const merged = {};
+  for (const [key, v] of Object.entries(byCondition)) {
+    if (v.count === 0) continue;
+    const displayName = WORKING_CONDITIONS.includes(v.condition) ? 'Working' : v.condition;
+    if (!merged[displayName]) {
+      merged[displayName] = { condition: displayName, color: displayName === 'Working' ? WORKING_COLOR : v.color, count: 0, valuation: 0 };
+    }
+    merged[displayName].count += v.count;
+    merged[displayName].valuation += v.valuation;
+  }
+
+  const byConditionArray = Object.values(merged)
+    .map(v => ({ ...v, valuation: Math.round(v.valuation * 100) / 100 }));
 
   totalValuation = Math.round(totalValuation * 100) / 100;
   totalAtSellingPrice = Math.round(totalAtSellingPrice * 100) / 100;
