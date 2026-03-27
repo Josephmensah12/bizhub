@@ -119,9 +119,12 @@ exports.salesReport = asyncHandler(async (req, res) => {
     raw: true
   });
 
-  // Sales trend — always monthly
+  // Sales trend — always monthly, always last 13 months regardless of period selector
   const salesGranularity = 'monthly';
   const salesTrendExpr = trendGroupExpr(salesGranularity);
+  const trendStart = new Date();
+  trendStart.setMonth(trendStart.getMonth() - 12);
+  trendStart.setDate(1);
   const dailyTrend = await sequelize.query(`
     SELECT
       ${salesTrendExpr.select},
@@ -130,13 +133,13 @@ exports.salesReport = asyncHandler(async (req, res) => {
       COALESCE(SUM(total_cost_amount), 0) as cost,
       COALESCE(SUM(total_profit_amount), 0) as profit
     FROM invoices
-    WHERE invoice_date BETWEEN :startDate AND :endDate
+    WHERE invoice_date >= :trendStart
       AND status != 'CANCELLED'
       AND is_deleted = false
     GROUP BY ${salesTrendExpr.group}
     ORDER BY date ASC
   `, {
-    replacements: { startDate, endDate },
+    replacements: { trendStart },
     type: QueryTypes.SELECT
   });
 
