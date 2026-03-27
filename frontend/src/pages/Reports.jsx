@@ -807,6 +807,8 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
 
   return (
     <div className="space-y-6">
+      {/* Condition Valuation + Aging side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Condition Valuation Breakdown */}
       {conditionValuation && !loadingCondVal && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
@@ -856,7 +858,6 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
 
       {/* Aging Buckets */}
       {agingData && (
-        <>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory Aging</h3>
             {(() => {
@@ -909,9 +910,11 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
               );
             })()}
           </div>
+      )}
+      </div>
 
-          {/* Oldest Items */}
-          {agingData.oldest_items?.length > 0 && (
+      {/* Oldest Items */}
+      {agingData && agingData.oldest_items?.length > 0 && (
             <div className="bg-white rounded-lg shadow-sm border border-orange-200 p-5">
               <h3 className="text-lg font-semibold text-orange-700 mb-4">🕐 Oldest Unsold Items</h3>
               <div className="overflow-x-auto">
@@ -943,8 +946,6 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
                 </table>
               </div>
             </div>
-          )}
-        </>
       )}
 
       {/* Low Stock & Restock Suggestions */}
