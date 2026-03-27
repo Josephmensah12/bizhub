@@ -204,7 +204,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-      AND LOWER(COALESCE(ii.description, '')) != 'discount'
+      AND LOWER(COALESCE(ii.description, '')) != 'discount' AND COALESCE(ii.category, '') != '_discount'
     GROUP BY COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked'), COALESCE(a.model, ii.description, 'Unlinked'), COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY total_sold DESC
     LIMIT :limit
@@ -233,7 +233,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-      AND LOWER(COALESCE(ii.description, '')) != 'discount'
+      AND LOWER(COALESCE(ii.description, '')) != 'discount' AND COALESCE(ii.category, '') != '_discount'
     GROUP BY COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked'), COALESCE(a.model, ii.description, 'Unlinked'), COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY total_revenue DESC
     LIMIT :limit
@@ -261,7 +261,7 @@ exports.topSellers = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-      AND LOWER(COALESCE(ii.description, '')) != 'discount'
+      AND LOWER(COALESCE(ii.description, '')) != 'discount' AND COALESCE(ii.category, '') != '_discount'
     GROUP BY COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY total_revenue DESC
   `, {
@@ -589,7 +589,7 @@ exports.lowStockReport = asyncHandler(async (req, res) => {
        AND i.status IN ('PAID', 'PARTIALLY_PAID') 
        AND i.is_deleted = false
        AND ii.voided_at IS NULL
-      AND LOWER(COALESCE(ii.description, '')) != 'discount'
+      AND LOWER(COALESCE(ii.description, '')) != 'discount' AND COALESCE(ii.category, '') != '_discount'
        AND i.invoice_date >= NOW() - INTERVAL '30 days') as sold_last_30_days
     FROM assets a
     WHERE a.status = 'In Stock'
@@ -618,7 +618,7 @@ exports.lowStockReport = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-      AND LOWER(COALESCE(ii.description, '')) != 'discount'
+      AND LOWER(COALESCE(ii.description, '')) != 'discount' AND COALESCE(ii.category, '') != '_discount'
       AND i.invoice_date >= NOW() - INTERVAL '90 days'
     GROUP BY a.id, a.make, a.model, a.category, a.asset_type
     HAVING SUM(ii.quantity) >= 2
@@ -693,7 +693,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
       AND i.status != 'CANCELLED'
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-      AND LOWER(COALESCE(ii.description, '')) != 'discount'
+      AND LOWER(COALESCE(ii.description, '')) != 'discount' AND COALESCE(ii.category, '') != '_discount'
     GROUP BY COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY profit DESC
   `, {
@@ -761,7 +761,7 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
       AND i.status IN ('PAID', 'PARTIALLY_PAID')
       AND i.is_deleted = false
       AND ii.voided_at IS NULL
-      AND LOWER(COALESCE(ii.description, '')) != 'discount'
+      AND LOWER(COALESCE(ii.description, '')) != 'discount' AND COALESCE(ii.category, '') != '_discount'
     GROUP BY COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked'), COALESCE(a.model, ii.description, 'Unlinked'), COALESCE(a.category, ii.category, 'Unlinked'), COALESCE(a.asset_type, ii.asset_type, 'Unlinked')
     ORDER BY margin_percent DESC
     LIMIT 20
