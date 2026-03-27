@@ -184,6 +184,12 @@ exports.topSellers = asyncHandler(async (req, res) => {
   const { startDate, endDate } = parseDateRange(req.query);
   const limit = parseInt(req.query.limit) || 20;
 
+  // Proportional discount factor: distributes invoice-level discount across line items
+  // adj_revenue = line_total * (1 - invoice_discount / subtotal)
+  // adj_profit  = adj_revenue - line_cost
+  const ADJ_REV = `ii.line_total_amount * (1 - COALESCE(i.discount_amount, 0) / NULLIF(i.subtotal_amount, 0))`;
+  const ADJ_PROFIT = `(${ADJ_REV}) - ii.line_cost_amount`;
+
   const topByQuantity = await sequelize.query(`
     SELECT
       COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked') as make,
@@ -191,11 +197,11 @@ exports.topSellers = asyncHandler(async (req, res) => {
       COALESCE(a.category, ii.category, 'Unlinked') as category,
       COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
-      SUM(ii.line_total_amount) as total_revenue,
-      SUM(ii.line_profit_amount) as total_profit,
+      SUM(${ADJ_REV}) as total_revenue,
+      SUM(${ADJ_PROFIT}) as total_profit,
       AVG(ii.unit_price_amount) as avg_price,
-      CASE WHEN SUM(ii.line_total_amount) > 0
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
+      CASE WHEN SUM(${ADJ_REV}) > 0
+        THEN (SUM(${ADJ_PROFIT}) / SUM(${ADJ_REV}) * 100)
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
@@ -221,10 +227,10 @@ exports.topSellers = asyncHandler(async (req, res) => {
       COALESCE(a.category, ii.category, 'Unlinked') as category,
       COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
-      SUM(ii.line_total_amount) as total_revenue,
-      SUM(ii.line_profit_amount) as total_profit,
-      CASE WHEN SUM(ii.line_total_amount) > 0
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
+      SUM(${ADJ_REV}) as total_revenue,
+      SUM(${ADJ_PROFIT}) as total_profit,
+      CASE WHEN SUM(${ADJ_REV}) > 0
+        THEN (SUM(${ADJ_PROFIT}) / SUM(${ADJ_REV}) * 100)
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
@@ -249,10 +255,10 @@ exports.topSellers = asyncHandler(async (req, res) => {
       COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       COUNT(DISTINCT i.id) as invoice_count,
       SUM(ii.quantity) as total_sold,
-      SUM(ii.line_total_amount) as total_revenue,
-      SUM(ii.line_profit_amount) as total_profit,
-      CASE WHEN SUM(ii.line_total_amount) > 0
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
+      SUM(${ADJ_REV}) as total_revenue,
+      SUM(${ADJ_PROFIT}) as total_profit,
+      CASE WHEN SUM(${ADJ_REV}) > 0
+        THEN (SUM(${ADJ_PROFIT}) / SUM(${ADJ_REV}) * 100)
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
@@ -674,16 +680,19 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     type: QueryTypes.SELECT
   });
 
-  // Margin by category
+  // Margin by category — proportionally distribute invoice-level discounts
+  const M_ADJ_REV = `ii.line_total_amount * (1 - COALESCE(i.discount_amount, 0) / NULLIF(i.subtotal_amount, 0))`;
+  const M_ADJ_PROFIT = `(${M_ADJ_REV}) - ii.line_cost_amount`;
+
   const marginByCategory = await sequelize.query(`
     SELECT
       COALESCE(a.category, ii.category, 'Unlinked') as category,
       COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
-      SUM(ii.line_total_amount) as revenue,
+      SUM(${M_ADJ_REV}) as revenue,
       SUM(ii.line_cost_amount) as cost,
-      SUM(ii.line_profit_amount) as profit,
-      CASE WHEN SUM(ii.line_total_amount) > 0
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
+      SUM(${M_ADJ_PROFIT}) as profit,
+      CASE WHEN SUM(${M_ADJ_REV}) > 0
+        THEN (SUM(${M_ADJ_PROFIT}) / SUM(${M_ADJ_REV}) * 100)
         ELSE 0 END as margin_percent,
       COUNT(DISTINCT i.id) as invoice_count
     FROM invoice_items ii
@@ -748,11 +757,11 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     SELECT
       COALESCE(a.make, SPLIT_PART(ii.description, ' - ', 1), 'Unlinked') as make, COALESCE(a.model, ii.description, 'Unlinked') as model, COALESCE(a.category, ii.category, 'Unlinked') as category, COALESCE(a.asset_type, ii.asset_type, 'Unlinked') as asset_type,
       SUM(ii.quantity) as total_sold,
-      SUM(ii.line_total_amount) as total_revenue,
+      SUM(${M_ADJ_REV}) as total_revenue,
       SUM(ii.line_cost_amount) as total_cost,
-      SUM(ii.line_profit_amount) as total_profit,
-      CASE WHEN SUM(ii.line_total_amount) > 0
-        THEN (SUM(ii.line_profit_amount) / SUM(ii.line_total_amount) * 100)
+      SUM(${M_ADJ_PROFIT}) as total_profit,
+      CASE WHEN SUM(${M_ADJ_REV}) > 0
+        THEN (SUM(${M_ADJ_PROFIT}) / SUM(${M_ADJ_REV}) * 100)
         ELSE 0 END as margin_percent
     FROM invoice_items ii
     JOIN invoices i ON ii.invoice_id = i.id
