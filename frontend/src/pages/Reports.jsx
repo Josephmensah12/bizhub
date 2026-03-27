@@ -326,13 +326,15 @@ function MarginsTab({ data, loading }) {
           <LineChart data={trend}>
             <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
             <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-            <YAxis tickFormatter={(v) => `${v.toFixed(0)}%`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <YAxis yAxisId="pct" tickFormatter={(v) => `${v.toFixed(0)}%`} stroke={CHART_THEME.colors.primary} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+            <YAxis yAxisId="amt" orientation="right" tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.colors.success} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
             <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
-              formatter={(value) => [formatPercent(value), 'Avg Margin']}
+              formatter={(value, name) => name === 'Margin %' ? [formatPercent(value), name] : [formatCurrency(value), name]}
               labelFormatter={(d) => formatXAxisTooltip(d, granularity)}
             />
             <Legend />
-            <Line type="monotone" dataKey="avg_margin" stroke={CHART_THEME.colors.primary} strokeWidth={2.5} name="Avg Margin %" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
+            <Line yAxisId="pct" type="monotone" dataKey="avg_margin" stroke={CHART_THEME.colors.primary} strokeWidth={2.5} name="Margin %" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
+            <Line yAxisId="amt" type="monotone" dataKey="total_profit" stroke={CHART_THEME.colors.success} strokeWidth={2} strokeDasharray="5 3" name="Profit Amount" dot={false} activeDot={{ r: 4, strokeWidth: 2 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
