@@ -896,7 +896,7 @@ export default function Expenses() {
   const tabs = [
     { key: 'list', label: 'Expenses' },
     ...(canManage ? [{ key: 'recurring', label: 'Recurring' }] : []),
-    { key: 'analytics', label: 'Analytics' },
+    { key: 'analytics', label: 'Reports' },
     ...(canManage ? [{ key: 'categories', label: 'Categories' }] : [])
   ]
 
