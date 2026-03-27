@@ -859,28 +859,55 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
         <>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory Aging</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={agingData.aging_buckets} barCategoryGap="20%">
-                <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
-                <XAxis dataKey="age_bucket" stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-                <YAxis stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-                <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor} formatter={(value, name) => [name.includes('value') ? formatCurrency(value) : value]} />
-                <Legend />
-                <Bar dataKey="total_units" fill={CHART_THEME.colors.primary} name="Units" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Aging Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {agingData.aging_buckets.map((b, i) => (
-              <div key={b.age_bucket} className={`p-4 rounded-lg border ${i === 3 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}>
-                <div className="text-sm text-gray-500 mb-1">{b.age_bucket}</div>
-                <div className="text-xl font-bold">{b.total_units} units</div>
-                <div className="text-sm text-gray-500">Retail: {formatCurrency(b.total_retail_value)}</div>
-                <div className="text-sm text-gray-500">Cost: {formatCurrency(b.total_cost_value)}</div>
-              </div>
-            ))}
+            {(() => {
+              const AGING_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444'];
+              const donutData = agingData.aging_buckets.filter(b => b.total_units > 0).map((b, i) => ({
+                name: b.age_bucket, value: b.total_units, color: AGING_COLORS[i] || AGING_COLORS[3],
+                retail: b.total_retail_value, cost: b.total_cost_value
+              }));
+              const totalUnits = donutData.reduce((s, d) => s + d.value, 0);
+              return (
+                <div className="flex flex-col md:flex-row items-center gap-6">
+                  <div className="relative">
+                    <ResponsiveContainer width={220} height={220}>
+                      <PieChart>
+                        <Pie data={donutData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" stroke="none">
+                          {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        </Pie>
+                        <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle}
+                          formatter={(value, name) => [`${value} units`, name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-900">{totalUnits}</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wider">units</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    {donutData.map((d) => {
+                      const pct = totalUnits > 0 ? (d.value / totalUnits * 100).toFixed(1) : 0;
+                      return (
+                        <div key={d.name} className="flex items-center gap-3">
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                          <div className="flex-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-700 font-medium">{d.name}</span>
+                              <span className="font-bold">{d.value} units ({pct}%)</span>
+                            </div>
+                            <div className="flex gap-4 text-xs text-gray-500 mt-0.5">
+                              <span>Retail: {formatCurrency(d.retail)}</span>
+                              <span>Cost: {formatCurrency(d.cost)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Oldest Items */}
