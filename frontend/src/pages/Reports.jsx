@@ -829,7 +829,7 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
           </div>
           {conditionValuation.by_condition?.length > 0 && (
             <div className="space-y-2">
-              {conditionValuation.by_condition.map((item) => {
+              {[...conditionValuation.by_condition].sort((a, b) => b.count - a.count).map((item) => {
                 const maxVal = Math.max(...conditionValuation.by_condition.map(c => c.count), 1)
                 const pct = Math.max((item.count / maxVal) * 100, 4)
                 return (
