@@ -99,6 +99,15 @@ module.exports = (sequelize, DataTypes) => {
         return val === null ? null : parseFloat(val);
       }
     },
+    // Fulfillment type: delivered (default) = items left store; held = layaway
+    fulfillment_type: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      defaultValue: 'delivered',
+      validate: {
+        isIn: [['delivered', 'held']]
+      }
+    },
     // FX snapshot
     fx_rate_source: {
       type: DataTypes.STRING(50),

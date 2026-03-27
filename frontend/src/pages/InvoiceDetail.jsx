@@ -911,6 +911,9 @@ export default function InvoiceDetail() {
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">{invoice.invoice_number}</h1>
             <StatusBadge status={invoice.status} />
+            {invoice.fulfillment_type === 'held' && (
+              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Held</span>
+            )}
           </div>
           <p className="text-gray-500 mt-1">{formatDate(invoice.invoice_date)}</p>
         </div>

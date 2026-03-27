@@ -252,8 +252,9 @@ exports.start = asyncHandler(async (req, res) => {
     rows.forEach(r => { unitCountMap[r.asset_id] = parseInt(r.cnt, 10); });
   }
 
-  // For non-serialized assets, compute reserved quantities on open invoices
-  // so expected = quantity - reserved (items on open invoices are physically with the customer)
+  // For non-serialized assets, compute reserved quantities on delivered open invoices
+  // Only subtract items that have physically left the store (fulfillment_type = 'delivered')
+  // Items on 'held' (layaway) invoices are still in store and should be counted
   const nonSerializedIds = assets.filter(a => !a.is_serialized).map(a => a.id);
   let reservedMap = {};
   if (nonSerializedIds.length > 0) {
@@ -264,6 +265,7 @@ exports.start = asyncHandler(async (req, res) => {
         WHERE ii.asset_id IN (:ids)
           AND i.status NOT IN ('CANCELLED', 'PAID')
           AND ii.voided_at IS NULL
+          AND COALESCE(i.fulfillment_type, 'delivered') = 'delivered'
         GROUP BY ii.asset_id`,
       { replacements: { ids: nonSerializedIds } }
     );

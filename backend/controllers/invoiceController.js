@@ -321,6 +321,7 @@ exports.create = asyncHandler(async (req, res) => {
     customerId, customer_id,
     invoiceDate, invoice_date,
     currency = 'GHS',
+    fulfillment_type = 'delivered',
     notes
   } = req.body;
 
@@ -347,6 +348,7 @@ exports.create = asyncHandler(async (req, res) => {
     invoice_date: _invoiceDate,
     status: 'UNPAID', // Always UNPAID on creation
     currency,
+    fulfillment_type: ['delivered', 'held'].includes(fulfillment_type) ? fulfillment_type : 'delivered',
     notes,
     amount_paid: 0,
     balance_due: 0, // Will be updated when items are added
@@ -391,6 +393,7 @@ exports.update = asyncHandler(async (req, res) => {
     customerId, customer_id,
     invoiceDate, invoice_date,
     currency,
+    fulfillment_type,
     notes
   } = req.body;
 
@@ -440,6 +443,11 @@ exports.update = asyncHandler(async (req, res) => {
   if (currency !== undefined) {
     changes.currency = { from: invoice.currency, to: currency };
     invoice.currency = currency;
+  }
+
+  if (fulfillment_type !== undefined && ['delivered', 'held'].includes(fulfillment_type)) {
+    changes.fulfillment_type = { from: invoice.fulfillment_type, to: fulfillment_type };
+    invoice.fulfillment_type = fulfillment_type;
   }
 
   if (notes !== undefined) {

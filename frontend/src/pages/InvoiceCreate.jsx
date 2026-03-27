@@ -103,6 +103,7 @@ export default function InvoiceCreate() {
   const [invoice, setInvoice] = useState(null);
   const [currency, setCurrency] = useState('GHS');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [fulfillmentType, setFulfillmentType] = useState('delivered');
   const [notes, setNotes] = useState('');
 
   // Customer state
@@ -166,6 +167,7 @@ export default function InvoiceCreate() {
       setInvoice(invoiceData);
       setCurrency(invoiceData.currency || 'GHS');
       setInvoiceDate(invoiceData.invoice_date?.split('T')[0] || new Date().toISOString().split('T')[0]);
+      setFulfillmentType(invoiceData.fulfillment_type || 'delivered');
       setNotes(invoiceData.notes || '');
       setCustomer(invoiceData.customer || null);
       setItems(invoiceData.items || []);
@@ -217,6 +219,7 @@ export default function InvoiceCreate() {
       customer_id: customer?.id,
       invoice_date: invoiceDate,
       currency,
+      fulfillment_type: fulfillmentType,
       notes
     });
     const created = response.data.data.invoice;
@@ -723,6 +726,18 @@ export default function InvoiceCreate() {
                   <option value="GHS">GHS (Ghana Cedi)</option>
                   <option value="USD">USD (US Dollar)</option>
                   <option value="GBP">GBP (British Pound)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fulfillment</label>
+                <select
+                  value={fulfillmentType}
+                  onChange={(e) => setFulfillmentType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="delivered">Delivered — items leave store now</option>
+                  <option value="held">Held — items stay until fully paid</option>
                 </select>
               </div>
 
