@@ -252,14 +252,35 @@ exports.start = asyncHandler(async (req, res) => {
     rows.forEach(r => { unitCountMap[r.asset_id] = parseInt(r.cnt, 10); });
   }
 
+  // For non-serialized assets, compute reserved quantities on open invoices
+  // so expected = quantity - reserved (items on open invoices are physically with the customer)
+  const nonSerializedIds = assets.filter(a => !a.is_serialized).map(a => a.id);
+  let reservedMap = {};
+  if (nonSerializedIds.length > 0) {
+    const [rows] = await sequelize.query(
+      `SELECT ii.asset_id, COALESCE(SUM(ii.quantity), 0) AS reserved
+         FROM invoice_items ii
+         JOIN invoices i ON i.id = ii.invoice_id
+        WHERE ii.asset_id IN (:ids)
+          AND i.status NOT IN ('CANCELLED', 'PAID')
+          AND ii.voided_at IS NULL
+        GROUP BY ii.asset_id`,
+      { replacements: { ids: nonSerializedIds } }
+    );
+    rows.forEach(r => { reservedMap[r.asset_id] = parseInt(r.reserved, 10); });
+  }
+
   const transaction = await sequelize.transaction();
   try {
     // Create items in bulk — set count_method based on is_serialized
+    // Non-serialized: expected = quantity - reserved on open invoices
     const itemRows = assets.map(a => ({
       stock_take_id: stockTake.id,
       asset_id: a.id,
       count_method: a.is_serialized ? 'serial' : 'quantity',
-      expected_quantity: a.is_serialized ? (unitCountMap[a.id] || 0) : (a.quantity || 0),
+      expected_quantity: a.is_serialized
+        ? (unitCountMap[a.id] || 0)
+        : Math.max((a.quantity || 0) - (reservedMap[a.id] || 0), 0),
       status: 'pending'
     }));
 
