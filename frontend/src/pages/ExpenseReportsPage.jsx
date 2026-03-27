@@ -129,8 +129,8 @@ export default function ExpenseReportsPage() {
       </div>
 
       {/* 2 & 3: Monthly Trend + Category */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl border p-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="bg-white rounded-xl border p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-700">
               Monthly Expense Trend
