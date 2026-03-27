@@ -94,12 +94,6 @@ export default function ExpenseReportsPage() {
             <button onClick={() => setDisplayCurrency('USD')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>USD</button>
           </div>
-          <select value={period} onChange={e => { setPeriod(e.target.value); setCatFilter(null); setVendorFilter(null); setMonthFilter(null) }}
-            className="border rounded-lg px-3 py-1.5 text-sm">
-            <option value="month">This Month</option>
-            <option value="quarter">This Quarter</option>
-            <option value="year">This Year</option>
-          </select>
           {(catFilter || vendorFilter || monthFilter) && (
             <button onClick={() => { setCatFilter(null); setVendorFilter(null); setMonthFilter(null); setData(fullData) }}
               className="text-xs text-gray-500 hover:text-gray-700">Clear filters</button>
