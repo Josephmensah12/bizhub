@@ -119,8 +119,8 @@ exports.salesReport = asyncHandler(async (req, res) => {
     raw: true
   });
 
-  // Sales trend (daily or monthly based on range)
-  const salesGranularity = getGranularity(startDate, endDate);
+  // Sales trend — always monthly
+  const salesGranularity = 'monthly';
   const salesTrendExpr = trendGroupExpr(salesGranularity);
   const dailyTrend = await sequelize.query(`
     SELECT
