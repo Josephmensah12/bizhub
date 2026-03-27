@@ -896,7 +896,6 @@ export default function Expenses() {
   const tabs = [
     { key: 'list', label: 'Expenses' },
     ...(canManage ? [{ key: 'recurring', label: 'Recurring' }] : []),
-    { key: 'analytics', label: 'Reports' },
     ...(canManage ? [{ key: 'categories', label: 'Categories' }] : [])
   ]
 
@@ -1132,11 +1131,6 @@ export default function Expenses() {
             </table>
           </div>
         </div>
-      )}
-
-      {/* Analytics/Reports Tab */}
-      {activeTab === 'analytics' && (
-        <ExpenseReports fc={fc} displayCurrency={displayCurrency} analyticsPeriod={analyticsPeriod} setAnalyticsPeriod={setAnalyticsPeriod} />
       )}
 
       {/* Categories Tab */}
