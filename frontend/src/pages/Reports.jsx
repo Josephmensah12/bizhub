@@ -802,6 +802,15 @@ function StaffTab({ data, loading }) {
 // ─── Inventory Tab ────────────────────────────────────────────
 function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAging, loadingLowStock, loadingCondVal }) {
   const loading = loadingAging || loadingLowStock
+  const [agingFilter, setAgingFilter] = useState(null)
+
+  // Day range mapping for each bucket
+  const AGING_RANGES = {
+    '0-30 days': [0, 30],
+    '31-60 days': [31, 60],
+    '61-90 days': [61, 90],
+    '90+ days': [91, Infinity]
+  }
 
   if (loading) return <LoadingSpinner />
 
@@ -859,7 +868,15 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
       {/* Aging Buckets */}
       {agingData && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory Aging</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Inventory Aging
+                {agingFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {agingFilter}</span>}
+              </h3>
+              {agingFilter && (
+                <button onClick={() => setAgingFilter(null)} className="text-xs text-gray-500 hover:text-gray-700">Clear</button>
+              )}
+            </div>
             {(() => {
               const AGING_COLORS = ['#22c55e', '#eab308', '#f97316', '#ef4444'];
               const donutData = agingData.aging_buckets.filter(b => b.total_units > 0).map((b, i) => ({
@@ -872,8 +889,9 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
                   <div className="relative">
                     <ResponsiveContainer width={220} height={220}>
                       <PieChart>
-                        <Pie data={donutData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" stroke="none">
-                          {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        <Pie data={donutData} cx="50%" cy="50%" innerRadius={60} outerRadius={95} dataKey="value" stroke="none"
+                          cursor="pointer" onClick={(_, idx) => setAgingFilter(prev => prev === donutData[idx].name ? null : donutData[idx].name)}>
+                          {donutData.map((d, i) => <Cell key={i} fill={d.color} opacity={agingFilter && agingFilter !== d.name ? 0.3 : 1} />)}
                         </Pie>
                         <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle}
                           formatter={(value, name) => [`${value} units`, name]} />
@@ -889,8 +907,10 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
                   <div className="flex-1 space-y-3">
                     {donutData.map((d) => {
                       const pct = totalUnits > 0 ? (d.value / totalUnits * 100).toFixed(1) : 0;
+                      const isActive = agingFilter === d.name;
                       return (
-                        <div key={d.name} className="flex items-center gap-3">
+                        <button key={d.name} onClick={() => setAgingFilter(prev => prev === d.name ? null : d.name)}
+                          className={`flex items-center gap-3 w-full text-left transition-opacity ${agingFilter && !isActive ? 'opacity-40' : ''}`}>
                           <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
                           <div className="flex-1">
                             <div className="flex justify-between text-sm">
@@ -902,7 +922,7 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
                               <span>Cost: {formatCurrency(d.cost)}</span>
                             </div>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -914,9 +934,18 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
       </div>
 
       {/* Oldest Items */}
-      {agingData && agingData.oldest_items?.length > 0 && (
+      {agingData && agingData.oldest_items?.length > 0 && (() => {
+        const range = agingFilter ? AGING_RANGES[agingFilter] : null;
+        const filteredItems = range
+          ? agingData.oldest_items.filter(item => item.days_in_stock >= range[0] && item.days_in_stock <= range[1])
+          : agingData.oldest_items;
+        if (filteredItems.length === 0) return null;
+        return (
             <div className="bg-white rounded-lg shadow-sm border border-orange-200 p-5">
-              <h3 className="text-lg font-semibold text-orange-700 mb-4">🕐 Oldest Unsold Items</h3>
+              <h3 className="text-lg font-semibold text-orange-700 mb-4">
+                Oldest Unsold Items
+                {agingFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {agingFilter}</span>}
+              </h3>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
@@ -930,7 +959,7 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
                     </tr>
                   </thead>
                   <tbody>
-                    {agingData.oldest_items.slice(0, 10).map((item) => (
+                    {filteredItems.slice(0, 20).map((item) => (
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-orange-50">
                         <td className="py-2 px-3 font-mono text-xs">{item.asset_tag}</td>
                         <td className="py-2 px-3 font-medium">{item.make} {item.model}</td>
@@ -946,7 +975,8 @@ function InventoryTab({ agingData, lowStockData, conditionValuation, loadingAgin
                 </table>
               </div>
             </div>
-      )}
+        );
+      })()}
 
       {/* Low Stock & Restock Suggestions */}
       {lowStockData && (
