@@ -217,8 +217,8 @@ exports.getMetrics = asyncHandler(async (req, res) => {
   const topByQuantity = await Asset.sequelize.query(
     `SELECT make, model,
             SUM(CASE WHEN is_serialized THEN
-              (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status NOT IN ('Sold','Scrapped','Written Off'))
-            ELSE a.quantity END) AS quantity
+              (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status = 'Available')
+            ELSE a.quantity - COALESCE((SELECT SUM(ii.quantity) FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id WHERE ii.asset_id = a.id AND i.status NOT IN ('CANCELLED','PAID') AND ii.voided_at IS NULL AND COALESCE(i.fulfillment_type,'delivered') = 'delivered'), 0) END) AS quantity
      FROM assets a
      WHERE a.deleted_at IS NULL AND a.status = 'In Stock' ${agingWhere} ${categoryWhere}
      GROUP BY make, model
