@@ -15,8 +15,9 @@ router.post('/recurring/generate', adminOnly, expenseController.generateRecurrin
 router.patch('/recurring/:id', expenseEditors, expenseController.updateRecurring);
 router.delete('/recurring/:id', adminOnly, expenseController.removeRecurring);
 
-// ─── Analytics ───────────────────────────────────────────────
+// ─── Analytics & Reports ──────────────────────────────────────
 router.get('/analytics', expenseController.analytics);
+router.get('/reports', expenseController.reports);
 
 // ─── Expense CRUD ────────────────────────────────────────────
 router.get('/', expenseController.list);

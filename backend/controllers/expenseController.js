@@ -623,3 +623,181 @@ exports.analytics = asyncHandler(async (req, res) => {
     }
   });
 });
+
+/**
+ * GET /api/v1/expenses/reports
+ * Comprehensive expense reports with 8 sections
+ */
+exports.reports = asyncHandler(async (req, res) => {
+  const { period, dateFrom, dateTo } = req.query;
+  const role = req.user.role;
+  const isAdmin = role === 'Admin';
+
+  const now = new Date();
+  let startDate, endDate;
+  switch (period) {
+    case 'week':
+      startDate = new Date(now); startDate.setDate(now.getDate() - 7); endDate = now; break;
+    case 'month':
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1); endDate = now; break;
+    case 'quarter':
+      startDate = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); endDate = now; break;
+    case 'year':
+      startDate = new Date(now.getFullYear(), 0, 1); endDate = now; break;
+    case 'custom':
+      startDate = dateFrom ? new Date(dateFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = dateTo ? new Date(dateTo) : now; break;
+    default:
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1); endDate = now;
+  }
+
+  const sensFilter = isAdmin ? '' : 'AND e.category_id NOT IN (SELECT id FROM expense_categories WHERE is_sensitive = true)';
+
+  // Previous period for comparison
+  const periodMs = endDate - startDate;
+  const prevEnd = new Date(startDate.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - periodMs);
+
+  // Summary
+  const [currentSummary] = await sequelize.query(`
+    SELECT COALESCE(SUM(amount_usd), 0) as total_usd, COALESCE(SUM(amount_local), 0) as total_local,
+           COUNT(*) as count, COALESCE(AVG(amount_usd), 0) as avg_usd, MAX(amount_usd) as max_usd
+    FROM expenses e WHERE expense_date BETWEEN :startDate AND :endDate ${sensFilter}
+  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+
+  const [prevSummary] = await sequelize.query(`
+    SELECT COALESCE(SUM(amount_usd), 0) as total_usd
+    FROM expenses e WHERE expense_date BETWEEN :prevStart AND :prevEnd ${sensFilter}
+  `, { replacements: { prevStart, prevEnd }, type: QueryTypes.SELECT });
+
+  const [revData] = await sequelize.query(`
+    SELECT COALESCE(SUM(total_amount), 0) as revenue
+    FROM invoices WHERE invoice_date BETWEEN :startDate AND :endDate
+      AND status IN ('PAID', 'PARTIALLY_PAID') AND is_deleted = false
+  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+
+  const days = Math.max(Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)), 1);
+  const totalUsd = parseFloat(currentSummary.total_usd) || 0;
+  const prevTotalUsd = parseFloat(prevSummary.total_usd) || 0;
+  const pctChange = prevTotalUsd > 0 ? ((totalUsd - prevTotalUsd) / prevTotalUsd * 100) : 0;
+  const revenue = parseFloat(revData.revenue) || 0;
+
+  // Monthly trend (13 months) with revenue
+  const trendStart = new Date(); trendStart.setMonth(trendStart.getMonth() - 12); trendStart.setDate(1);
+  const monthlyTrend = await sequelize.query(`
+    SELECT DATE_TRUNC('month', expense_date)::date as month,
+           COALESCE(SUM(amount_usd), 0) as expenses_usd, COALESCE(SUM(amount_local), 0) as expenses_local, COUNT(*) as count
+    FROM expenses e WHERE expense_date >= :trendStart ${sensFilter}
+    GROUP BY DATE_TRUNC('month', expense_date) ORDER BY month ASC
+  `, { replacements: { trendStart }, type: QueryTypes.SELECT });
+
+  const monthlyRevenue = await sequelize.query(`
+    SELECT DATE_TRUNC('month', invoice_date)::date as month, COALESCE(SUM(total_amount), 0) as revenue
+    FROM invoices WHERE invoice_date >= :trendStart AND status IN ('PAID', 'PARTIALLY_PAID') AND is_deleted = false
+    GROUP BY DATE_TRUNC('month', invoice_date) ORDER BY month ASC
+  `, { replacements: { trendStart }, type: QueryTypes.SELECT });
+  const revenueByMonth = {};
+  monthlyRevenue.forEach(r => { revenueByMonth[r.month] = parseFloat(r.revenue); });
+
+  // By category
+  const byCategory = await sequelize.query(`
+    SELECT ec.id as category_id, ec.name as category_name,
+           COALESCE(SUM(e.amount_usd), 0) as total_usd, COALESCE(SUM(e.amount_local), 0) as total_local, COUNT(e.id) as count
+    FROM expense_categories ec
+    LEFT JOIN expenses e ON e.category_id = ec.id AND e.expense_date BETWEEN :startDate AND :endDate
+    WHERE ec.is_active = true ${isAdmin ? '' : 'AND ec.is_sensitive = false'}
+    GROUP BY ec.id, ec.name HAVING COUNT(e.id) > 0 ORDER BY total_usd DESC
+  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+
+  // Top vendors
+  const topVendors = await sequelize.query(`
+    SELECT COALESCE(vendor_or_payee, 'Unspecified') as vendor,
+           COALESCE(SUM(amount_usd), 0) as total_usd, COALESCE(SUM(amount_local), 0) as total_local, COUNT(*) as count
+    FROM expenses e WHERE expense_date BETWEEN :startDate AND :endDate ${sensFilter}
+    GROUP BY COALESCE(vendor_or_payee, 'Unspecified') ORDER BY total_usd DESC LIMIT 15
+  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+
+  // Recurring vs one-time
+  const typeSplit = await sequelize.query(`
+    SELECT expense_type, COALESCE(SUM(amount_usd), 0) as total_usd,
+           COALESCE(SUM(amount_local), 0) as total_local, COUNT(*) as count
+    FROM expenses e WHERE expense_date BETWEEN :startDate AND :endDate ${sensFilter}
+    GROUP BY expense_type
+  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+
+  // Expense-to-revenue ratio trend
+  const ratioTrend = monthlyTrend.map(m => {
+    const rev = revenueByMonth[m.month] || 0;
+    const exp = parseFloat(m.expenses_local);
+    return { month: m.month, expenses: exp, revenue: rev, ratio: rev > 0 ? (exp / rev * 100) : 0 };
+  });
+
+  const catTotal = byCategory.reduce((s, c) => s + parseFloat(c.total_usd), 0);
+
+  // Largest expenses
+  const largestExpenses = await sequelize.query(`
+    SELECT e.id, e.expense_date, e.description, e.vendor_or_payee, e.amount_usd, e.amount_local,
+           e.currency_code, e.expense_type, ec.name as category_name
+    FROM expenses e LEFT JOIN expense_categories ec ON ec.id = e.category_id
+    WHERE e.expense_date BETWEEN :startDate AND :endDate ${sensFilter}
+    ORDER BY e.amount_usd DESC LIMIT 20
+  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+
+  // Month-over-month comparison
+  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+  const momComparison = await sequelize.query(`
+    SELECT ec.name as category,
+           COALESCE(SUM(CASE WHEN e.expense_date >= :currentMonth THEN e.amount_local ELSE 0 END), 0) as current_month,
+           COALESCE(SUM(CASE WHEN e.expense_date >= :prevMonth AND e.expense_date <= :prevMonthEnd THEN e.amount_local ELSE 0 END), 0) as previous_month
+    FROM expense_categories ec
+    LEFT JOIN expenses e ON e.category_id = ec.id AND e.expense_date >= :prevMonth
+    WHERE ec.is_active = true ${isAdmin ? '' : 'AND ec.is_sensitive = false'}
+    GROUP BY ec.name
+    HAVING COALESCE(SUM(CASE WHEN e.expense_date >= :currentMonth THEN e.amount_local ELSE 0 END), 0) > 0
+        OR COALESCE(SUM(CASE WHEN e.expense_date >= :prevMonth AND e.expense_date <= :prevMonthEnd THEN e.amount_local ELSE 0 END), 0) > 0
+    ORDER BY current_month DESC
+  `, { replacements: { currentMonth, prevMonth, prevMonthEnd }, type: QueryTypes.SELECT });
+
+  res.json({
+    success: true,
+    data: {
+      period: { startDate, endDate },
+      summary: {
+        total_usd: totalUsd, total_local: parseFloat(currentSummary.total_local) || 0,
+        count: parseInt(currentSummary.count) || 0, avg_usd: parseFloat(currentSummary.avg_usd) || 0,
+        max_usd: parseFloat(currentSummary.max_usd) || 0, daily_burn: totalUsd / days,
+        expense_to_revenue: revenue > 0 ? (totalUsd / revenue * 100) : 0,
+        pct_change: Math.round(pctChange * 10) / 10
+      },
+      monthly_trend: monthlyTrend.map(m => ({
+        month: m.month, expenses_usd: parseFloat(m.expenses_usd), expenses_local: parseFloat(m.expenses_local),
+        revenue: revenueByMonth[m.month] || 0, count: parseInt(m.count)
+      })),
+      by_category: byCategory.map(c => ({
+        category_id: c.category_id, category_name: c.category_name,
+        total_usd: parseFloat(c.total_usd), total_local: parseFloat(c.total_local),
+        count: parseInt(c.count), pct_of_total: catTotal > 0 ? (parseFloat(c.total_usd) / catTotal * 100) : 0
+      })),
+      top_vendors: topVendors.map(v => ({
+        vendor: v.vendor, total_usd: parseFloat(v.total_usd), total_local: parseFloat(v.total_local), count: parseInt(v.count)
+      })),
+      type_split: typeSplit.map(t => ({
+        type: t.expense_type, total_usd: parseFloat(t.total_usd), total_local: parseFloat(t.total_local), count: parseInt(t.count)
+      })),
+      ratio_trend: ratioTrend,
+      largest_expenses: largestExpenses.map(e => ({
+        ...e, amount_usd: parseFloat(e.amount_usd), amount_local: parseFloat(e.amount_local)
+      })),
+      mom_comparison: momComparison.map(m => ({
+        category: m.category, current_month: parseFloat(m.current_month), previous_month: parseFloat(m.previous_month),
+        change: parseFloat(m.current_month) - parseFloat(m.previous_month),
+        pct_change: parseFloat(m.previous_month) > 0
+          ? ((parseFloat(m.current_month) - parseFloat(m.previous_month)) / parseFloat(m.previous_month) * 100)
+          : (parseFloat(m.current_month) > 0 ? 100 : 0)
+      }))
+    }
+  });
+});
