@@ -629,7 +629,9 @@ exports.addItem = asyncHandler(async (req, res) => {
         unit_price_amount: sellingPrice,
         unit_cost_amount: unitCost,
         original_cost_currency: originalCostCurrency,
-        original_cost_amount: originalCostAmount
+        original_cost_amount: originalCostAmount,
+        category: asset.category || null,
+        asset_type: asset.asset_type || null
       }, { transaction });
 
       // Mark unit as Reserved
@@ -753,7 +755,9 @@ exports.addItem = asyncHandler(async (req, res) => {
       unit_price_amount: sellingPrice,
       unit_cost_amount: unitCost,
       original_cost_currency: originalCostCurrency,
-      original_cost_amount: originalCostAmount
+      original_cost_amount: originalCostAmount,
+      category: asset.category || null,
+      asset_type: asset.asset_type || null
     }, { transaction });
 
     // Update asset computed status
