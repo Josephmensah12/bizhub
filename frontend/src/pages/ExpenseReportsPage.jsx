@@ -39,13 +39,19 @@ export default function ExpenseReportsPage() {
   }, [])
 
   const [fullData, setFullData] = useState(null)
+  const [trendData, setTrendData] = useState([])
 
   useEffect(() => {
     setLoading(true)
-    axios.get('/api/v1/expenses/reports', { params: { period } })
-      .then(res => { setData(res.data.data); setFullData(res.data.data) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    // Fetch period-specific data + always fetch 13-month trend separately
+    Promise.all([
+      axios.get('/api/v1/expenses/reports', { params: { period } }),
+      axios.get('/api/v1/expenses/reports', { params: { period: 'custom', dateFrom: (() => { const d = new Date(); d.setMonth(d.getMonth() - 12); d.setDate(1); return d.toISOString().slice(0,10) })() } })
+    ]).then(([periodRes, trendRes]) => {
+      setData(periodRes.data.data)
+      setFullData(periodRes.data.data)
+      setTrendData(trendRes.data.data.monthly_trend || [])
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [period])
 
   // When a month is clicked on the trend chart, fetch that month's category breakdown
@@ -138,8 +144,8 @@ export default function ExpenseReportsPage() {
             </h3>
             {monthFilter && <button onClick={() => { setMonthFilter(null); setData(fullData) }} className="text-xs text-gray-500 hover:text-gray-700">Clear</button>}
           </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={monthly_trend.map(m => ({
+          <ResponsiveContainer width="100%" height={350}>
+            <LineChart data={trendData.map(m => ({
               ...m,
               label: new Date(m.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
               ratio: m.revenue > 0 ? (m.expenses_local / m.revenue * 100) : 0
