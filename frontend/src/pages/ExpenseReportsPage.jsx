@@ -72,7 +72,7 @@ export default function ExpenseReportsPage() {
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-600 border-t-transparent"></div></div>
   if (!data) return <div className="text-center py-12 text-gray-400">No expense data</div>
 
-  const { summary, monthly_trend, by_category, top_vendors, type_split, ratio_trend, largest_expenses, mom_comparison } = data
+  const { summary, monthly_trend, by_category, top_vendors, type_split, ratio_trend, largest_expenses, mom_comparison, category_trend } = data
 
   let filteredLargest = largest_expenses
   if (catFilter) filteredLargest = filteredLargest.filter(e => e.category_name === catFilter)
@@ -269,6 +269,33 @@ export default function ExpenseReportsPage() {
           </div>
         </div>
       </div>
+
+      {/* Category Trend Lines (13 months) */}
+      {category_trend?.data?.length > 0 && category_trend?.categories?.length > 0 && (
+        <div className="bg-white rounded-xl border p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Expense Categories Trend (13 Months)</h3>
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={category_trend.data.map(d => ({
+              ...d,
+              label: new Date(d.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                formatter={(value, name) => [fmtLocal(value || 0), name]}
+                labelFormatter={l => l}
+              />
+              <Legend />
+              {category_trend.categories.map((cat, i) => (
+                <Line key={cat} type="monotone" dataKey={cat} stroke={DONUT_COLORS[i % DONUT_COLORS.length]}
+                  strokeWidth={2} name={cat} dot={false} activeDot={{ r: 4 }} connectNulls />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* 6. Category Breakdown Table */}
       <div className="bg-white rounded-xl border p-5 mb-6">

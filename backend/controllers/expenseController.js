@@ -748,6 +748,24 @@ exports.reports = asyncHandler(async (req, res) => {
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
+  // Category trend (13 months) — pivoted by category
+  const categoryTrendRaw = await sequelize.query(`
+    SELECT DATE_TRUNC('month', e.expense_date)::date as month, ec.name as category,
+           COALESCE(SUM(e.amount_local), 0) as amount
+    FROM expenses e JOIN expense_categories ec ON ec.id = e.category_id
+    WHERE e.expense_date >= :trendStart ${sensFilter}
+    GROUP BY DATE_TRUNC('month', e.expense_date), ec.name
+    ORDER BY month ASC
+  `, { replacements: { trendStart }, type: QueryTypes.SELECT });
+
+  const ctMap = {};
+  const ctCategories = new Set();
+  for (const r of categoryTrendRaw) {
+    if (!ctMap[r.month]) ctMap[r.month] = { month: r.month };
+    ctMap[r.month][r.category] = parseFloat(r.amount);
+    ctCategories.add(r.category);
+  }
+
   const momComparison = await sequelize.query(`
     SELECT ec.name as category,
            COALESCE(SUM(CASE WHEN e.expense_date >= :currentMonth THEN e.amount_local ELSE 0 END), 0) as current_month,
@@ -797,7 +815,11 @@ exports.reports = asyncHandler(async (req, res) => {
         pct_change: parseFloat(m.previous_month) > 0
           ? ((parseFloat(m.current_month) - parseFloat(m.previous_month)) / parseFloat(m.previous_month) * 100)
           : (parseFloat(m.current_month) > 0 ? 100 : 0)
-      }))
+      })),
+      category_trend: {
+        data: Object.values(ctMap),
+        categories: [...ctCategories].sort()
+      }
     }
   });
 });
