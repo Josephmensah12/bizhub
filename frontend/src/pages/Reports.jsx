@@ -1236,32 +1236,6 @@ function ReconciliationTab({ data, loading }) {
       </div>
 
       {/* Daily Collections Stacked Bar Chart */}
-      {daily_collections.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Daily Collections by Method</h3>
-            <span className="text-xs text-gray-400">Click a bar to filter invoices below</span>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={daily_collections} className="cursor-pointer" barCategoryGap="15%">
-              <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
-              <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-              <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
-                formatter={(value, name) => [formatCurrency(value), name.charAt(0).toUpperCase() + name.slice(1)]}
-                labelFormatter={(d) => new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-              />
-              <Legend />
-              <Bar dataKey="cash" stackId="a" fill={METHOD_COLORS.Cash} name="Cash" cursor="pointer" radius={[0, 0, 0, 0]} onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'cash') }} />
-              <Bar dataKey="momo" stackId="a" fill={METHOD_COLORS.MoMo} name="MoMo" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'momo') }} />
-              <Bar dataKey="card" stackId="a" fill={METHOD_COLORS.Card} name="Card" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'card') }} />
-              <Bar dataKey="ach" stackId="a" fill={METHOD_COLORS.ACH} name="ACH" cursor="pointer" onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'ach') }} />
-              <Bar dataKey="other" stackId="a" fill={METHOD_COLORS.Other} name="Other" cursor="pointer" radius={[4, 4, 0, 0]} onClick={(payload, _idx, e) => { handleBarClick({ activePayload: [{ payload }] }, 'other') }} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
       {/* Payment Method Breakdown */}
       {by_method.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
