@@ -154,24 +154,30 @@ const navGroups = [
     ]
   },
   {
-    label: 'SALES',
+    label: 'INVENTORY',
     items: [
-      { name: 'Inventory', path: '/inventory', roles: ['Admin', 'Manager', 'Sales', 'Technician', 'Warehouse'] },
-      { name: 'Write-Offs', path: '/financials/write-offs', roles: ['Admin', 'Manager', 'Warehouse'] },
       {
-        name: 'Invoices', path: '/sales/invoices', addPath: '/sales/invoices/new',
-        roles: ['Admin', 'Manager', 'Sales'],
-        matchPaths: ['/sales/invoices', '/sales']
+        name: 'Inventory', roles: ['Admin', 'Manager', 'Sales', 'Technician', 'Warehouse'],
+        submenu: [
+          { name: 'All Items', path: '/inventory' },
+          { name: 'Write-Offs', path: '/financials/write-offs' },
+          { name: 'Repairs', path: '/repairs' },
+          { name: 'Stock Takes', path: '/stock-takes' },
+        ]
       },
-      { name: 'Payments', path: '/sales/payments', roles: ['Admin', 'Manager', 'Sales'] },
-      { name: 'Preorders', path: '/preorders', roles: ['Admin', 'Manager', 'Sales'] },
     ]
   },
   {
-    label: 'OPERATIONS',
+    label: 'SALES',
     items: [
-      { name: 'Stock Takes', path: '/stock-takes', roles: ['Admin', 'Manager', 'Warehouse'] },
-      { name: 'Repairs', path: '/repairs', roles: ['Admin', 'Manager', 'Technician'] },
+      {
+        name: 'Sales', roles: ['Admin', 'Manager', 'Sales'],
+        submenu: [
+          { name: 'Invoices', path: '/sales/invoices', addPath: '/sales/invoices/new' },
+          { name: 'Payments', path: '/sales/payments' },
+          { name: 'Preorders', path: '/preorders' },
+        ]
+      },
       { name: 'Customers', path: '/customers', roles: ['Admin', 'Manager', 'Sales'] },
     ]
   },
@@ -179,13 +185,13 @@ const navGroups = [
     label: 'FINANCIALS',
     items: [
       { name: 'Expenses', path: '/expenses', roles: ['Admin', 'Manager', 'Sales'] },
-      { name: 'Financial Reports', path: '/financial-reports', roles: ['Admin'] },
-    ]
-  },
-  {
-    label: 'INSIGHTS',
-    items: [
-      { name: 'Reports', path: '/reports', roles: ['Admin'] },
+      {
+        name: 'Reports', roles: ['Admin'],
+        submenu: [
+          { name: 'Sales Reports', path: '/reports' },
+          { name: 'Financial Reports', path: '/financial-reports' },
+        ]
+      },
     ]
   },
   {
@@ -209,7 +215,22 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
   const { user, logout } = useAuth()
   const userRole = user?.role
   const [collapsed, setCollapsed] = useState(false)
-  const [expandedMenus, setExpandedMenus] = useState(['Settings'])
+  // Auto-expand menus that contain the active route
+  const getInitialExpanded = () => {
+    const expanded = []
+    for (const group of navGroups) {
+      for (const item of group.items) {
+        if (item.submenu) {
+          const hasActive = item.submenu.some(s =>
+            s.path === '/' ? location.pathname === '/' : location.pathname.startsWith(s.path)
+          )
+          if (hasActive) expanded.push(item.name)
+        }
+      }
+    }
+    return expanded
+  }
+  const [expandedMenus, setExpandedMenus] = useState(getInitialExpanded)
 
   const toggleSubmenu = (name) => {
     setExpandedMenus(prev =>
@@ -326,6 +347,16 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
                             >
                               <span className="w-1 h-1 rounded-full bg-current" />
                               <span>{sub.name}</span>
+                              {sub.addPath && (
+                                <NavLink
+                                  to={sub.addPath}
+                                  onClick={e => { e.stopPropagation(); handleMobileNavClick() }}
+                                  className="ml-auto p-1 text-gray-500 hover:text-white rounded transition-colors"
+                                  title={`New ${sub.name.slice(0, -1) || sub.name}`}
+                                >
+                                  {Icons.Plus}
+                                </NavLink>
+                              )}
                             </NavLink>
                           ))}
                         </div>
@@ -488,6 +519,16 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }) {
                                     >
                                       <span className="w-1 h-1 rounded-full bg-current" />
                                       <span>{sub.name}</span>
+                                      {sub.addPath && (
+                                        <NavLink
+                                          to={sub.addPath}
+                                          onClick={e => { e.stopPropagation(); handleMobileNavClick() }}
+                                          className="ml-auto p-1 text-gray-500 hover:text-white rounded transition-colors"
+                                          title={`New ${sub.name.slice(0, -1) || sub.name}`}
+                                        >
+                                          {Icons.Plus}
+                                        </NavLink>
+                                      )}
                                     </NavLink>
                                   ))}
                                 </div>
