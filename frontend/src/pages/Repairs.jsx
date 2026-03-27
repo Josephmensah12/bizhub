@@ -365,7 +365,7 @@ export default function Repairs() {
                                     >
                                       {lastNote ? (
                                         <>
-                                          <div className="text-xs max-w-[200px] truncate">{lastNote.text}</div>
+                                          <div className="text-xs max-w-[300px] whitespace-normal break-words">{lastNote.text}</div>
                                           <div className="text-[10px] text-gray-400 mt-0.5">
                                             {lastNote.author} · {new Date(lastNote.timestamp).toLocaleString()}
                                             {notes.length > 1 && <span className="ml-1 text-blue-500">+{notes.length - 1} more</span>}
@@ -458,7 +458,7 @@ export default function Repairs() {
                               </span>
                             ) : <span className="text-gray-300 text-xs">—</span>}
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[200px] truncate">
+                          <td className="px-4 py-2.5 text-xs text-gray-600 max-w-[300px] whitespace-normal break-words">
                             {asset.repair_notes || <span className="text-gray-300">—</span>}
                           </td>
                           {canRepair && (
