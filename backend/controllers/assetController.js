@@ -1505,3 +1505,92 @@ exports.updateRepairState = asyncHandler(async (req, res) => {
     throw err;
   }
 });
+
+/**
+ * POST /api/v1/assets/reconcile-quantities
+ * Audit and fix quantity drift for non-serialized assets.
+ * Detects cases where handlePaidTransition didn't decrement quantity
+ * (e.g. after asset merges, manual edits, or interrupted transactions).
+ * Admin only. Dry-run by default; pass { apply: true } to fix.
+ */
+exports.reconcileQuantities = asyncHandler(async (req, res) => {
+  const { apply = false } = req.body || {};
+
+  const [rows] = await sequelize.query(`
+    WITH paid_sales AS (
+      SELECT ii.asset_id,
+             COALESCE(SUM(ii.quantity - COALESCE(ii.quantity_returned_total, 0)), 0)::int AS net_sold
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      WHERE i.status = 'PAID' AND ii.voided_at IS NULL
+      GROUP BY ii.asset_id
+    )
+    SELECT a.id, a.asset_tag, a.model, a.quantity::int AS current_qty, COALESCE(ps.net_sold, 0) AS net_sold
+    FROM assets a
+    LEFT JOIN paid_sales ps ON ps.asset_id = a.id
+    WHERE a.is_serialized = false AND a.deleted_at IS NULL
+      AND a.status IN ('In Stock', 'Processing', 'Reserved')
+      AND a.quantity > 0
+    ORDER BY a.asset_tag
+  `);
+
+  // For each asset, check if quantity + net_sold is consistent
+  // We can't know the original stock, but we CAN detect if quantity is higher
+  // than it should be by comparing to the last finalized stock take count
+  const corrections = [];
+  for (const row of rows) {
+    if (row.net_sold === 0) continue;
+
+    // Find the most recent finalized stock take count for this asset
+    const [stRows] = await sequelize.query(`
+      SELECT si.counted_quantity, st.started_at
+      FROM stock_take_items si
+      JOIN stock_takes st ON st.id = si.stock_take_id
+      WHERE si.asset_id = :assetId AND st.status = 'finalized' AND si.counted_quantity IS NOT NULL
+      ORDER BY st.started_at DESC LIMIT 1
+    `, { replacements: { assetId: row.id } });
+
+    if (stRows.length === 0) continue;
+
+    const lastCount = parseInt(stRows[0].counted_quantity);
+    const countDate = stRows[0].started_at;
+
+    // Sales AFTER the last stock take
+    const [salesAfter] = await sequelize.query(`
+      SELECT COALESCE(SUM(ii.quantity - COALESCE(ii.quantity_returned_total, 0)), 0)::int AS sold_after
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      WHERE ii.asset_id = :assetId AND i.status = 'PAID' AND ii.voided_at IS NULL
+        AND i.invoice_date > :countDate
+    `, { replacements: { assetId: row.id, countDate } });
+
+    const soldAfter = parseInt(salesAfter[0].sold_after);
+    const correctQty = lastCount - soldAfter;
+
+    if (correctQty !== row.current_qty && correctQty >= 0) {
+      corrections.push({
+        asset_tag: row.asset_tag,
+        model: row.model,
+        current_qty: row.current_qty,
+        correct_qty: correctQty,
+        last_count: lastCount,
+        count_date: countDate,
+        sold_after: soldAfter
+      });
+
+      if (apply) {
+        await sequelize.query('UPDATE assets SET quantity = $1 WHERE id = $2', { bind: [correctQty, row.id] });
+      }
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      scanned: rows.length,
+      corrections: corrections.length,
+      applied: apply,
+      details: corrections
+    }
+  });
+});

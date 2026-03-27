@@ -105,6 +105,9 @@ router.get('/valuation-summary', assetController.getValuationSummary);
 // GET /api/v1/assets/repair-units - List repair/salvage units grouped by product
 router.get('/repair-units', assetController.getRepairUnits);
 
+// POST /api/v1/assets/reconcile-quantities - Audit and fix quantity drift (Admin only)
+router.post('/reconcile-quantities', requireRole(['Admin']), assetController.reconcileQuantities);
+
 // GET /api/v1/assets
 router.get('/', assetController.list);
 
