@@ -2042,6 +2042,7 @@ exports.cancel = asyncHandler(async (req, res) => {
     });
   }
 
+  const prevStatus = invoice.status;
   const dbTransaction = await sequelize.transaction();
 
   try {
@@ -2075,6 +2076,22 @@ exports.cancel = asyncHandler(async (req, res) => {
             unit.sold_date = null;
             unit.invoice_item_id = null;
             await unit.save({ transaction: dbTransaction });
+          }
+        }
+
+        // Safety net: restore non-serialized quantity if a prior PAID decrement wasn't restored
+        // Normal flow: PAID → refund → handleUnpaidTransition restores qty → cancel
+        // Edge case: refund happened before the handleUnpaidTransition fix was deployed
+        if (!item.asset.is_serialized) {
+          // Check: was quantity decremented for this item? (SOLD event exists but no corresponding restore)
+          // Simple approach: if prevStatus was PAID, quantity still needs restoring
+          // If prevStatus was UNPAID/PARTIALLY_PAID, handleUnpaidTransition already ran (or was never needed)
+          if (prevStatus === 'PAID') {
+            const unreturned = item.quantity - (item.quantity_returned_total || 0);
+            if (unreturned > 0) {
+              item.asset.quantity += unreturned;
+              await item.asset.save({ transaction: dbTransaction });
+            }
           }
         }
 
