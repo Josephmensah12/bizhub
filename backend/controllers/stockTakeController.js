@@ -1349,12 +1349,25 @@ exports.getItemScans = asyncHandler(async (req, res) => {
     order: [['scanned_at', 'DESC']]
   });
 
-  // Fetch asset units for the parent product, excluding Sold and Written Off
-  const allUnits = await AssetUnit.findAll({
+  // Find Reserved units on delivered invoices (dispatched — not physically in store)
+  const [dispatchedUnits] = await sequelize.query(`
+    SELECT DISTINCT ii.asset_unit_id
+    FROM invoice_items ii
+    JOIN invoices i ON i.id = ii.invoice_id
+    WHERE ii.asset_id = :assetId
+      AND ii.asset_unit_id IS NOT NULL
+      AND i.status NOT IN ('CANCELLED', 'PAID')
+      AND ii.voided_at IS NULL
+      AND COALESCE(i.fulfillment_type, 'delivered') = 'delivered'
+  `, { replacements: { assetId: item.asset_id } });
+  const dispatchedIds = new Set(dispatchedUnits.map(d => d.asset_unit_id));
+
+  // Fetch asset units excluding Sold, Written Off, and dispatched Reserved units
+  const allUnits = (await AssetUnit.findAll({
     where: { asset_id: item.asset_id, status: { [Op.notIn]: ['Sold', 'Written Off'] } },
     attributes: ['id', 'serial_number', 'cpu', 'cpu_model', 'memory', 'storage', 'status'],
     order: [['serial_number', 'ASC']]
-  });
+  })).filter(u => !dispatchedIds.has(u.id));
 
   // Build a set of scanned unit IDs for quick lookup
   const scannedUnitIds = new Set(scans.map(s => s.asset_unit_id));
