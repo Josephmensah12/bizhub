@@ -1649,6 +1649,11 @@ exports.createTransaction = asyncHandler(async (req, res) => {
       await invoice.handlePaidTransition(dbTransaction, req.user?.id);
     }
 
+    // If invoice was PAID but refund moved it to non-PAID, restore inventory
+    if (prevStatus === 'PAID' && totals.status !== 'PAID') {
+      await invoice.handleUnpaidTransition(dbTransaction);
+    }
+
     // Log payment received event for each item on the invoice
     if (_transactionType === 'PAYMENT' && invoice.items) {
       for (const item of invoice.items) {
