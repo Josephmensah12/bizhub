@@ -1349,9 +1349,9 @@ exports.getItemScans = asyncHandler(async (req, res) => {
     order: [['scanned_at', 'DESC']]
   });
 
-  // Fetch ALL asset units for the parent product
+  // Fetch asset units for the parent product, excluding Sold and Written Off
   const allUnits = await AssetUnit.findAll({
-    where: { asset_id: item.asset_id },
+    where: { asset_id: item.asset_id, status: { [Op.notIn]: ['Sold', 'Written Off'] } },
     attributes: ['id', 'serial_number', 'cpu', 'cpu_model', 'memory', 'storage', 'status'],
     order: [['serial_number', 'ASC']]
   });
