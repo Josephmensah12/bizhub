@@ -210,9 +210,9 @@ export default function ExpenseReportsPage() {
                       <div className="flex justify-between text-xs">
                         <span className={`${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
                           {cat.category_name}
-                          <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${cat.expense_type === 'recurring' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                            {cat.expense_type === 'recurring' ? 'Recurring' : 'One-time'}
-                          </span>
+                          {cat.expense_type === 'recurring' && (
+                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600">Recurring</span>
+                          )}
                         </span>
                         <span className="font-medium">{fmtLocal(cat.total_local)} ({cat.pct_of_total.toFixed(1)}%)</span>
                       </div>
