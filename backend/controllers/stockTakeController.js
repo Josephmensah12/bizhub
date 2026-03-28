@@ -237,16 +237,25 @@ exports.start = asyncHandler(async (req, res) => {
     });
   }
 
-  // For serialized assets, compute expected quantity excluding Sold and Written Off units
-  // Note: Scrapped units are still physically present and should be counted
+  // For serialized assets, compute expected quantity:
+  // Exclude Sold, Written Off, and Reserved units on delivered invoices (dispatched)
+  // Scrapped/In Repair units are still physically present and should be counted
   const serializedIds = assets.filter(a => a.is_serialized).map(a => a.id);
   let unitCountMap = {};
   if (serializedIds.length > 0) {
     const [rows] = await sequelize.query(
-      `SELECT asset_id, COUNT(*) AS cnt
-         FROM asset_units
-        WHERE asset_id IN (:ids) AND status NOT IN ('Sold', 'Written Off')
-        GROUP BY asset_id`,
+      `SELECT au.asset_id, COUNT(*) AS cnt
+         FROM asset_units au
+        WHERE au.asset_id IN (:ids) AND au.status NOT IN ('Sold', 'Written Off')
+          AND au.id NOT IN (
+            SELECT ii.asset_unit_id FROM invoice_items ii
+            JOIN invoices i ON i.id = ii.invoice_id
+            WHERE ii.asset_unit_id IS NOT NULL
+              AND i.status NOT IN ('CANCELLED', 'PAID')
+              AND ii.voided_at IS NULL
+              AND COALESCE(i.fulfillment_type, 'delivered') = 'delivered'
+          )
+        GROUP BY au.asset_id`,
       { replacements: { ids: serializedIds } }
     );
     rows.forEach(r => { unitCountMap[r.asset_id] = parseInt(r.cnt, 10); });
