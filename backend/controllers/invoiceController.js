@@ -760,6 +760,13 @@ exports.addItem = asyncHandler(async (req, res) => {
       asset_type: asset.asset_type || null
     }, { transaction });
 
+    // Decrement non-serialized quantity if item physically leaves the shelf
+    // Held (layaway) invoices keep items in store — don't decrement
+    if (!asset.is_serialized && invoice.fulfillment_type !== 'held') {
+      asset.quantity = Math.max((asset.quantity || 0) - quantity, 0);
+      await asset.save({ transaction });
+    }
+
     // Update asset computed status
     await asset.updateComputedStatus(transaction);
 
@@ -1256,7 +1263,14 @@ exports.removeItem = asyncHandler(async (req, res) => {
       }
     }
 
-    // Delete the item — this releases the reservation automatically
+    // Restore non-serialized quantity (item back on the shelf)
+    // Only restore if it was decremented (delivered invoices only)
+    if (assetRef && !assetRef.is_serialized && invoice.fulfillment_type !== 'held') {
+      assetRef.quantity = (assetRef.quantity || 0) + removedQuantity;
+      await assetRef.save({ transaction });
+    }
+
+    // Delete the item
     await item.destroy({ transaction });
 
     // Update asset computed status (will go back to 'In Stock' if no other active items)
@@ -1418,7 +1432,7 @@ exports.voidItem = asyncHandler(async (req, res) => {
       }
     }
 
-    // Restore on_hand for voided quantity since payment had decremented it
+    // Restore non-serialized quantity (was decremented on addItem, item going back on shelf)
     if (item.asset) {
       if (!item.asset.is_serialized) {
         item.asset.quantity += quantityToVoid;
@@ -2043,6 +2057,7 @@ exports.cancel = asyncHandler(async (req, res) => {
   }
 
   const prevStatus = invoice.status;
+  const prevFulfillment = invoice.fulfillment_type || 'delivered';
   const dbTransaction = await sequelize.transaction();
 
   try {
@@ -2079,19 +2094,12 @@ exports.cancel = asyncHandler(async (req, res) => {
           }
         }
 
-        // Safety net: restore non-serialized quantity if a prior PAID decrement wasn't restored
-        // Normal flow: PAID → refund → handleUnpaidTransition restores qty → cancel
-        // Edge case: refund happened before the handleUnpaidTransition fix was deployed
-        if (!item.asset.is_serialized) {
-          // Check: was quantity decremented for this item? (SOLD event exists but no corresponding restore)
-          // Simple approach: if prevStatus was PAID, quantity still needs restoring
-          // If prevStatus was UNPAID/PARTIALLY_PAID, handleUnpaidTransition already ran (or was never needed)
-          if (prevStatus === 'PAID') {
-            const unreturned = item.quantity - (item.quantity_returned_total || 0);
-            if (unreturned > 0) {
-              item.asset.quantity += unreturned;
-              await item.asset.save({ transaction: dbTransaction });
-            }
+        // Restore non-serialized quantity (was decremented on addItem for delivered invoices)
+        if (!item.asset.is_serialized && prevFulfillment !== 'held') {
+          const unreturned = item.quantity - (item.quantity_returned_total || 0);
+          if (unreturned > 0) {
+            item.asset.quantity += unreturned;
+            await item.asset.save({ transaction: dbTransaction });
           }
         }
 

@@ -454,11 +454,7 @@ module.exports = (sequelize, DataTypes) => {
 
         const unreturned = item.quantity - (item.quantity_returned_total || 0);
         if (unreturned > 0) {
-          // Only decrement quantity for non-serialized products
-          if (!item.asset.is_serialized) {
-            item.asset.quantity -= unreturned;
-            await item.asset.save({ transaction });
-          }
+          // Non-serialized quantity already decremented on addItem — no change needed here
           await item.asset.updateComputedStatus(transaction);
           await InventoryItemEvent.logSold(item.asset, this, userId, transaction);
         }
@@ -496,11 +492,8 @@ module.exports = (sequelize, DataTypes) => {
 
         const unreturned = item.quantity - (item.quantity_returned_total || 0);
         if (unreturned > 0) {
-          // Only restore quantity for non-serialized products
-          if (!item.asset.is_serialized) {
-            item.asset.quantity += unreturned;
-            await item.asset.save({ transaction });
-          }
+          // Non-serialized quantity already decremented on addItem — no restore needed
+          // (item is still on the invoice, just not paid yet)
           await item.asset.updateComputedStatus(transaction);
         }
       }
