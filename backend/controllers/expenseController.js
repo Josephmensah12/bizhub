@@ -711,13 +711,18 @@ exports.reports = asyncHandler(async (req, res) => {
     GROUP BY ec.id, ec.name HAVING COUNT(e.id) > 0 ORDER BY total_usd DESC
   `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
 
-  // Top vendors
+  // Top vendors — optionally filtered by category
+  const catIdFilter = req.query.category_id;
+  const catIdWhere = catIdFilter ? 'AND e.category_id = :catId' : '';
+  const vendorReplacements = { startDate, endDate };
+  if (catIdFilter) vendorReplacements.catId = catIdFilter;
+
   const topVendors = await sequelize.query(`
     SELECT COALESCE(vendor_or_payee, 'Unspecified') as vendor,
            COALESCE(SUM(amount_usd), 0) as total_usd, COALESCE(SUM(amount_local), 0) as total_local, COUNT(*) as count
-    FROM expenses e WHERE expense_date BETWEEN :startDate AND :endDate ${sensFilter}
+    FROM expenses e WHERE expense_date BETWEEN :startDate AND :endDate ${sensFilter} ${catIdWhere}
     GROUP BY COALESCE(vendor_or_payee, 'Unspecified') ORDER BY total_usd DESC LIMIT 15
-  `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
+  `, { replacements: vendorReplacements, type: QueryTypes.SELECT });
 
   // Recurring vs one-time
   const typeSplit = await sequelize.query(`

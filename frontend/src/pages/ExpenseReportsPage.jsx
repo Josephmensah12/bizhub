@@ -66,6 +66,27 @@ export default function ExpenseReportsPage() {
       .catch(() => {})
   }, [monthFilter, fullData])
 
+  // When category filter changes, refetch vendors for that category
+  useEffect(() => {
+    if (!fullData) return
+    if (!catFilter) {
+      setData(prev => prev ? { ...prev, top_vendors: fullData.top_vendors } : prev)
+      return
+    }
+    const cat = fullData.by_category?.find(c => c.category_name === catFilter)
+    if (!cat) return
+    const params = { period, category_id: cat.category_id }
+    if (monthFilter) {
+      const ms = new Date(monthFilter)
+      params.period = 'custom'
+      params.dateFrom = ms.toISOString().slice(0,10)
+      params.dateTo = new Date(ms.getFullYear(), ms.getMonth() + 1, 0).toISOString().slice(0,10)
+    }
+    axios.get('/api/v1/expenses/reports', { params })
+      .then(res => setData(prev => prev ? { ...prev, top_vendors: res.data.data.top_vendors } : prev))
+      .catch(() => {})
+  }, [catFilter, fullData, monthFilter, period])
+
   const fc = (amount, fromCurrency) => convertAndFormat(amount, fromCurrency, displayCurrency, xRate)
   const fmtLocal = (v) => `GHS ${parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
@@ -210,7 +231,10 @@ export default function ExpenseReportsPage() {
       {/* 4 & 5: Top Vendors + Type Split */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl border p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Top Vendors</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">
+            Top Vendors
+            {catFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter}</span>}
+          </h3>
           <div className="space-y-2">
             {top_vendors.map((v, i) => {
               const maxV = Math.max(...top_vendors.map(x => x.total_local), 1)
