@@ -176,16 +176,13 @@ export default function ExpenseReportsPage() {
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
               <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
-              <YAxis yAxisId="amt" tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} stroke="#7c3aed" fontSize={11} tickLine={false} axisLine={false} />
-              <YAxis yAxisId="pct" orientation="right" tickFormatter={v => `${v.toFixed(0)}%`} stroke="#10b981" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} stroke="#7c3aed" fontSize={11} tickLine={false} axisLine={false} />
               <Tooltip
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                formatter={(value, name) => name === 'Expenses' ? [fmtLocal(value), name] : [`${value.toFixed(1)}%`, name]}
+                formatter={(value) => [fmtLocal(value), 'Expenses']}
                 labelFormatter={l => l}
               />
-              <Legend />
-              <Line yAxisId="amt" type="monotone" dataKey="expenses_local" stroke="#7c3aed" strokeWidth={2.5} name="Expenses" dot={{ r: 4, cursor: 'pointer' }} activeDot={{ r: 6, strokeWidth: 2 }} />
-              <Line yAxisId="pct" type="monotone" dataKey="ratio" stroke="#10b981" strokeWidth={2} strokeDasharray="5 3" name="% of Revenue" dot={false} />
+              <Line type="monotone" dataKey="expenses_local" stroke="#7c3aed" strokeWidth={2.5} name="Expenses" dot={{ r: 4, cursor: 'pointer' }} activeDot={{ r: 6, strokeWidth: 2 }} />
             </LineChart>
           </ResponsiveContainer>
           <p className="text-[10px] text-gray-400 mt-2">Click a data point to filter categories below by that month.</p>
