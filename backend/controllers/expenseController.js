@@ -702,7 +702,9 @@ exports.reports = asyncHandler(async (req, res) => {
   // By category
   const byCategory = await sequelize.query(`
     SELECT ec.id as category_id, ec.name as category_name,
-           COALESCE(SUM(e.amount_usd), 0) as total_usd, COALESCE(SUM(e.amount_local), 0) as total_local, COUNT(e.id) as count
+           COALESCE(SUM(e.amount_usd), 0) as total_usd, COALESCE(SUM(e.amount_local), 0) as total_local, COUNT(e.id) as count,
+           COALESCE(SUM(CASE WHEN e.expense_type = 'fixed_recurring' THEN e.amount_local ELSE 0 END), 0) as recurring_local,
+           COALESCE(SUM(CASE WHEN e.expense_type != 'fixed_recurring' THEN e.amount_local ELSE 0 END), 0) as onetime_local
     FROM expense_categories ec
     LEFT JOIN expenses e ON e.category_id = ec.id AND e.expense_date BETWEEN :startDate AND :endDate
     WHERE ec.is_active = true ${isAdmin ? '' : 'AND ec.is_sensitive = false'}
@@ -797,7 +799,9 @@ exports.reports = asyncHandler(async (req, res) => {
       by_category: byCategory.map(c => ({
         category_id: c.category_id, category_name: c.category_name,
         total_usd: parseFloat(c.total_usd), total_local: parseFloat(c.total_local),
-        count: parseInt(c.count), pct_of_total: catTotal > 0 ? (parseFloat(c.total_usd) / catTotal * 100) : 0
+        count: parseInt(c.count), pct_of_total: catTotal > 0 ? (parseFloat(c.total_usd) / catTotal * 100) : 0,
+        recurring_local: parseFloat(c.recurring_local) || 0, onetime_local: parseFloat(c.onetime_local) || 0,
+        expense_type: parseFloat(c.recurring_local) > parseFloat(c.onetime_local) ? 'recurring' : 'one_time'
       })),
       top_vendors: topVendors.map(v => ({
         vendor: v.vendor, total_usd: parseFloat(v.total_usd), total_local: parseFloat(v.total_local), count: parseInt(v.count)

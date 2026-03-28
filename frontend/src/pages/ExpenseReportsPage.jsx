@@ -183,14 +183,20 @@ export default function ExpenseReportsPage() {
                 return (
                   <button key={i} onClick={() => { setCatFilter(prev => prev === cat.category_name ? null : cat.category_name); setVendorFilter(null) }}
                     className={`flex items-center gap-3 w-full text-left transition-opacity ${catFilter && !isActive ? 'opacity-40' : ''}`}>
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                    <span className={`w-3 h-3 rounded-full shrink-0 ${cat.expense_type === 'recurring' ? 'ring-2 ring-purple-300' : ''}`}
+                      style={{ backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
                     <div className="flex-1">
                       <div className="flex justify-between text-xs">
-                        <span className={`${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>{cat.category_name}</span>
+                        <span className={`${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+                          {cat.category_name}
+                          <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${cat.expense_type === 'recurring' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                            {cat.expense_type === 'recurring' ? 'Recurring' : 'One-time'}
+                          </span>
+                        </span>
                         <span className="font-medium">{fmtLocal(cat.total_local)} ({cat.pct_of_total.toFixed(1)}%)</span>
                       </div>
                       <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
-                        <div className="h-full rounded-full" style={{ width: `${(cat.total_local / maxAmt) * 100}%`, backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                        <div className="h-full rounded-full" style={{ width: `${(cat.total_local / maxAmt) * 100}%`, backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
                       </div>
                     </div>
                   </button>
@@ -229,29 +235,7 @@ export default function ExpenseReportsPage() {
         </div>
 
         <div className="bg-white rounded-xl border p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Expense Type Split</h3>
-          {type_split.length > 0 ? (
-            <div className="space-y-4 mb-6">
-              {type_split.map((t, i) => {
-                const totalAll = type_split.reduce((s, x) => s + x.total_local, 0)
-                const pct = totalAll > 0 ? (t.total_local / totalAll * 100) : 0
-                return (
-                  <div key={i}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-700 capitalize">{t.type === 'fixed_recurring' ? 'Recurring' : 'One-time'}</span>
-                      <span className="font-medium">{fmtLocal(t.total_local)} ({pct.toFixed(0)}%)</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-3">
-                      <div className={`h-full rounded-full ${t.type === 'fixed_recurring' ? 'bg-purple-500' : 'bg-blue-400'}`}
-                        style={{ width: `${Math.max(pct, 3)}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : <p className="text-sm text-gray-400 text-center py-4">No data</p>}
-
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 pt-3 border-t">Expense-to-Revenue Ratio Trend</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Expense-to-Revenue Ratio Trend</h3>
           <div className="space-y-1.5">
             {ratio_trend.map((m, i) => {
               const label = new Date(m.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
