@@ -351,21 +351,31 @@ module.exports = (sequelize, DataTypes) => {
     );
 
     if (parseInt(paidResult.cnt) > 0) {
-      // For serialized assets: only "Sold" if ALL units are sold/scrapped
+      // For serialized assets: only "Sold" if ALL units are sold/scrapped/written off
       if (this.is_serialized) {
-        const [availUnits] = await sequelize.query(
+        const [freeUnits] = await sequelize.query(
           `SELECT COUNT(*) AS cnt FROM asset_units
-           WHERE asset_id = :assetId AND status NOT IN ('Sold', 'Scrapped', 'Written Off')`,
+           WHERE asset_id = :assetId AND status = 'Available'`,
           { replacements: { assetId: this.id }, ...queryOptions }
         );
-        if (parseInt(availUnits.cnt) > 0) {
-          // Check if any units are truly Available (not just Reserved on open invoices)
-          const [freeUnits] = await sequelize.query(
-            `SELECT COUNT(*) AS cnt FROM asset_units
-             WHERE asset_id = :assetId AND status = 'Available'`,
+        if (parseInt(freeUnits.cnt) > 0) return 'In Stock';
+
+        const [reservedUnits] = await sequelize.query(
+          `SELECT COUNT(*) AS cnt FROM asset_units
+           WHERE asset_id = :assetId AND status IN ('Reserved', 'In Repair', 'Scrapped')`,
+          { replacements: { assetId: this.id }, ...queryOptions }
+        );
+        if (parseInt(reservedUnits.cnt) > 0) return 'Processing';
+      } else {
+        // Non-serialized: only "Sold" if quantity is 0 (nothing left on shelf)
+        if (this.quantity > 0) {
+          // Still has stock — check for active invoices
+          const [activeOnPaid] = await sequelize.query(
+            `SELECT COUNT(*) AS cnt FROM invoice_items ii JOIN invoices i ON ii.invoice_id = i.id
+             WHERE ii.asset_id = :assetId AND i.status NOT IN ('CANCELLED', 'PAID') AND ii.voided_at IS NULL`,
             { replacements: { assetId: this.id }, ...queryOptions }
           );
-          return parseInt(freeUnits.cnt) > 0 ? 'In Stock' : 'Processing';
+          return parseInt(activeOnPaid.cnt) > 0 ? 'Processing' : 'In Stock';
         }
       }
       return 'Sold';

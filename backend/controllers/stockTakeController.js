@@ -763,7 +763,14 @@ exports.finalize = asyncHandler(async (req, res) => {
       if (item.resolution === 'miscount' || !item.resolution) continue;
 
       // Adjust asset quantity
-      item.asset.quantity = item.counted_quantity;
+      // For non-serialized: counted = physical on shelf
+      // But qty field must also exclude dispatched items on open delivered invoices
+      // Since addItem decrements qty, counted_quantity IS the correct qty value
+      // (dispatched items were already subtracted from qty when added to invoice)
+      if (!item.asset.is_serialized) {
+        item.asset.quantity = item.counted_quantity;
+      }
+      // For serialized: don't change quantity field (derived from units)
       await item.asset.save({ transaction });
       await item.asset.updateComputedStatus(transaction);
 

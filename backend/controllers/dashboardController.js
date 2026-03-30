@@ -220,7 +220,7 @@ exports.getMetrics = asyncHandler(async (req, res) => {
               (SELECT COUNT(*) FROM asset_units u WHERE u.asset_id = a.id AND u.status = 'Available')
             ELSE a.quantity END) AS quantity
      FROM assets a
-     WHERE a.deleted_at IS NULL AND a.status = 'In Stock' ${agingWhere} ${categoryWhere}
+     WHERE a.deleted_at IS NULL AND a.status IN ('In Stock', 'Processing') ${agingWhere} ${categoryWhere}
      GROUP BY make, model
      ORDER BY quantity DESC
      LIMIT 10`,
