@@ -344,8 +344,11 @@ export default function StockTakeDetail() {
           addToast('info', `Batch #${batchNum - 1} full (20/20). Batch #${batchNum} started.`)
         }
 
-        // If this item is expanded, refresh its scans
+        // Refresh unit list if item is expanded, and auto-expand if not
         if (expandedItems[item.id]) {
+          fetchItemScans(item.id)
+        } else {
+          setExpandedItems(prev => ({ ...prev, [item.id]: true }))
           fetchItemScans(item.id)
         }
 
@@ -1271,10 +1274,10 @@ function ItemRow({ item, blindCount, isEditable, showResolution, onUpdateCount, 
                     </tr>
                   </thead>
                   <tbody>
-                    {units.map(unit => {
+                    {[...units].sort((a, b) => a.scanned === b.scanned ? 0 : a.scanned ? 1 : -1).map(unit => {
                       const scan = unit.scanned ? (scanData?.scans || []).find(s => s.asset_unit_id === unit.id) : null
                       return (
-                        <tr key={unit.id} className={`border-t border-gray-100 ${unit.scanned ? 'bg-green-50' : ''}`}>
+                        <tr key={unit.id} className={`border-t border-gray-100 ${unit.scanned ? 'bg-green-50 opacity-50' : 'bg-white'}`}>
                           <td className="py-1.5 pr-3 text-center">
                             {unit.scanned ? (
                               <span className="inline-block w-5 h-5 rounded-full bg-green-500 text-white text-[10px] leading-5 text-center" title="Scanned">&#10003;</span>
