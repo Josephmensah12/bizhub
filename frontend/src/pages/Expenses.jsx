@@ -784,7 +784,8 @@ export default function Expenses() {
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 50, totalPages: 1 })
 
   // Filters
-  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', category_id: '', search: '', page: 1 })
+  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', page: 1 })
+  const [users, setUsers] = useState([])
 
   // Modals
   const [showExpenseModal, setShowExpenseModal] = useState(false)
@@ -822,6 +823,7 @@ export default function Expenses() {
       if (filters.dateTo) params.dateTo = filters.dateTo
       if (filters.category_id) params.category_id = filters.category_id
       if (filters.search) params.search = filters.search
+      if (filters.created_by) params.created_by = filters.created_by
 
       const res = await axios.get('/api/v1/expenses', { params })
       setExpenses(res.data.data.expenses)
@@ -854,6 +856,14 @@ export default function Expenses() {
   }, [analyticsPeriod])
 
   useEffect(() => { fetchCategories() }, [fetchCategories])
+
+  useEffect(() => {
+    if (canManage) {
+      axios.get('/api/v1/users', { params: { limit: 200 } })
+        .then(res => setUsers(res.data.data?.users || res.data.data || []))
+        .catch(() => {})
+    }
+  }, [canManage])
   useEffect(() => { fetchExpenses() }, [fetchExpenses])
   useEffect(() => {
     if (activeTab === 'recurring') fetchRecurring()
@@ -976,7 +986,7 @@ export default function Expenses() {
 
           {/* Filters */}
           <div className="bg-white rounded-xl border p-4 mb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
               <input type="text" placeholder="Search..." value={filters.search}
                 onChange={e => setFilters(f => ({ ...f, search: e.target.value, page: 1 }))}
                 className="border rounded-lg px-3 py-2 text-sm" />
@@ -992,7 +1002,15 @@ export default function Expenses() {
                 <option value="">All Categories</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', search: '', page: 1 })}
+              {canManage && (
+                <select value={filters.created_by}
+                  onChange={e => setFilters(f => ({ ...f, created_by: e.target.value, page: 1 }))}
+                  className="border rounded-lg px-3 py-2 text-sm">
+                  <option value="">All Users</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                </select>
+              )}
+              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', page: 1 })}
                 className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900">Clear</button>
             </div>
           </div>

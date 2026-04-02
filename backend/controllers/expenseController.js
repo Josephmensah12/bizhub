@@ -37,7 +37,7 @@ function buildSensitiveFilter(role) {
 exports.list = asyncHandler(async (req, res) => {
   const {
     page = 1, limit = 50,
-    dateFrom, dateTo, category_id, search, expense_type,
+    dateFrom, dateTo, category_id, search, expense_type, created_by,
     sortBy = 'expense_date', sortOrder = 'DESC'
   } = req.query;
   const role = req.user.role;
@@ -57,6 +57,7 @@ exports.list = asyncHandler(async (req, res) => {
     if (dateTo) where.expense_date[Op.lte] = dateTo;
   }
   if (category_id) where.category_id = parseInt(category_id);
+  if (created_by) where.created_by = parseInt(created_by);
   if (expense_type) where.expense_type = expense_type;
   if (search) {
     where[Op.or] = [
