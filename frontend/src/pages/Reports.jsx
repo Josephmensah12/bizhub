@@ -468,6 +468,7 @@ function renderDonutLabel({ cx, cy, midAngle, innerRadius, outerRadius, name, va
 // ─── Top Sellers Tab ──────────────────────────────────────────
 function TopSellersTab({ data, loading }) {
   const [categoryFilter, setCategoryFilter] = useState(null)
+  const [sortMode, setSortMode] = useState('quantity')
 
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No sales data available" />
@@ -482,13 +483,22 @@ function TopSellersTab({ data, loading }) {
     asset_type: c.asset_type,
   }))
 
-  // Filter tables when a donut slice is clicked
-  const filteredByQty = categoryFilter
-    ? by_quantity.filter(item => item.asset_type === categoryFilter)
-    : by_quantity
-  const filteredByRev = categoryFilter
-    ? by_revenue.filter(item => item.asset_type === categoryFilter)
-    : by_revenue
+  // Use by_quantity as base (has all fields) and sort by selected mode
+  const sourceData = sortMode === 'revenue' ? by_revenue : by_quantity
+  const sorted = [...sourceData].sort((a, b) => {
+    if (sortMode === 'quantity') return b.total_sold - a.total_sold
+    if (sortMode === 'revenue') return b.total_revenue - a.total_revenue
+    return b.total_profit - a.total_profit
+  })
+  const filtered = categoryFilter
+    ? sorted.filter(item => item.asset_type === categoryFilter)
+    : sorted
+
+  const SORT_OPTIONS = [
+    { id: 'quantity', label: 'Quantity' },
+    { id: 'revenue', label: 'Revenue' },
+    { id: 'profit', label: 'Profit' },
+  ]
 
   return (
     <div className="space-y-6">
@@ -545,11 +555,26 @@ function TopSellersTab({ data, loading }) {
         )}
       </div>
 
-      {/* Top by Quantity */}
+      {/* Top Sellers — single table with toggle */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Top Sellers by Quantity{categoryFilter ? ` — ${categoryFilter}` : ''}
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Top Sellers{categoryFilter ? ` — ${categoryFilter}` : ''}
+          </h3>
+          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            {SORT_OPTIONS.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setSortMode(opt.id)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  sortMode === opt.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
@@ -557,64 +582,26 @@ function TopSellersTab({ data, loading }) {
                 <th className="text-left py-2 px-3 font-medium text-gray-500">#</th>
                 <th className="text-left py-2 px-3 font-medium text-gray-500">Product</th>
                 <th className="text-left py-2 px-3 font-medium text-gray-500">Category</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-500">Qty Sold</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-500">Revenue</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-500">Avg Price</th>
+                <th className={`text-right py-2 px-3 font-medium ${sortMode === 'quantity' ? 'text-violet-600' : 'text-gray-500'}`}>Qty Sold</th>
+                <th className={`text-right py-2 px-3 font-medium ${sortMode === 'revenue' ? 'text-violet-600' : 'text-gray-500'}`}>Revenue</th>
+                <th className={`text-right py-2 px-3 font-medium ${sortMode === 'profit' ? 'text-violet-600' : 'text-gray-500'}`}>Profit</th>
                 <th className="text-right py-2 px-3 font-medium text-gray-500">Margin</th>
               </tr>
             </thead>
             <tbody>
-              {filteredByQty.length === 0 && (
+              {filtered.length === 0 && (
                 <tr><td colSpan={7} className="py-6 text-center text-gray-400">No items in this category</td></tr>
               )}
-              {filteredByQty.map((item, i) => (
-                <tr key={`${item.make}-${item.model}`} className="border-b border-gray-100 hover:bg-gray-50">
+              {filtered.map((item, i) => (
+                <tr key={`${item.make}-${item.model}-${i}`} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2 px-3 text-gray-400">{i + 1}</td>
                   <td className="py-2 px-3 font-medium">{item.make} {item.model}</td>
                   <td className="py-2 px-3 text-gray-500">{item.asset_type}</td>
-                  <td className="text-right py-2 px-3 font-bold">{item.total_sold}</td>
-                  <td className="text-right py-2 px-3">{formatCurrency(item.total_revenue)}</td>
-                  <td className="text-right py-2 px-3 text-gray-500">{formatCurrency(item.avg_price)}</td>
-                  <td className={`text-right py-2 px-3 ${item.margin_percent >= 20 ? 'text-green-600' : 'text-yellow-600'}`}>
-                    {formatPercent(item.margin_percent)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Top by Revenue */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Top Sellers by Revenue{categoryFilter ? ` — ${categoryFilter}` : ''}
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-2 px-3 font-medium text-gray-500">#</th>
-                <th className="text-left py-2 px-3 font-medium text-gray-500">Product</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-500">Revenue</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-500">Profit</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-500">Qty</th>
-                <th className="text-right py-2 px-3 font-medium text-gray-500">Margin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredByRev.length === 0 && (
-                <tr><td colSpan={6} className="py-6 text-center text-gray-400">No items in this category</td></tr>
-              )}
-              {filteredByRev.map((item, i) => (
-                <tr key={`${item.make}-${item.model}`} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-2 px-3 text-gray-400">{i + 1}</td>
-                  <td className="py-2 px-3 font-medium">{item.make} {item.model}</td>
-                  <td className="text-right py-2 px-3 font-bold">{formatCurrency(item.total_revenue)}</td>
-                  <td className={`text-right py-2 px-3 ${item.total_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <td className={`text-right py-2 px-3 ${sortMode === 'quantity' ? 'font-bold' : ''}`}>{item.total_sold}</td>
+                  <td className={`text-right py-2 px-3 ${sortMode === 'revenue' ? 'font-bold' : ''}`}>{formatCurrency(item.total_revenue)}</td>
+                  <td className={`text-right py-2 px-3 ${sortMode === 'profit' ? 'font-bold' : ''} ${item.total_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(item.total_profit)}
                   </td>
-                  <td className="text-right py-2 px-3">{item.total_sold}</td>
                   <td className={`text-right py-2 px-3 ${item.margin_percent >= 20 ? 'text-green-600' : 'text-yellow-600'}`}>
                     {formatPercent(item.margin_percent)}
                   </td>
