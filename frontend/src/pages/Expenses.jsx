@@ -1006,72 +1006,113 @@ export default function Expenses() {
           </div>
 
           {/* Category Treemap */}
-          {categoryTreeData.length > 0 && (
-            <div className="bg-white rounded-xl border p-4 mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-700">Expenses by Category</h3>
-                {filters.category_id && (
-                  <button onClick={() => setFilters(f => ({ ...f, category_id: '', page: 1 }))}
-                    className="text-xs text-primary-600 hover:underline">Show all</button>
-                )}
-              </div>
-              <ResponsiveContainer width="100%" height={180}>
-                <Treemap
-                  data={categoryTreeData}
-                  dataKey="size"
-                  nameKey="name"
-                  stroke="#fff"
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                  content={({ x, y, width, height, name, size, index, depth }) => {
-                    if (depth !== 1 || index == null || !width || !height) return null
-                    const cat = categoryTreeData[index]
-                    if (!cat) return null
-                    const isActive = filters.category_id && String(cat.id) === String(filters.category_id)
-                    const color = TREE_COLORS[index % TREE_COLORS.length]
-                    return (
-                      <g onClick={() => {
-                        setFilters(f => ({
-                          ...f,
-                          category_id: String(f.category_id) === String(cat.id) ? '' : String(cat.id),
-                          page: 1
-                        }))
-                      }} style={{ cursor: 'pointer' }}>
-                        <rect x={x} y={y} width={width} height={height} fill={color}
-                          opacity={filters.category_id ? (isActive ? 1 : 0.35) : 0.85}
-                          rx={4} />
-                        {width > 50 && height > 30 && (
-                          <>
-                            <text x={x + 6} y={y + 16} fontSize={11} fontWeight={600} fill="#fff">
-                              {(name || '').length > Math.floor(width / 7) ? (name || '').slice(0, Math.floor(width / 7)) + '...' : name}
-                            </text>
-                            {height > 42 && (
-                              <text x={x + 6} y={y + 30} fontSize={10} fill="rgba(255,255,255,0.8)">
-                                ${parseFloat(size || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+          {categoryTreeData.length > 0 && (() => {
+            const grandTotal = categoryTreeData.reduce((s, c) => s + c.size, 0)
+            const fmtK = v => v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${Math.round(v)}`
+            return (
+              <div className="bg-white rounded-xl border mb-4 overflow-hidden">
+                <div className="flex items-center justify-between px-5 pt-4 pb-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800">Expenses by Category</h3>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Click a tile to filter</p>
+                  </div>
+                  {filters.category_id && (
+                    <button onClick={() => setFilters(f => ({ ...f, category_id: '', page: 1 }))}
+                      className="text-xs text-violet-600 font-medium hover:underline">Show all</button>
+                  )}
+                </div>
+                <div className="px-2 pb-2">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <Treemap
+                      data={categoryTreeData}
+                      dataKey="size"
+                      nameKey="name"
+                      isAnimationActive={false}
+                      content={({ x, y, width, height, name, size, index, depth }) => {
+                        if (depth !== 1 || index == null || !width || !height) return null
+                        const cat = categoryTreeData[index]
+                        if (!cat) return null
+                        const isActive = filters.category_id && String(cat.id) === String(filters.category_id)
+                        const dimmed = filters.category_id && !isActive
+                        const pct = grandTotal > 0 ? ((size || 0) / grandTotal * 100) : 0
+                        const color = TREE_COLORS[index % TREE_COLORS.length]
+
+                        // Tile sizing: inset by 2px for clean gaps
+                        const gap = 2
+                        const tx = x + gap, ty = y + gap
+                        const tw = Math.max(width - gap * 2, 0), th = Math.max(height - gap * 2, 0)
+                        if (tw < 2 || th < 2) return null
+
+                        // Label logic based on tile area
+                        const area = tw * th
+                        const isLarge = area > 8000 && tw > 80 && th > 50
+                        const isMedium = area > 3000 && tw > 50 && th > 30
+
+                        return (
+                          <g onClick={() => {
+                            setFilters(f => ({
+                              ...f,
+                              category_id: String(f.category_id) === String(cat.id) ? '' : String(cat.id),
+                              page: 1
+                            }))
+                          }} style={{ cursor: 'pointer' }}>
+                            <rect x={tx} y={ty} width={tw} height={th} fill={color}
+                              opacity={dimmed ? 0.25 : 0.88}
+                              rx={6} ry={6}
+                              stroke={isActive ? '#1e1b4b' : 'transparent'}
+                              strokeWidth={isActive ? 2 : 0} />
+                            {isLarge && (
+                              <>
+                                <text x={tx + tw / 2} y={ty + th / 2 - 10} textAnchor="middle"
+                                  fontSize={12} fontWeight={500} fill="rgba(255,255,255,0.92)"
+                                  style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+                                  {(name || '').length > Math.floor(tw / 8) ? (name || '').slice(0, Math.floor(tw / 8)) + '...' : name}
+                                </text>
+                                <text x={tx + tw / 2} y={ty + th / 2 + 8} textAnchor="middle"
+                                  fontSize={14} fontWeight={700} fill="#fff"
+                                  style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+                                  {fmtK(size || 0)}
+                                </text>
+                                <text x={tx + tw / 2} y={ty + th / 2 + 22} textAnchor="middle"
+                                  fontSize={10} fill="rgba(255,255,255,0.6)">
+                                  {pct.toFixed(1)}%
+                                </text>
+                              </>
+                            )}
+                            {!isLarge && isMedium && (
+                              <text x={tx + tw / 2} y={ty + th / 2 + 4} textAnchor="middle"
+                                fontSize={12} fontWeight={700} fill="#fff"
+                                style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+                                {fmtK(size || 0)}
                               </text>
                             )}
-                          </>
-                        )}
-                      </g>
-                    )
-                  }}
-                >
-                  <Tooltip
-                    content={({ payload }) => {
-                      if (!payload?.[0]) return null
-                      const d = payload[0].payload
-                      return (
-                        <div className="bg-gray-900 text-white text-xs px-3 py-2 rounded-lg shadow">
-                          <p className="font-medium">{d.name}</p>
-                          <p>USD {parseFloat(d.size).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                      )
-                    }}
-                  />
-                </Treemap>
-              </ResponsiveContainer>
-            </div>
-          )}
+                          </g>
+                        )
+                      }}
+                    >
+                      <Tooltip
+                        cursor={false}
+                        content={({ payload }) => {
+                          if (!payload?.[0]) return null
+                          const d = payload[0].payload
+                          const pct = grandTotal > 0 ? (d.size / grandTotal * 100) : 0
+                          return (
+                            <div className="bg-gray-900/95 backdrop-blur text-white text-xs px-4 py-3 rounded-lg shadow-xl border border-gray-700/50">
+                              <p className="font-semibold text-[13px] mb-1">{d.name}</p>
+                              <div className="flex items-baseline gap-3">
+                                <span className="text-white/90">USD {parseFloat(d.size).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span className="text-white/50">{pct.toFixed(1)}% of total</span>
+                              </div>
+                            </div>
+                          )
+                        }}
+                      />
+                    </Treemap>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Filters */}
           <div className="bg-white rounded-xl border p-4 mb-4">
