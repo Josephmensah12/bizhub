@@ -8,7 +8,7 @@
 const TAXONOMY = {
   'Computer': ['Laptop', 'Desktop', 'MacBook', 'Tablet', 'Monitor', 'Storage Device', 'Memory', 'Other'],
   'Smartphone': ['iPhone', 'Samsung Galaxy', 'Google Pixel', 'Other'],
-  'Consumer Electronics': ['Bluetooth Speaker', 'Home Theatre System', 'Television', 'Audio Equipment', 'Other'],
+  'Consumer Electronics': ['Audio Equipment', 'Home Theatre System', 'Television', 'Other'],
   'Appliance': ['Refrigerator', 'Washing Machine', 'Air Conditioner', 'Other']
 };
 
@@ -96,10 +96,10 @@ const ASSET_TYPE_NORMALIZATION = {
   'ddr5': 'Memory',
 
   // Consumer Electronics types
-  'bluetooth speaker': 'Bluetooth Speaker',
-  'bluetoothspeaker': 'Bluetooth Speaker',
-  'bt speaker': 'Bluetooth Speaker',
-  'speaker': 'Bluetooth Speaker',
+  'bluetooth speaker': 'Audio Equipment',
+  'bluetoothspeaker': 'Audio Equipment',
+  'bt speaker': 'Audio Equipment',
+  'speaker': 'Audio Equipment',
   'home theatre system': 'Home Theatre System',
   'home theatre': 'Home Theatre System',
   'hometheatre': 'Home Theatre System',
