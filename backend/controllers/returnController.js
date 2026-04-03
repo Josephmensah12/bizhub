@@ -199,29 +199,43 @@ exports.createReturn = asyncHandler(async (req, res) => {
       });
     }
 
-    const lineReturnAmount = parseFloat((invoiceItem.unit_price_amount * quantityReturned).toFixed(2));
+    // Use actual line total (after discount), not list price
+    const actualUnitPrice = invoiceItem.quantity > 0
+      ? parseFloat(invoiceItem.line_total_amount) / invoiceItem.quantity
+      : parseFloat(invoiceItem.unit_price_amount);
+    const lineReturnAmount = parseFloat((actualUnitPrice * quantityReturned).toFixed(2));
     totalReturnAmount += lineReturnAmount;
 
     returnItemsData.push({
       invoiceItemId,
       invoiceItem,
       quantityReturned,
-      unitPriceAtSale: invoiceItem.unit_price_amount,
+      unitPriceAtSale: actualUnitPrice,
       lineReturnAmount,
       restockCondition,
       assetId: invoiceItem.asset_id
     });
   }
 
-  // For RETURN_REFUND, check if refund would exceed amount paid
+  // Cap return amount to what was actually paid (applies to both refunds and store credits)
+  const amountPaid = parseFloat(invoice.amount_paid) || 0;
+  if (totalReturnAmount > amountPaid) {
+    totalReturnAmount = amountPaid;
+    // Proportionally adjust each item's return amount
+    const ratio = amountPaid / returnItemsData.reduce((s, d) => s + d.lineReturnAmount, 0);
+    for (const item of returnItemsData) {
+      item.lineReturnAmount = parseFloat((item.lineReturnAmount * ratio).toFixed(2));
+    }
+  }
+
+  // For RETURN_REFUND, hard block if nothing was paid
   if (returnType === 'RETURN_REFUND') {
-    const amountPaid = parseFloat(invoice.amount_paid) || 0;
-    if (totalReturnAmount > amountPaid) {
+    if (amountPaid <= 0) {
       return res.status(400).json({
         success: false,
         error: {
           code: 'EXCEEDS_PAID',
-          message: `Return amount (${invoice.currency} ${totalReturnAmount}) exceeds amount paid (${invoice.currency} ${amountPaid})`
+          message: `Cannot refund — no payments recorded on this invoice`
         }
       });
     }
