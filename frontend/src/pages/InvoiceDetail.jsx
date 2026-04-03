@@ -587,6 +587,13 @@ export default function InvoiceDetail() {
   // Cancel modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
 
+  // Admin Adjust modal state
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustReason, setAdjustReason] = useState('');
+  const [adjustItems, setAdjustItems] = useState({});
+  const [adjustDiscount, setAdjustDiscount] = useState(null);
+  const [adjustments, setAdjustments] = useState([]);
+
   // Inline price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null);
   const [editingPriceValue, setEditingPriceValue] = useState('');
@@ -623,6 +630,55 @@ export default function InvoiceDetail() {
       setError(err.response?.data?.error?.message || 'Failed to fetch invoice');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch adjustment history
+  const fetchAdjustments = async () => {
+    try {
+      const res = await axios.get(`/api/v1/invoices/${id}/adjustments`);
+      setAdjustments(res.data.data.adjustments || []);
+    } catch {}
+  };
+  useEffect(() => { if (id) fetchAdjustments(); }, [id]);
+
+  const openAdjustModal = () => {
+    const items = {};
+    (invoice?.items || []).filter(i => !i.voided_at).forEach(i => {
+      items[i.id] = parseFloat(i.unit_price_amount) || 0;
+    });
+    setAdjustItems(items);
+    setAdjustDiscount(parseFloat(invoice?.discount_amount) || 0);
+    setAdjustReason('');
+    setShowAdjustModal(true);
+  };
+
+  const submitAdjustment = async () => {
+    if (!adjustReason.trim()) { alert('Reason is required'); return; }
+    const changes = [];
+    // Price changes
+    (invoice?.items || []).filter(i => !i.voided_at).forEach(i => {
+      const newPrice = adjustItems[i.id];
+      if (newPrice !== undefined && newPrice !== parseFloat(i.unit_price_amount)) {
+        changes.push({ type: 'price', itemId: i.id, value: newPrice });
+      }
+    });
+    // Discount change
+    if (adjustDiscount !== null && adjustDiscount !== parseFloat(invoice?.discount_amount || 0)) {
+      changes.push({ type: 'discount', discountType: 'fixed', value: adjustDiscount });
+    }
+    if (changes.length === 0) { alert('No changes detected'); return; }
+
+    try {
+      setActionLoading(true);
+      await axios.post(`/api/v1/invoices/${id}/adjust`, { reason: adjustReason, adjustments: changes });
+      setShowAdjustModal(false);
+      fetchInvoice();
+      fetchAdjustments();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Adjustment failed');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -916,6 +972,13 @@ export default function InvoiceDetail() {
             )}
           </div>
           <p className="text-gray-500 mt-1">{formatDate(invoice.invoice_date)}</p>
+          {invoice.is_adjusted && (
+            <div className="mt-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 inline-flex items-center gap-2">
+              <span className="font-medium">Adjusted</span>
+              <span>on {new Date(invoice.last_adjusted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              {adjustments.length > 0 && <span>({adjustments.length} change{adjustments.length > 1 ? 's' : ''})</span>}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -1007,6 +1070,17 @@ export default function InvoiceDetail() {
                 </button>
               )}
             </>
+          )}
+
+          {/* Admin Adjust */}
+          {isAdmin && invoice.status !== 'CANCELLED' && (
+            <button
+              onClick={openAdjustModal}
+              disabled={actionLoading}
+              className="px-4 py-2 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+            >
+              Adjust Invoice
+            </button>
           )}
 
           {/* Admin-only Delete */}
@@ -1686,6 +1760,96 @@ export default function InvoiceDetail() {
           </div>
         </div>
       </div>
+
+      {/* Adjustment History */}
+      {adjustments.length > 0 && (
+        <div className="bg-white rounded-xl border p-5 mt-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Adjustment History</h3>
+          <div className="space-y-2">
+            {adjustments.map(adj => (
+              <div key={adj.id} className="flex items-start gap-3 text-xs border-l-2 border-amber-300 pl-3 py-1">
+                <div className="flex-1">
+                  <span className="font-medium text-gray-800">{adj.field_name}</span>
+                  <span className="text-gray-400 mx-1">:</span>
+                  <span className="text-red-500 line-through">{adj.old_value}</span>
+                  <span className="text-gray-400 mx-1">&rarr;</span>
+                  <span className="text-green-600 font-medium">{adj.new_value}</span>
+                  <span className="text-gray-400 ml-2">| Total: {adj.old_total} &rarr; {adj.new_total}</span>
+                </div>
+                <div className="text-right text-gray-400 shrink-0">
+                  <p>{adj.adjustedBy?.full_name || 'Admin'}</p>
+                  <p>{new Date(adj.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+              </div>
+            ))}
+            <p className="text-[10px] text-gray-400 mt-2">Reason: {adjustments[0]?.reason}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Adjust Invoice Modal */}
+      {showAdjustModal && invoice && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900">Adjust Invoice</h2>
+                <button onClick={() => setShowAdjustModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-700">
+                Changes are logged with full audit trail. This works on any invoice status.
+              </div>
+
+              {/* Reason */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for adjustment *</label>
+                <input type="text" value={adjustReason} onChange={e => setAdjustReason(e.target.value)}
+                  placeholder="e.g. Price correction, customer requested change"
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+
+              {/* Line items */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Line Item Prices</label>
+                <div className="space-y-2">
+                  {(invoice.items || []).filter(i => !i.voided_at).map(item => (
+                    <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
+                      <div className="flex-1 text-xs">
+                        <p className="font-medium text-gray-800 truncate">{item.description}</p>
+                        <p className="text-gray-400">Qty: {item.quantity} | Current: {parseFloat(item.unit_price_amount).toFixed(2)}</p>
+                      </div>
+                      <input type="number" step="0.01" min="0"
+                        value={adjustItems[item.id] ?? ''}
+                        onChange={e => setAdjustItems(prev => ({ ...prev, [item.id]: parseFloat(e.target.value) || 0 }))}
+                        className="w-28 border rounded-lg px-2 py-1.5 text-sm text-right" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Discount */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Discount (fixed)</label>
+                <input type="number" step="0.01" min="0"
+                  value={adjustDiscount ?? ''}
+                  onChange={e => setAdjustDiscount(parseFloat(e.target.value) || 0)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setShowAdjustModal(false)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                <button onClick={submitAdjustment} disabled={actionLoading}
+                  className="px-4 py-2 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50">
+                  {actionLoading ? 'Saving...' : 'Apply Adjustment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

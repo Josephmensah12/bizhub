@@ -4,7 +4,7 @@
  * CRUD operations for invoices with payments and inventory locking
  */
 
-const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, AssetUnit, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, CustomerCredit, InvoiceReturn, DescriptionMapping, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, AssetUnit, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, CustomerCredit, InvoiceReturn, InvoiceAdjustment, DescriptionMapping, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { sanitizeInvoiceForRole, canSeeCost, canEditInvoices, canVoidInvoices } = require('../middleware/permissions');
 const exchangeRateService = require('../services/exchangeRateService');
@@ -2773,6 +2773,189 @@ exports.linkItemAsset = asyncHandler(async (req, res) => {
     data: { item },
     message: 'Item linked to asset'
   });
+});
+
+/**
+ * POST /api/v1/invoices/:id/adjust
+ * Admin-only invoice adjustment — works on any non-cancelled invoice
+ */
+exports.adjustInvoice = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason, adjustments } = req.body;
+  const userId = req.user?.id;
+
+  if (!req.user || req.user.role !== 'Admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only admins can adjust invoices' } });
+  }
+  if (!reason?.trim()) {
+    return res.status(400).json({ success: false, error: { code: 'REASON_REQUIRED', message: 'Adjustment reason is required' } });
+  }
+  if (!adjustments || !Array.isArray(adjustments) || adjustments.length === 0) {
+    return res.status(400).json({ success: false, error: { code: 'NO_ADJUSTMENTS', message: 'At least one adjustment is required' } });
+  }
+
+  const invoice = await Invoice.findByPk(id, {
+    include: [
+      { model: InvoiceItem, as: 'items', include: [{ model: Asset, as: 'asset' }] },
+      { model: Customer, as: 'customer' }
+    ]
+  });
+
+  if (!invoice) {
+    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Invoice not found' } });
+  }
+  if (invoice.status === 'CANCELLED') {
+    return res.status(400).json({ success: false, error: { code: 'CANCELLED', message: 'Cannot adjust a cancelled invoice' } });
+  }
+
+  const dbTransaction = await sequelize.transaction();
+  const logs = [];
+  const oldTotal = parseFloat(invoice.total_amount);
+
+  try {
+    for (const adj of adjustments) {
+      const { type, itemId, value } = adj;
+
+      if (type === 'price' && itemId) {
+        // Adjust line item price
+        const item = invoice.items.find(i => i.id === itemId && !i.voided_at);
+        if (!item) continue;
+        const oldPrice = parseFloat(item.unit_price_amount);
+        const newPrice = parseFloat(value);
+        if (isNaN(newPrice) || newPrice < 0) continue;
+        if (newPrice === oldPrice) continue;
+
+        item.unit_price_amount = newPrice;
+        item.line_total_amount = parseFloat((newPrice * item.quantity).toFixed(2));
+        item.line_cost_amount = parseFloat(item.unit_cost_amount || 0) * item.quantity;
+        await item.save({ transaction: dbTransaction });
+
+        logs.push({ field_name: 'unit_price', item_id: itemId, old_value: oldPrice.toString(), new_value: newPrice.toString() });
+      }
+
+      if (type === 'discount') {
+        const oldDiscount = parseFloat(invoice.discount_amount) || 0;
+        const newDiscountValue = parseFloat(value);
+        const discountType = adj.discountType || 'fixed';
+
+        if (discountType === 'none') {
+          invoice.discount_type = 'none';
+          invoice.discount_value = 0;
+          invoice.discount_amount = 0;
+          invoice.discount_percent = 0;
+        } else if (discountType === 'percentage') {
+          const pct = Math.min(Math.max(newDiscountValue, 0), 100);
+          invoice.discount_type = 'percentage';
+          invoice.discount_value = pct;
+          invoice.discount_percent = pct;
+        } else {
+          invoice.discount_type = 'fixed';
+          invoice.discount_value = newDiscountValue;
+        }
+
+        logs.push({ field_name: 'discount', old_value: `${oldDiscount}`, new_value: `${discountType}:${value}` });
+      }
+
+      if (type === 'customer' && value) {
+        const newCustomer = await Customer.findByPk(parseInt(value), { transaction: dbTransaction });
+        if (newCustomer) {
+          const oldName = invoice.customer ? `${invoice.customer.first_name} ${invoice.customer.last_name}`.trim() : 'Walk-in';
+          invoice.customer_id = newCustomer.id;
+          const newName = `${newCustomer.first_name} ${newCustomer.last_name}`.trim();
+          logs.push({ field_name: 'customer', old_value: oldName, new_value: newName });
+        }
+      }
+
+      if (type === 'notes') {
+        const oldNotes = invoice.notes || '';
+        invoice.notes = value || '';
+        logs.push({ field_name: 'notes', old_value: oldNotes, new_value: value || '' });
+      }
+    }
+
+    // Recalculate totals from items
+    const activeItems = invoice.items.filter(i => !i.voided_at);
+    const subtotal = activeItems.reduce((s, i) => s + parseFloat(i.line_total_amount || 0), 0);
+    invoice.subtotal_amount = parseFloat(subtotal.toFixed(2));
+
+    // Apply discount
+    let discountAmount = 0;
+    if (invoice.discount_type === 'percentage') {
+      discountAmount = subtotal * (invoice.discount_value / 100);
+      invoice.discount_percent = invoice.discount_value;
+    } else if (invoice.discount_type === 'fixed') {
+      discountAmount = Math.min(invoice.discount_value, subtotal);
+      invoice.discount_percent = subtotal > 0 ? (discountAmount / subtotal * 100) : 0;
+    }
+    invoice.discount_amount = parseFloat(discountAmount.toFixed(2));
+    invoice.total_amount = parseFloat((subtotal - discountAmount).toFixed(2));
+
+    // Recalculate cost and profit
+    const totalCost = activeItems.reduce((s, i) => s + parseFloat(i.line_cost_amount || 0), 0);
+    invoice.total_cost_amount = parseFloat(totalCost.toFixed(2));
+    invoice.total_profit_amount = parseFloat((invoice.total_amount - totalCost).toFixed(2));
+    invoice.margin_percent = invoice.total_amount > 0 ? parseFloat((invoice.total_profit_amount / invoice.total_amount * 100).toFixed(4)) : 0;
+
+    // Mark as adjusted
+    invoice.is_adjusted = true;
+    invoice.last_adjusted_at = new Date();
+    invoice.updated_by = userId;
+    await invoice.save({ transaction: dbTransaction });
+
+    // Recalculate payment status
+    await recalculateInvoiceTotals(invoice, dbTransaction);
+
+    const newTotal = parseFloat(invoice.total_amount);
+
+    // Save adjustment log entries
+    for (const log of logs) {
+      await InvoiceAdjustment.create({
+        invoice_id: invoice.id,
+        adjusted_by_user_id: userId,
+        reason: reason.trim(),
+        field_name: log.field_name,
+        item_id: log.item_id || null,
+        old_value: log.old_value,
+        new_value: log.new_value,
+        old_total: oldTotal,
+        new_total: newTotal,
+      }, { transaction: dbTransaction });
+    }
+
+    await dbTransaction.commit();
+
+    // Reload
+    await invoice.reload({
+      include: [
+        { model: InvoiceItem, as: 'items', include: [{ model: Asset, as: 'asset' }] },
+        { model: Customer, as: 'customer' },
+        { model: InvoicePayment, as: 'payments' },
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: { invoice },
+      message: `Invoice adjusted: ${logs.length} change(s) applied`
+    });
+  } catch (err) {
+    await dbTransaction.rollback();
+    throw err;
+  }
+});
+
+/**
+ * GET /api/v1/invoices/:id/adjustments
+ * Get adjustment history for an invoice
+ */
+exports.getAdjustments = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const adjustments = await InvoiceAdjustment.findAll({
+    where: { invoice_id: id },
+    include: [{ model: User, as: 'adjustedBy', attributes: ['id', 'full_name'] }],
+    order: [['created_at', 'DESC']]
+  });
+  res.json({ success: true, data: { adjustments } });
 });
 
 module.exports = exports;

@@ -91,4 +91,8 @@ router.post('/:invoiceId/returns', invoiceAdmins, returnController.createReturn)
 // POST /api/v1/invoices/:id/items/:itemId/link-asset - Link item to asset
 router.post('/:id/items/:itemId/link-asset', invoiceAdmins, invoiceController.linkItemAsset);
 
+// Admin invoice adjustments
+router.post('/:id/adjust', requireRole(['Admin']), invoiceController.adjustInvoice);
+router.get('/:id/adjustments', invoiceController.getAdjustments);
+
 module.exports = router;
