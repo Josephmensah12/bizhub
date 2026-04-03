@@ -541,7 +541,7 @@ function TopSellersTab({ data, loading }) {
                 ))}
               </Pie>
               <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} formatter={(value, name) => [`${value} units`, name]} />
-              <Legend />
+              <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, lineHeight: '22px' }} />
               {/* Center label */}
               <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" className="text-2xl font-bold" fill="#111827" fontSize={28} fontWeight="bold">
                 {donutData.reduce((s, d) => s + d.value, 0)}
