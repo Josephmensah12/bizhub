@@ -207,45 +207,6 @@ export default function ExpenseReportsPage() {
 
         <div className="bg-white rounded-xl border p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">
-            Expenses by Category
-            {monthFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {new Date(monthFilter).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>}
-          </h3>
-          {by_category.length > 0 ? (
-            <div className="space-y-2">
-              {by_category.map((cat, i) => {
-                const maxAmt = Math.max(...by_category.map(c => c.total_local), 1)
-                const isActive = catFilter === cat.category_name
-                return (
-                  <button key={i} onClick={() => { setCatFilter(prev => prev === cat.category_name ? null : cat.category_name); setVendorFilter(null) }}
-                    className={`flex items-center gap-3 w-full text-left transition-opacity ${catFilter && !isActive ? 'opacity-40' : ''}`}>
-                    <span className={`w-3 h-3 rounded-full shrink-0 ${cat.expense_type === 'recurring' ? 'ring-2 ring-purple-300' : ''}`}
-                      style={{ backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
-                    <div className="flex-1">
-                      <div className="flex justify-between text-xs">
-                        <span className={`${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-                          {cat.category_name}
-                          {cat.expense_type === 'recurring' && (
-                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600">Recurring</span>
-                          )}
-                        </span>
-                        <span className="font-medium">{fmtLocal(cat.total_local)} ({cat.pct_of_total.toFixed(1)}%)</span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
-                        <div className="h-full rounded-full" style={{ width: `${(cat.total_local / maxAmt) * 100}%`, backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          ) : <p className="text-sm text-gray-400 text-center py-8">No data</p>}
-        </div>
-      </div>
-
-      {/* 4 & 5: Top Vendors + Type Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl border p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">
             Top Vendors
             {catFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter}</span>}
           </h3>
@@ -271,6 +232,43 @@ export default function ExpenseReportsPage() {
             {top_vendors.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No data</p>}
           </div>
         </div>
+      </div>
+
+      {/* Expenses by Category */}
+      <div className="bg-white rounded-xl border p-5 mb-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">
+          Expenses by Category
+          {monthFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {new Date(monthFilter).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>}
+        </h3>
+        {by_category.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {by_category.map((cat, i) => {
+              const maxAmt = Math.max(...by_category.map(c => c.total_local), 1)
+              const isActive = catFilter === cat.category_name
+              return (
+                <button key={i} onClick={() => { setCatFilter(prev => prev === cat.category_name ? null : cat.category_name); setVendorFilter(null) }}
+                  className={`flex items-center gap-3 w-full text-left transition-opacity ${catFilter && !isActive ? 'opacity-40' : ''}`}>
+                  <span className={`w-3 h-3 rounded-full shrink-0 ${cat.expense_type === 'recurring' ? 'ring-2 ring-purple-300' : ''}`}
+                    style={{ backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
+                  <div className="flex-1">
+                    <div className="flex justify-between text-xs">
+                      <span className={`${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+                        {cat.category_name}
+                        {cat.expense_type === 'recurring' && (
+                          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600">Recurring</span>
+                        )}
+                      </span>
+                      <span className="font-medium">{fmtLocal(cat.total_local)} ({cat.pct_of_total.toFixed(1)}%)</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                      <div className="h-full rounded-full" style={{ width: `${(cat.total_local / maxAmt) * 100}%`, backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : <p className="text-sm text-gray-400 text-center py-8">No data</p>}
       </div>
 
       {/* 6. Category Breakdown Table */}
