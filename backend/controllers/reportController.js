@@ -48,6 +48,10 @@ function parseDateRange(query) {
       startDate = new Date(now.getFullYear(), 0, 1);
       endDate = now;
       break;
+    case 'lifetime':
+      startDate = new Date(2000, 0, 1);
+      endDate = now;
+      break;
     case 'custom':
       startDate = query.startDate ? new Date(query.startDate) : new Date(now.getFullYear(), now.getMonth(), 1);
       endDate = query.endDate ? new Date(query.endDate) : now;

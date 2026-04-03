@@ -24,6 +24,7 @@ const PERIODS = [
   { id: 'month', label: 'This Month' },
   { id: 'quarter', label: 'This Quarter' },
   { id: 'year', label: 'This Year' },
+  { id: 'lifetime', label: 'Lifetime' },
   { id: 'custom', label: 'Custom' },
 ]
 
