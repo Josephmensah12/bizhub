@@ -561,8 +561,8 @@ function TopSellersTab({ data, loading }) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Margin % by Category</h3>
         {by_category.length > 0 ? (
           <div className="space-y-2.5 mt-2">
-            {by_category.map((cat, i) => {
-              const color = COLORS[i % COLORS.length]
+            {[...by_category].map((cat, i) => ({ cat, origIndex: i })).sort((a, b) => b.cat.margin_percent - a.cat.margin_percent).map(({ cat, origIndex }) => {
+              const color = COLORS[origIndex % COLORS.length]
               const isActive = categoryFilter === cat.asset_type
               const dimmed = categoryFilter && !isActive
               return (
