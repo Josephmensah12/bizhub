@@ -557,10 +557,10 @@ function TopSellersTab({ data, loading }) {
       </div>
 
       {/* Margin % by Category */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex flex-col">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Margin % by Category</h3>
         {by_category.length > 0 ? (
-          <div className="space-y-2.5 mt-2">
+          <div className="flex flex-col justify-between flex-1 gap-1">
             {[...by_category].map((cat, i) => ({ cat, origIndex: i })).filter(({ cat }) => cat.asset_type !== 'Unlinked').sort((a, b) => b.cat.margin_percent - a.cat.margin_percent).map(({ cat, origIndex }) => {
               const color = COLORS[origIndex % COLORS.length]
               const isActive = categoryFilter === cat.asset_type
@@ -569,12 +569,12 @@ function TopSellersTab({ data, loading }) {
                 <button
                   key={cat.asset_type}
                   onClick={() => setCategoryFilter(prev => prev === cat.asset_type ? null : cat.asset_type)}
-                  className={`w-full text-left transition-opacity ${dimmed ? 'opacity-35' : ''}`}
+                  className={`w-full text-left transition-opacity flex-1 ${dimmed ? 'opacity-35' : ''}`}
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden relative">
+                  <div className="flex items-center gap-2 h-full">
+                    <div className="flex-1 bg-gray-100 rounded-lg h-full min-h-[28px] overflow-hidden relative">
                       <div
-                        className="h-full rounded-full transition-all"
+                        className="h-full rounded-lg transition-all"
                         style={{
                           width: `${Math.min(Math.max(cat.margin_percent, 0), 100)}%`,
                           backgroundColor: color
