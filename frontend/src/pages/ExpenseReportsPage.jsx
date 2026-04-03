@@ -234,72 +234,73 @@ export default function ExpenseReportsPage() {
         </div>
       </div>
 
-      {/* Expenses by Category */}
-      <div className="bg-white rounded-xl border p-5 mb-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          Expenses by Category
-          {monthFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {new Date(monthFilter).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>}
-        </h3>
-        {by_category.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {by_category.map((cat, i) => {
-              const maxAmt = Math.max(...by_category.map(c => c.total_local), 1)
-              const isActive = catFilter === cat.category_name
-              return (
-                <button key={i} onClick={() => { setCatFilter(prev => prev === cat.category_name ? null : cat.category_name); setVendorFilter(null) }}
-                  className={`flex items-center gap-3 w-full text-left transition-opacity ${catFilter && !isActive ? 'opacity-40' : ''}`}>
-                  <span className={`w-3 h-3 rounded-full shrink-0 ${cat.expense_type === 'recurring' ? 'ring-2 ring-purple-300' : ''}`}
-                    style={{ backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
-                  <div className="flex-1">
-                    <div className="flex justify-between text-xs">
-                      <span className={`${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
-                        {cat.category_name}
-                        {cat.expense_type === 'recurring' && (
-                          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600">Recurring</span>
-                        )}
-                      </span>
-                      <span className="font-medium">{fmtLocal(cat.total_local)} ({cat.pct_of_total.toFixed(1)}%)</span>
+      {/* Expenses by Category + Category Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white rounded-xl border p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">
+            Expenses by Category
+            {monthFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {new Date(monthFilter).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>}
+          </h3>
+          {by_category.length > 0 ? (
+            <div className="space-y-2">
+              {by_category.map((cat, i) => {
+                const maxAmt = Math.max(...by_category.map(c => c.total_local), 1)
+                const isActive = catFilter === cat.category_name
+                return (
+                  <button key={i} onClick={() => { setCatFilter(prev => prev === cat.category_name ? null : cat.category_name); setVendorFilter(null) }}
+                    className={`flex items-center gap-3 w-full text-left transition-opacity ${catFilter && !isActive ? 'opacity-40' : ''}`}>
+                    <span className={`w-3 h-3 rounded-full shrink-0 ${cat.expense_type === 'recurring' ? 'ring-2 ring-purple-300' : ''}`}
+                      style={{ backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
+                    <div className="flex-1">
+                      <div className="flex justify-between text-xs">
+                        <span className={`${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>
+                          {cat.category_name}
+                          {cat.expense_type === 'recurring' && (
+                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600">Recurring</span>
+                          )}
+                        </span>
+                        <span className="font-medium">{fmtLocal(cat.total_local)} ({cat.pct_of_total.toFixed(1)}%)</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                        <div className="h-full rounded-full" style={{ width: `${(cat.total_local / maxAmt) * 100}%`, backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
-                      <div className="h-full rounded-full" style={{ width: `${(cat.total_local / maxAmt) * 100}%`, backgroundColor: cat.expense_type === 'recurring' ? '#7c3aed' : '#3b82f6' }} />
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        ) : <p className="text-sm text-gray-400 text-center py-8">No data</p>}
-      </div>
+                  </button>
+                )
+              })}
+            </div>
+          ) : <p className="text-sm text-gray-400 text-center py-8">No data</p>}
+        </div>
 
-      {/* 6. Category Breakdown Table */}
-      <div className="bg-white rounded-xl border p-5 mb-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          Category Breakdown
-          {catFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter}</span>}
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 px-2 text-gray-500">Category</th>
-                <th className="text-right py-2 px-2 text-gray-500">Amount ({displayCurrency})</th>
-                <th className="text-right py-2 px-2 text-gray-500">% of Total</th>
-                <th className="text-right py-2 px-2 text-gray-500">Count</th>
-                <th className="text-right py-2 px-2 text-gray-500">Avg</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {(catFilter ? by_category.filter(c => c.category_name === catFilter) : by_category).map((c, i) => (
-                <tr key={i} className="hover:bg-gray-50 cursor-pointer" onClick={() => setCatFilter(prev => prev === c.category_name ? null : c.category_name)}>
-                  <td className="py-2 px-2 font-medium">{c.category_name}</td>
-                  <td className="py-2 px-2 text-right">{fc(c.total_local, 'GHS')}</td>
-                  <td className="py-2 px-2 text-right text-gray-500">{c.pct_of_total.toFixed(1)}%</td>
-                  <td className="py-2 px-2 text-right text-gray-500">{c.count}</td>
-                  <td className="py-2 px-2 text-right text-gray-500">{fc(c.count > 0 ? c.total_local / c.count : 0, 'GHS')}</td>
+        <div className="bg-white rounded-xl border p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">
+            Category Breakdown
+            {catFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter}</span>}
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 px-2 text-gray-500">Category</th>
+                  <th className="text-right py-2 px-2 text-gray-500">Amount ({displayCurrency})</th>
+                  <th className="text-right py-2 px-2 text-gray-500">%</th>
+                  <th className="text-right py-2 px-2 text-gray-500">Count</th>
+                  <th className="text-right py-2 px-2 text-gray-500">Avg</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y">
+                {(catFilter ? by_category.filter(c => c.category_name === catFilter) : by_category).map((c, i) => (
+                  <tr key={i} className="hover:bg-gray-50 cursor-pointer" onClick={() => setCatFilter(prev => prev === c.category_name ? null : c.category_name)}>
+                    <td className="py-2 px-2 font-medium">{c.category_name}</td>
+                    <td className="py-2 px-2 text-right">{fc(c.total_local, 'GHS')}</td>
+                    <td className="py-2 px-2 text-right text-gray-500">{c.pct_of_total.toFixed(1)}%</td>
+                    <td className="py-2 px-2 text-right text-gray-500">{c.count}</td>
+                    <td className="py-2 px-2 text-right text-gray-500">{fc(c.count > 0 ? c.total_local / c.count : 0, 'GHS')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
