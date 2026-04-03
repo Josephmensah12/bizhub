@@ -103,8 +103,13 @@ export default function ExpenseReportsPage() {
 
   const { summary, monthly_trend, by_category, top_vendors, type_split, ratio_trend, largest_expenses, mom_comparison, category_trend } = data
 
+  // Default catFilter to top category on first load
+  const [largestCatFilter, setLargestCatFilter] = useState(null)
+  const topCategory = by_category.length > 0 ? by_category[0].category_name : null
+  const activeLargestCat = largestCatFilter || catFilter || topCategory
+
   let filteredLargest = largest_expenses
-  if (catFilter) filteredLargest = filteredLargest.filter(e => e.category_name === catFilter)
+  if (activeLargestCat) filteredLargest = filteredLargest.filter(e => e.category_name === activeLargestCat)
   if (vendorFilter) filteredLargest = filteredLargest.filter(e => (e.vendor_or_payee || 'Unspecified') === vendorFilter)
 
   return (
@@ -326,10 +331,21 @@ export default function ExpenseReportsPage() {
         </div>
 
         <div className="bg-white rounded-xl border p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">
-            Largest Expenses
-            {(catFilter || vendorFilter) && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter || vendorFilter}</span>}
-          </h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Largest Expenses</h3>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {by_category.map(cat => {
+              const isActive = activeLargestCat === cat.category_name
+              return (
+                <button key={cat.category_name}
+                  onClick={() => { setLargestCatFilter(cat.category_name); setCatFilter(null) }}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${
+                    isActive ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>
+                  {cat.category_name}
+                </button>
+              )
+            })}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
