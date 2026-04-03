@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import { usePermissions } from '../hooks/usePermissions'
+import MonthYearPicker from '../components/MonthYearPicker'
 
 function formatCurrencyRaw(amount, currency = 'USD') {
   if (amount === null || amount === undefined) return '—'
@@ -784,7 +785,7 @@ export default function Expenses() {
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 50, totalPages: 1 })
 
   // Filters
-  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', page: 1 })
+  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', month: '', page: 1 })
   const [users, setUsers] = useState([])
 
   // Modals
@@ -824,6 +825,11 @@ export default function Expenses() {
       if (filters.category_id) params.category_id = filters.category_id
       if (filters.search) params.search = filters.search
       if (filters.created_by) params.created_by = filters.created_by
+      if (filters.month) {
+        const [y, m] = filters.month.split('-')
+        params.dateFrom = `${y}-${m}-01`
+        params.dateTo = new Date(parseInt(y), parseInt(m), 0).toISOString().slice(0, 10)
+      }
 
       const res = await axios.get('/api/v1/expenses', { params })
       setExpenses(res.data.data.expenses)
@@ -986,16 +992,15 @@ export default function Expenses() {
 
           {/* Filters */}
           <div className="bg-white rounded-xl border p-4 mb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
               <input type="text" placeholder="Search..." value={filters.search}
                 onChange={e => setFilters(f => ({ ...f, search: e.target.value, page: 1 }))}
                 className="border rounded-lg px-3 py-2 text-sm" />
-              <input type="date" value={filters.dateFrom}
-                onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value, page: 1 }))}
-                className="border rounded-lg px-3 py-2 text-sm" />
-              <input type="date" value={filters.dateTo}
-                onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value, page: 1 }))}
-                className="border rounded-lg px-3 py-2 text-sm" />
+              <MonthYearPicker
+                value={filters.month}
+                onChange={v => setFilters(f => ({ ...f, month: v, dateFrom: '', dateTo: '', page: 1 }))}
+                placeholder="Pick month..."
+              />
               <select value={filters.category_id}
                 onChange={e => setFilters(f => ({ ...f, category_id: e.target.value, page: 1 }))}
                 className="border rounded-lg px-3 py-2 text-sm">
@@ -1010,7 +1015,15 @@ export default function Expenses() {
                   {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                 </select>
               )}
-              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', page: 1 })}
+            </div>
+            <div className="flex items-center gap-3">
+              <input type="date" value={filters.dateFrom} placeholder="From date"
+                onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value, month: '', page: 1 }))}
+                className="border rounded-lg px-3 py-2 text-sm" />
+              <input type="date" value={filters.dateTo} placeholder="To date"
+                onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value, month: '', page: 1 }))}
+                className="border rounded-lg px-3 py-2 text-sm" />
+              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', month: '', page: 1 })}
                 className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900">Clear</button>
             </div>
           </div>

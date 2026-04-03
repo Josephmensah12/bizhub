@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import MonthYearPicker from '../components/MonthYearPicker'
 
 function formatCurrencyRaw(amount, currency = 'USD') {
   if (amount === null || amount === undefined) return '—'
@@ -26,6 +27,7 @@ export default function ExpenseReportsPage() {
   const [displayCurrency, setDisplayCurrency] = useState('GHS')
   const [xRate, setXRate] = useState(1)
   const [period, setPeriod] = useState('month')
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [catFilter, setCatFilter] = useState(null)
@@ -43,16 +45,22 @@ export default function ExpenseReportsPage() {
 
   useEffect(() => {
     setLoading(true)
+    const periodParams = selectedMonth
+      ? (() => {
+          const [y, m] = selectedMonth.split('-')
+          return { period: 'custom', dateFrom: `${y}-${m}-01`, dateTo: new Date(parseInt(y), parseInt(m), 0).toISOString().slice(0, 10) }
+        })()
+      : { period }
     // Fetch period-specific data + always fetch 13-month trend separately
     Promise.all([
-      axios.get('/api/v1/expenses/reports', { params: { period } }),
+      axios.get('/api/v1/expenses/reports', { params: periodParams }),
       axios.get('/api/v1/expenses/reports', { params: { period: 'custom', dateFrom: (() => { const d = new Date(); d.setMonth(d.getMonth() - 12); d.setDate(1); return d.toISOString().slice(0,10) })() } })
     ]).then(([periodRes, trendRes]) => {
       setData(periodRes.data.data)
       setFullData(periodRes.data.data)
       setTrendData(trendRes.data.data.monthly_trend || [])
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [period])
+  }, [period, selectedMonth])
 
   // When a month is clicked on the trend chart, fetch that month's category breakdown
   useEffect(() => {
@@ -115,8 +123,13 @@ export default function ExpenseReportsPage() {
             <button onClick={() => setDisplayCurrency('USD')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>USD</button>
           </div>
-          {(catFilter || vendorFilter || monthFilter) && (
-            <button onClick={() => { setCatFilter(null); setVendorFilter(null); setMonthFilter(null); setData(fullData) }}
+          <MonthYearPicker
+            value={selectedMonth}
+            onChange={v => { setSelectedMonth(v); if (v) setPeriod(''); setCatFilter(null); setVendorFilter(null); setMonthFilter(null) }}
+            placeholder="Pick month..."
+          />
+          {(catFilter || vendorFilter || monthFilter || selectedMonth) && (
+            <button onClick={() => { setCatFilter(null); setVendorFilter(null); setMonthFilter(null); setSelectedMonth(''); setPeriod('month'); setData(fullData) }}
               className="text-xs text-gray-500 hover:text-gray-700">Clear filters</button>
           )}
         </div>

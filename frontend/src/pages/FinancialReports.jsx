@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
+import MonthYearPicker from '../components/MonthYearPicker'
 
 function formatCurrency(amount, currency = 'GHS', rate = 1) {
   if (amount === null || amount === undefined) return '—'
@@ -34,6 +35,7 @@ export default function FinancialReports() {
   const [period, setPeriod] = useState('month')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [currency, setCurrency] = useState('GHS')
   const [xRate, setXRate] = useState(1)
 
@@ -42,9 +44,14 @@ export default function FinancialReports() {
   const [rveData, setRveData] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const params = period === 'custom'
-    ? { period, startDate, endDate }
-    : { period }
+  const params = selectedMonth
+    ? (() => {
+        const [y, m] = selectedMonth.split('-')
+        return { period: 'custom', startDate: `${y}-${m}-01`, endDate: new Date(parseInt(y), parseInt(m), 0).toISOString().slice(0, 10) }
+      })()
+    : period === 'custom'
+      ? { period, startDate, endDate }
+      : { period }
 
   // Shorthand for formatting in active currency
   const fc = (amount) => formatCurrency(amount, currency, xRate)
@@ -66,7 +73,7 @@ export default function FinancialReports() {
     } catch (err) {
       console.error('Failed to load summary:', err)
     }
-  }, [period, startDate, endDate])
+  }, [period, startDate, endDate, selectedMonth])
 
   const fetchPnl = useCallback(async () => {
     try {
@@ -75,7 +82,7 @@ export default function FinancialReports() {
     } catch (err) {
       console.error('Failed to load P&L:', err)
     }
-  }, [period, startDate, endDate])
+  }, [period, startDate, endDate, selectedMonth])
 
   const fetchRve = useCallback(async () => {
     try {
@@ -84,7 +91,7 @@ export default function FinancialReports() {
     } catch (err) {
       console.error('Failed to load revenue vs expense:', err)
     }
-  }, [period, startDate, endDate])
+  }, [period, startDate, endDate, selectedMonth])
 
   useEffect(() => {
     setLoading(true)
@@ -123,12 +130,19 @@ export default function FinancialReports() {
               </button>
             </div>
           </div>
+          {/* Month picker */}
+          <MonthYearPicker
+            value={selectedMonth}
+            onChange={v => { setSelectedMonth(v); if (v) setPeriod('') }}
+            placeholder="Pick month..."
+          />
           {/* Period selector */}
-          <select value={period} onChange={e => setPeriod(e.target.value)}
+          <select value={selectedMonth ? '' : period} onChange={e => { setPeriod(e.target.value); setSelectedMonth('') }}
             className="border rounded-lg px-3 py-2 text-sm">
+            <option value="" disabled>Period...</option>
             {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
-          {period === 'custom' && (
+          {period === 'custom' && !selectedMonth && (
             <>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
                 className="border rounded-lg px-3 py-2 text-sm" />
