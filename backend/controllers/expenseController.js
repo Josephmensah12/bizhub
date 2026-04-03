@@ -662,7 +662,9 @@ exports.reports = asyncHandler(async (req, res) => {
   // Summary
   const [currentSummary] = await sequelize.query(`
     SELECT COALESCE(SUM(amount_usd), 0) as total_usd, COALESCE(SUM(amount_local), 0) as total_local,
-           COUNT(*) as count, COALESCE(AVG(amount_usd), 0) as avg_usd, MAX(amount_usd) as max_usd
+           COUNT(*) as count, COALESCE(AVG(amount_usd), 0) as avg_usd, MAX(amount_usd) as max_usd,
+           COALESCE(SUM(CASE WHEN expense_type = 'fixed_recurring' THEN amount_usd ELSE 0 END), 0) as fixed_usd,
+           COALESCE(SUM(CASE WHEN expense_type = 'fixed_recurring' THEN amount_local ELSE 0 END), 0) as fixed_local
     FROM expenses e WHERE expense_date BETWEEN :startDate AND :endDate ${sensFilter}
   `, { replacements: { startDate, endDate }, type: QueryTypes.SELECT });
 
@@ -795,6 +797,8 @@ exports.reports = asyncHandler(async (req, res) => {
         total_usd: totalUsd, total_local: parseFloat(currentSummary.total_local) || 0,
         count: parseInt(currentSummary.count) || 0, avg_usd: parseFloat(currentSummary.avg_usd) || 0,
         max_usd: parseFloat(currentSummary.max_usd) || 0, daily_burn: totalUsd / days,
+        fixed_usd: parseFloat(currentSummary.fixed_usd) || 0,
+        fixed_local: parseFloat(currentSummary.fixed_local) || 0,
         expense_to_revenue: revenue > 0 ? (totalUsd / revenue * 100) : 0,
         pct_change: Math.round(pctChange * 10) / 10
       },

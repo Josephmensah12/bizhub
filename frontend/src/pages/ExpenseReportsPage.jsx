@@ -136,7 +136,7 @@ export default function ExpenseReportsPage() {
       </div>
 
       {/* 1. Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded-xl border p-4">
           <p className="text-xs text-gray-500 uppercase">Total Expenses</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{fc(summary.total_local, 'GHS')}</p>
@@ -145,6 +145,10 @@ export default function ExpenseReportsPage() {
               {summary.pct_change > 0 ? '+' : ''}{summary.pct_change.toFixed(1)}% vs prior
             </p>
           )}
+        </div>
+        <div className="bg-white rounded-xl border p-4">
+          <p className="text-xs text-gray-500 uppercase">Total Fixed Expenses</p>
+          <p className="text-2xl font-bold text-orange-600 mt-1">{fc(summary.fixed_local || 0, 'GHS')}</p>
         </div>
         <div className="bg-white rounded-xl border p-4">
           <p className="text-xs text-gray-500 uppercase">Daily Burn Rate</p>
