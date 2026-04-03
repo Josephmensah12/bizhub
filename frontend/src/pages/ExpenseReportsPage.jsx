@@ -110,12 +110,12 @@ export default function ExpenseReportsPage() {
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Expense Reports</h1>
           <p className="text-sm text-gray-500 mt-1">Analyze spending patterns and efficiency</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-[10px] text-gray-400">1 USD = {xRate.toFixed(2)} GHS</span>
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
             <button onClick={() => setDisplayCurrency('GHS')}
@@ -123,6 +123,12 @@ export default function ExpenseReportsPage() {
             <button onClick={() => setDisplayCurrency('USD')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>USD</button>
           </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl border p-4 mb-6">
+        <div className="flex flex-wrap items-center gap-3">
           <MonthYearPicker
             value={selectedMonth}
             onChange={v => { setSelectedMonth(v); if (v) setPeriod(''); setCatFilter(null); setVendorFilter(null); setMonthFilter(null) }}
@@ -135,9 +141,21 @@ export default function ExpenseReportsPage() {
             <option value="quarter">This Quarter</option>
             <option value="year">This Year</option>
           </select>
+          {catFilter && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+              Category: {catFilter}
+              <button onClick={() => { setCatFilter(null); setData(fullData) }} className="hover:text-blue-900">&times;</button>
+            </span>
+          )}
+          {vendorFilter && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+              Vendor: {vendorFilter}
+              <button onClick={() => setVendorFilter(null)} className="hover:text-green-900">&times;</button>
+            </span>
+          )}
           {(catFilter || vendorFilter || monthFilter || selectedMonth) && (
             <button onClick={() => { setCatFilter(null); setVendorFilter(null); setMonthFilter(null); setSelectedMonth(''); setPeriod('month'); setData(fullData) }}
-              className="text-xs text-gray-500 hover:text-gray-700">Clear filters</button>
+              className="text-xs text-gray-500 hover:text-gray-700">Clear all</button>
           )}
         </div>
       </div>
