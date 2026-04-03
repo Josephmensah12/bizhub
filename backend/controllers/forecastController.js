@@ -195,9 +195,9 @@ exports.forecast = asyncHandler(async (req, res) => {
 
     const inv = inventory[type];
     const available = inv ? inv.available : 0;
-    const constrainedUnits = available > 0 ? Math.min(avgUnits, available) : avgUnits;
-    const forecastRevenue = available > 0 ? constrainedUnits * (inv.avgPrice || avgPrice) : avgRevenue;
-    const stockConstraint = available > 0 && avgUnits > available;
+    const constrainedUnits = available > 0 ? Math.min(avgUnits, available) : 0;
+    const forecastRevenue = available > 0 ? constrainedUnits * (inv.avgPrice || avgPrice) : 0;
+    const stockConstraint = inv && available > 0 && avgUnits > available;
 
     categoryForecasts.push({
       asset_type: type,
