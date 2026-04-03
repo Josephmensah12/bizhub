@@ -5,6 +5,7 @@ import axios from 'axios'
 import App from './App.jsx'
 import './index.css'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { ThemeProvider } from './context/ThemeContext.jsx'
 
 // Point all axios requests at the API server (Railway in production, proxy in dev)
 axios.defaults.baseURL = import.meta.env.VITE_API_URL || ''
@@ -12,9 +13,11 @@ axios.defaults.baseURL = import.meta.env.VITE_API_URL || ''
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>,
 )

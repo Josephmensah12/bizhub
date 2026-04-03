@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useTheme } from '../../context/ThemeContext'
 
 // Route-to-title mapping
 const routeTitles = {
@@ -60,6 +61,7 @@ export default function TopBar({ onMenuToggle }) {
   const breadcrumbs = getBreadcrumbs(location.pathname)
   const pageTitle = getPageTitle(location.pathname)
 
+  const { dark, toggle } = useTheme()
   const initials = user?.full_name
     ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : '?'
@@ -114,6 +116,19 @@ export default function TopBar({ onMenuToggle }) {
             <path d="M8.5 17a1.5 1.5 0 003 0" />
           </svg>
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+        </button>
+
+        {/* Dark mode toggle */}
+        <button onClick={toggle} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors" title={dark ? 'Light mode' : 'Dark mode'}>
+          {dark ? (
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="10" cy="10" r="4" /><path d="M10 2v2m0 12v2m-6-8H2m16 0h-2m-1.17-5.66l-1.42 1.42M5.76 14.24l-1.42 1.42m0-11.32l1.42 1.42m8.48 8.48l1.42 1.42" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+            </svg>
+          )}
         </button>
 
         {/* Divider */}
