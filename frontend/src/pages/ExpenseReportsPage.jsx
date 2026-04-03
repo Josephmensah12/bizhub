@@ -267,25 +267,6 @@ export default function ExpenseReportsPage() {
             {top_vendors.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No data</p>}
           </div>
         </div>
-
-        <div className="bg-white rounded-xl border p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Expense-to-Revenue Ratio Trend</h3>
-          <div className="space-y-1.5">
-            {ratio_trend.map((m, i) => {
-              const label = new Date(m.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-              return (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-500 w-12 shrink-0">{label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div className={`h-full rounded-full ${m.ratio > 30 ? 'bg-red-400' : m.ratio > 15 ? 'bg-yellow-400' : 'bg-green-400'}`}
-                      style={{ width: `${Math.min(m.ratio, 100)}%` }} />
-                  </div>
-                  <span className={`text-[10px] font-medium w-10 text-right ${m.ratio > 30 ? 'text-red-500' : 'text-green-500'}`}>{m.ratio.toFixed(1)}%</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
       </div>
 
       {/* 6. Category Breakdown Table */}
