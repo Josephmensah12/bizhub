@@ -1023,13 +1023,15 @@ export default function Expenses() {
                   stroke="#fff"
                   strokeWidth={2}
                   isAnimationActive={false}
-                  content={({ x, y, width, height, name, size, index }) => {
-                    const isActive = filters.category_id && String(categoryTreeData[index]?.id) === String(filters.category_id)
+                  content={({ x, y, width, height, name, size, index, depth }) => {
+                    if (depth !== 1 || index == null || !width || !height) return null
+                    const cat = categoryTreeData[index]
+                    if (!cat) return null
+                    const isActive = filters.category_id && String(cat.id) === String(filters.category_id)
                     const color = TREE_COLORS[index % TREE_COLORS.length]
                     return (
                       <g onClick={() => {
-                        const cat = categoryTreeData[index]
-                        if (cat) setFilters(f => ({
+                        setFilters(f => ({
                           ...f,
                           category_id: String(f.category_id) === String(cat.id) ? '' : String(cat.id),
                           page: 1
@@ -1041,11 +1043,11 @@ export default function Expenses() {
                         {width > 50 && height > 30 && (
                           <>
                             <text x={x + 6} y={y + 16} fontSize={11} fontWeight={600} fill="#fff">
-                              {name.length > Math.floor(width / 7) ? name.slice(0, Math.floor(width / 7)) + '...' : name}
+                              {(name || '').length > Math.floor(width / 7) ? (name || '').slice(0, Math.floor(width / 7)) + '...' : name}
                             </text>
                             {height > 42 && (
                               <text x={x + 6} y={y + 30} fontSize={10} fill="rgba(255,255,255,0.8)">
-                                ${parseFloat(size).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                ${parseFloat(size || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                               </text>
                             )}
                           </>
