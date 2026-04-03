@@ -485,14 +485,18 @@ function MarginsTab({ data, loading }) {
 }
 
 // ─── Donut label renderer ─────────────────────────────────────
-function renderDonutLabel({ cx, cy, midAngle, innerRadius, outerRadius, name, value }) {
+const DONUT_PALETTE = ['#7c3aed', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe', '#f5f3ff', '#8b5cf6', '#6d28d9']
+
+function renderDonutLabel({ cx, cy, midAngle, innerRadius, outerRadius, name, percent }) {
+  if (percent < 0.05) return null // hide labels < 5%
   const RADIAN = Math.PI / 180
-  const radius = outerRadius + 24
+  const radius = outerRadius + 20
   const x = cx + radius * Math.cos(-midAngle * RADIAN)
   const y = cy + radius * Math.sin(-midAngle * RADIAN)
   return (
-    <text x={x} y={y} fill="#374151" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12}>
-      {name} ({value})
+    <text x={x} y={y} fill="#6b7280" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central"
+      fontSize={11} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+      {name} {(percent * 100).toFixed(0)}%
     </text>
   )
 }
@@ -507,13 +511,16 @@ function TopSellersTab({ data, loading }) {
 
   const { by_quantity, by_revenue, by_category } = data
 
-  // Build donut data: aggregate by asset_type for units sold
-  const donutData = by_category.map(c => ({
+  // Build donut data: aggregate by asset_type for units sold, sorted largest first
+  const donutData = [...by_category].sort((a, b) => b.total_sold - a.total_sold).map(c => ({
     name: c.asset_type,
     value: c.total_sold,
     category: c.category,
     asset_type: c.asset_type,
   }))
+  const donutTotal = donutData.reduce((s, d) => s + d.value, 0)
+  const topCategoryName = donutData.length > 0 ? donutData[0].name : ''
+  const topCategoryPct = donutTotal > 0 && donutData.length > 0 ? Math.round(donutData[0].value / donutTotal * 100) : 0
 
   // Use by_quantity as base (has all fields) and sort by selected mode
   const sourceData = sortMode === 'revenue' ? by_revenue : by_quantity
@@ -553,34 +560,55 @@ function TopSellersTab({ data, loading }) {
             <PieChart>
               <Pie
                 data={donutData}
-                cx="40%" cy="50%"
-                innerRadius={70} outerRadius={110}
-                paddingAngle={3}
+                cx="50%" cy="50%"
+                innerRadius={90} outerRadius={120}
+                startAngle={90} endAngle={-270}
+                paddingAngle={2}
                 dataKey="value"
                 label={renderDonutLabel}
                 onClick={(entry) => setCategoryFilter(prev => prev === entry.asset_type ? null : entry.asset_type)}
                 cursor="pointer"
-                cornerRadius={4}
+                cornerRadius={3}
               >
                 {donutData.map((entry, i) => (
                   <Cell
                     key={entry.name}
-                    fill={COLORS[i % COLORS.length]}
-                    opacity={categoryFilter && categoryFilter !== entry.asset_type ? 0.3 : 1}
-                    stroke={categoryFilter === entry.asset_type ? '#1d4ed8' : '#fff'}
-                    strokeWidth={categoryFilter === entry.asset_type ? 3 : 2}
+                    fill={DONUT_PALETTE[i % DONUT_PALETTE.length]}
+                    opacity={categoryFilter && categoryFilter !== entry.asset_type ? 0.25 : 1}
+                    stroke={categoryFilter === entry.asset_type ? '#4c1d95' : '#fff'}
+                    strokeWidth={categoryFilter === entry.asset_type ? 2.5 : 1.5}
                   />
                 ))}
               </Pie>
-              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} formatter={(value, name) => [`${value} units`, name]} />
-              <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, lineHeight: '22px' }} />
-              {/* Center label */}
-              <text x="40%" y="47%" textAnchor="middle" dominantBaseline="central" fill="#111827" fontSize={28} fontWeight="bold">
-                {donutData.reduce((s, d) => s + d.value, 0)}
+              <Tooltip
+                cursor={false}
+                content={({ payload }) => {
+                  if (!payload?.[0]) return null
+                  const d = payload[0].payload
+                  const pct = donutTotal > 0 ? (d.value / donutTotal * 100) : 0
+                  return (
+                    <div className="bg-gray-900/95 backdrop-blur text-white text-xs px-4 py-3 rounded-lg shadow-xl border border-gray-700/50">
+                      <p className="font-medium text-[13px]">{d.name}</p>
+                      <p className="text-white/80 mt-0.5">{d.value} units &middot; {pct.toFixed(1)}%</p>
+                    </div>
+                  )
+                }}
+              />
+              {/* Center — total + top category insight */}
+              <text x="50%" y="44%" textAnchor="middle" dominantBaseline="central" fill="#111827" fontSize={26}
+                style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontWeight: 600 }}>
+                {donutTotal.toLocaleString()}
               </text>
-              <text x="40%" y="56%" textAnchor="middle" dominantBaseline="central" fill="#6b7280" fontSize={12}>
+              <text x="50%" y="52%" textAnchor="middle" dominantBaseline="central" fill="#9ca3af" fontSize={10}
+                style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
                 units sold
               </text>
+              {topCategoryName && (
+                <text x="50%" y="59%" textAnchor="middle" dominantBaseline="central" fill="#7c3aed" fontSize={10}
+                  style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontWeight: 500 }}>
+                  {topCategoryName} {topCategoryPct}%
+                </text>
+              )}
             </PieChart>
           </ResponsiveContainer>
         ) : (
@@ -594,7 +622,7 @@ function TopSellersTab({ data, loading }) {
         {by_category.length > 0 ? (
           <div className="flex flex-col justify-between flex-1 gap-1">
             {[...by_category].map((cat, i) => ({ cat, origIndex: i })).filter(({ cat }) => cat.asset_type !== 'Unlinked').sort((a, b) => b.cat.margin_percent - a.cat.margin_percent).map(({ cat, origIndex }) => {
-              const color = COLORS[origIndex % COLORS.length]
+              const color = DONUT_PALETTE[origIndex % DONUT_PALETTE.length]
               const isActive = categoryFilter === cat.asset_type
               const dimmed = categoryFilter && !isActive
               return (
