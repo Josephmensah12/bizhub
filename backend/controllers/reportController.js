@@ -732,9 +732,12 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     type: QueryTypes.SELECT
   });
 
-  // Margin trend over time — always monthly
+  // Margin trend over time — always last 13 months
   const marginGranularity = 'monthly';
   const marginTrendExpr = trendGroupExpr(marginGranularity);
+  const trendStart = new Date();
+  trendStart.setMonth(trendStart.getMonth() - 12);
+  trendStart.setDate(1);
   const marginTrend = await sequelize.query(`
     SELECT
       ${marginTrendExpr.select},
@@ -744,14 +747,14 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
       SUM(total_profit_amount) as total_profit,
       SUM(total_amount) as total_revenue
     FROM invoices
-    WHERE invoice_date BETWEEN :startDate AND :endDate
+    WHERE invoice_date >= :trendStart
       AND status != 'CANCELLED'
       AND is_deleted = false
       AND total_amount > 0
     GROUP BY ${marginTrendExpr.group}
     ORDER BY date ASC
   `, {
-    replacements: { startDate, endDate },
+    replacements: { trendStart },
     type: QueryTypes.SELECT
   });
 
