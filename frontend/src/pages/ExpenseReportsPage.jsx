@@ -98,13 +98,13 @@ export default function ExpenseReportsPage() {
   const fc = (amount, fromCurrency) => convertAndFormat(amount, fromCurrency, displayCurrency, xRate)
   const fmtLocal = (v) => `GHS ${parseFloat(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
+  const [largestCatFilter, setLargestCatFilter] = useState(null)
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-2 border-primary-600 border-t-transparent"></div></div>
   if (!data) return <div className="text-center py-12 text-gray-400">No expense data</div>
 
   const { summary, monthly_trend, by_category, top_vendors, type_split, ratio_trend, largest_expenses, mom_comparison, category_trend } = data
 
-  // Default catFilter to top category on first load
-  const [largestCatFilter, setLargestCatFilter] = useState(null)
   const topCategory = by_category.length > 0 ? by_category[0].category_name : null
   const activeLargestCat = largestCatFilter || catFilter || topCategory
 
