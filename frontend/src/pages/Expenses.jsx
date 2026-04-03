@@ -992,10 +992,10 @@ export default function Expenses() {
 
           {/* Filters */}
           <div className="bg-white rounded-xl border p-4 mb-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+            <div className="flex flex-wrap items-center gap-3">
               <input type="text" placeholder="Search..." value={filters.search}
                 onChange={e => setFilters(f => ({ ...f, search: e.target.value, page: 1 }))}
-                className="border rounded-lg px-3 py-2 text-sm" />
+                className="border rounded-lg px-3 py-2 text-sm w-44" />
               <MonthYearPicker
                 value={filters.month}
                 onChange={v => setFilters(f => ({ ...f, month: v, dateFrom: '', dateTo: '', page: 1 }))}
@@ -1015,16 +1015,10 @@ export default function Expenses() {
                   {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                 </select>
               )}
-            </div>
-            <div className="flex items-center gap-3">
-              <input type="date" value={filters.dateFrom} placeholder="From date"
-                onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value, month: '', page: 1 }))}
-                className="border rounded-lg px-3 py-2 text-sm" />
-              <input type="date" value={filters.dateTo} placeholder="To date"
-                onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value, month: '', page: 1 }))}
-                className="border rounded-lg px-3 py-2 text-sm" />
-              <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', month: '', page: 1 })}
-                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900">Clear</button>
+              {(filters.search || filters.month || filters.category_id || filters.created_by) && (
+                <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', month: '', page: 1 })}
+                  className="text-xs text-gray-500 hover:text-gray-700">Clear</button>
+              )}
             </div>
           </div>
 
