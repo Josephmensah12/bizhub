@@ -312,11 +312,10 @@ function MarginsTab({ data, loading }) {
           info="Total revenue minus COGS. Formula: Total Revenue - COGS."
         />
         <MetricCard
-          title="Avg Margin"
-          value={formatPercent(overall.avg_margin)}
-          subtitle={`Min: ${formatPercent(overall.min_margin)} / Max: ${formatPercent(overall.max_margin)}`}
+          title="Margin"
+          value={formatPercent(overall.total_revenue > 0 ? (overall.total_profit / overall.total_revenue * 100) : 0)}
           icon="📊"
-          info="Average profit margin across invoices. Formula: AVG(Profit / Revenue * 100) per invoice."
+          info="Overall profit margin. Formula: Total Profit / Total Revenue * 100."
         />
       </div>
 
