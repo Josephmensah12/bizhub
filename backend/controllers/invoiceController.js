@@ -4,7 +4,7 @@
  * CRUD operations for invoices with payments and inventory locking
  */
 
-const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, AssetUnit, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, DescriptionMapping, sequelize } = require('../models');
+const { Invoice, InvoiceItem, InvoicePayment, Customer, Asset, AssetUnit, User, CompanyProfile, ActivityLog, InventoryItemEvent, CustomerCreditApplication, CustomerCredit, InvoiceReturn, DescriptionMapping, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { sanitizeInvoiceForRole, canSeeCost, canEditInvoices, canVoidInvoices } = require('../middleware/permissions');
 const exchangeRateService = require('../services/exchangeRateService');
@@ -2038,19 +2038,41 @@ exports.cancel = asyncHandler(async (req, res) => {
     }
   }
 
-  const netPaid = paymentsSum - refundsSum;
+  // Credits already issued from returns on this invoice (money already accounted for)
+  let creditsIssuedFromReturns = 0;
+  if (CustomerCredit && InvoiceReturn) {
+    const returnsOnInvoice = await InvoiceReturn.findAll({
+      where: { invoice_id: invoice.id },
+      attributes: ['id']
+    });
+    if (returnsOnInvoice.length > 0) {
+      const returnIds = returnsOnInvoice.map(r => r.id);
+      const creditsFromReturns = await CustomerCredit.findAll({
+        where: { source_return_id: { [Op.in]: returnIds }, voided_at: null }
+      });
+      for (const c of creditsFromReturns) {
+        creditsIssuedFromReturns += parseFloat(c.original_amount) || 0;
+      }
+    }
+  }
 
-  // Prevent cancelling if net paid > 0
-  if (netPaid > 0) {
+  const netPaid = paymentsSum - refundsSum;
+  // Effective unaccounted balance: payments minus refunds minus credits already issued
+  const effectiveUnaccounted = netPaid - creditsIssuedFromReturns;
+
+  // Prevent cancelling if there's money not accounted for by refunds or credits
+  if (effectiveUnaccounted > 0.01) {
     return res.status(409).json({
       success: false,
       error: {
         code: 'HAS_NET_PAYMENTS',
-        message: `Cannot cancel invoice with outstanding payments. Net paid: ${netPaid.toFixed(2)} ${invoice.currency}. Refund all payments first so net paid = 0.`,
+        message: `Cannot cancel invoice with unaccounted payments. Net paid: ${netPaid.toFixed(2)} ${invoice.currency}, credits issued: ${creditsIssuedFromReturns.toFixed(2)} ${invoice.currency}. Refund remaining ${effectiveUnaccounted.toFixed(2)} ${invoice.currency} first.`,
         details: {
           paymentsSum,
           refundsSum,
-          netPaid
+          creditsIssuedFromReturns,
+          netPaid,
+          effectiveUnaccounted
         }
       }
     });
@@ -2083,14 +2105,18 @@ exports.cancel = asyncHandler(async (req, res) => {
       if (item.asset && !item.voided_at) {
         const previousStatus = item.asset.status;
 
-        // Revert serialized unit status to Available
+        // Revert serialized unit status to Available — but only if unit is still on THIS invoice
         if (item.asset_unit_id) {
           const unit = await AssetUnit.findByPk(item.asset_unit_id, { transaction: dbTransaction });
           if (unit && ['Reserved', 'Sold'].includes(unit.status)) {
-            unit.status = 'Available';
-            unit.sold_date = null;
-            unit.invoice_item_id = null;
-            await unit.save({ transaction: dbTransaction });
+            // Skip if unit has been reassigned to a different invoice (e.g. via exchange)
+            const isStillOnThisInvoice = !unit.invoice_item_id || unit.invoice_item_id === item.id;
+            if (isStillOnThisInvoice) {
+              unit.status = 'Available';
+              unit.sold_date = null;
+              unit.invoice_item_id = null;
+              await unit.save({ transaction: dbTransaction });
+            }
           }
         }
 
