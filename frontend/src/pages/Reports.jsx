@@ -319,24 +319,50 @@ function MarginsTab({ data, loading }) {
         />
       </div>
 
-      {/* Margin Trend */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Margin Trend</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={trend}>
-            <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
-            <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-            <YAxis yAxisId="pct" tickFormatter={(v) => `${v.toFixed(0)}%`} stroke={CHART_THEME.colors.primary} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-            <YAxis yAxisId="amt" orientation="right" tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.colors.success} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
-            <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
-              formatter={(value, name) => name === 'Margin %' ? [formatPercent(value), name] : [formatCurrency(value), name]}
-              labelFormatter={(d) => formatXAxisTooltip(d, granularity)}
-            />
-            <Legend />
-            <Line yAxisId="pct" type="monotone" dataKey="avg_margin" stroke={CHART_THEME.colors.primary} strokeWidth={2.5} name="Margin %" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
-            <Line yAxisId="amt" type="monotone" dataKey="total_profit" stroke={CHART_THEME.colors.success} strokeWidth={2} strokeDasharray="5 3" name="Profit Amount" dot={false} activeDot={{ r: 4, strokeWidth: 2 }} />
-          </LineChart>
-        </ResponsiveContainer>
+      {/* Margin Trend + Net Income */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Margin Trend</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={trend}>
+              <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <YAxis yAxisId="pct" tickFormatter={(v) => `${v.toFixed(0)}%`} stroke={CHART_THEME.colors.primary} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <YAxis yAxisId="amt" orientation="right" tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} stroke={CHART_THEME.colors.success} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
+                formatter={(value, name) => name === 'Margin %' ? [formatPercent(value), name] : [formatCurrency(value), name]}
+                labelFormatter={(d) => formatXAxisTooltip(d, granularity)}
+              />
+              <Legend />
+              <Line yAxisId="pct" type="monotone" dataKey="avg_margin" stroke={CHART_THEME.colors.primary} strokeWidth={2.5} name="Margin %" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
+              <Line yAxisId="amt" type="monotone" dataKey="total_profit" stroke={CHART_THEME.colors.success} strokeWidth={2} strokeDasharray="5 3" name="Profit Amount" dot={false} activeDot={{ r: 4, strokeWidth: 2 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Net Income</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={trend}>
+              <defs>
+                <linearGradient id="netIncomeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={CHART_THEME.colors.success} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={CHART_THEME.colors.success} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={CHART_THEME.grid.stroke} strokeDasharray={CHART_THEME.grid.strokeDasharray} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={(d) => formatXAxisTick(d, granularity)} stroke={CHART_THEME.axis.stroke} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <YAxis tickFormatter={(v) => `₵${(v/1000).toFixed(0)}k`} fontSize={CHART_THEME.axis.fontSize} tickLine={CHART_THEME.axis.tickLine} axisLine={false} />
+              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} cursor={CHART_THEME.tooltip.cursor}
+                formatter={(value, name) => [formatCurrency(value), name]}
+                labelFormatter={(d) => formatXAxisTooltip(d, granularity)}
+              />
+              <Legend />
+              <Area type="monotone" dataKey="net_income" stroke={CHART_THEME.colors.success} strokeWidth={2.5} fill="url(#netIncomeGrad)" name="Net Income" dot={false} activeDot={{ r: 5, strokeWidth: 2 }} />
+              <Line type="monotone" dataKey="total_profit" stroke={CHART_THEME.colors.primary} strokeWidth={1.5} strokeDasharray="5 3" name="Gross Profit" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Margin by Category */}

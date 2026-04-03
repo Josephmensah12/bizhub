@@ -758,6 +758,21 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
     type: QueryTypes.SELECT
   });
 
+  // Monthly expenses for net income calculation (same 13-month window)
+  const monthlyExpenses = await sequelize.query(`
+    SELECT DATE_TRUNC('month', expense_date)::date as date,
+           COALESCE(SUM(amount_local), 0) as total_expenses
+    FROM expenses
+    WHERE expense_date >= :trendStart
+    GROUP BY DATE_TRUNC('month', expense_date)
+    ORDER BY date ASC
+  `, { replacements: { trendStart }, type: QueryTypes.SELECT });
+
+  const expenseMap = {};
+  for (const e of monthlyExpenses) {
+    expenseMap[e.date] = parseFloat(e.total_expenses) || 0;
+  }
+
   // Margin by model
   const marginByModel = await sequelize.query(`
     SELECT
@@ -821,12 +836,18 @@ exports.marginAnalysis = asyncHandler(async (req, res) => {
         total_profit_amount: parseFloat(l.total_profit_amount),
         margin_percent: parseFloat(l.margin_percent)
       })),
-      trend: marginTrend.map(t => ({
-        date: t.date,
-        avg_margin: parseFloat(t.avg_margin),
-        total_profit: parseFloat(t.total_profit),
-        total_revenue: parseFloat(t.total_revenue)
-      })),
+      trend: marginTrend.map(t => {
+        const expenses = expenseMap[t.date] || 0;
+        const grossProfit = parseFloat(t.total_profit);
+        return {
+          date: t.date,
+          avg_margin: parseFloat(t.avg_margin),
+          total_profit: grossProfit,
+          total_revenue: parseFloat(t.total_revenue),
+          total_expenses: expenses,
+          net_income: grossProfit - expenses
+        };
+      }),
       granularity: marginGranularity
     }
   });
