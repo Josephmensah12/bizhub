@@ -553,7 +553,7 @@ function TopSellersTab({ data, loading }) {
             <PieChart>
               <Pie
                 data={donutData}
-                cx="50%" cy="50%"
+                cx="40%" cy="50%"
                 innerRadius={70} outerRadius={110}
                 paddingAngle={3}
                 dataKey="value"
@@ -575,10 +575,10 @@ function TopSellersTab({ data, loading }) {
               <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} formatter={(value, name) => [`${value} units`, name]} />
               <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, lineHeight: '22px' }} />
               {/* Center label */}
-              <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" className="text-2xl font-bold" fill="#111827" fontSize={28} fontWeight="bold">
+              <text x="40%" y="47%" textAnchor="middle" dominantBaseline="central" fill="#111827" fontSize={28} fontWeight="bold">
                 {donutData.reduce((s, d) => s + d.value, 0)}
               </text>
-              <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" fill="#6b7280" fontSize={12}>
+              <text x="40%" y="56%" textAnchor="middle" dominantBaseline="central" fill="#6b7280" fontSize={12}>
                 units sold
               </text>
             </PieChart>
