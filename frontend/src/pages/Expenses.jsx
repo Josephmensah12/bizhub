@@ -852,10 +852,14 @@ export default function Expenses() {
       const name = exp.category?.name || 'Uncategorized'
       const id = exp.category?.id || ''
       if (!map[name]) map[name] = { name, size: 0, id }
-      map[name].size += parseFloat(exp.amount_usd) || 0
+      if (displayCurrency === 'USD') {
+        map[name].size += parseFloat(exp.amount_usd) || 0
+      } else {
+        map[name].size += parseFloat(exp.amount_local) || 0
+      }
     })
     return Object.values(map).sort((a, b) => b.size - a.size)
-  }, [expenses])
+  }, [expenses, displayCurrency])
 
   const fetchRecurring = useCallback(async () => {
     if (!canManage) return
@@ -1008,7 +1012,8 @@ export default function Expenses() {
           {/* Category Treemap */}
           {categoryTreeData.length > 0 && (() => {
             const grandTotal = categoryTreeData.reduce((s, c) => s + c.size, 0)
-            const fmtK = v => v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${Math.round(v)}`
+            const sym = displayCurrency === 'USD' ? '$' : '₵'
+            const fmtK = v => v >= 1000 ? `${sym}${(v / 1000).toFixed(1)}K` : `${sym}${Math.round(v)}`
             return (
               <div className="bg-white rounded-xl border mb-4 overflow-hidden">
                 <div className="flex items-center justify-between px-5 pt-4 pb-2">
@@ -1100,7 +1105,7 @@ export default function Expenses() {
                             <div className="bg-gray-900/95 backdrop-blur text-white text-xs px-4 py-3 rounded-lg shadow-xl border border-gray-700/50">
                               <p className="font-semibold text-[13px] mb-1">{d.name}</p>
                               <div className="flex items-baseline gap-3">
-                                <span className="text-white/90">USD {parseFloat(d.size).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span className="text-white/90">{displayCurrency} {parseFloat(d.size).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 <span className="text-white/50">{pct.toFixed(1)}% of total</span>
                               </div>
                             </div>
