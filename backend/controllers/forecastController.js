@@ -1,6 +1,8 @@
 const { sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
-const asyncHandler = require('express-async-handler');
+const asyncHandler = handler => (req, res, next) => {
+  Promise.resolve(handler(req, res, next)).catch(next);
+};
 
 // ─── Holt-Winters Additive Smoothing ────────────────────────
 function holtWinters(data, season = 12, alpha = 0.3, beta = 0.05, gamma = 0.3) {
