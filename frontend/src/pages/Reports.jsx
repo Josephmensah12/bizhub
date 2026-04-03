@@ -82,9 +82,15 @@ function MetricIcon({ emoji }) {
   )
 }
 
+let _displayCurrency = 'GHS'
+let _xRate = 1
+
 function formatCurrency(amount) {
-  if (amount == null) return 'GHS 0'
-  return `GHS ${Number(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  if (amount == null) return `${_displayCurrency} 0`
+  let val = Number(amount)
+  if (_displayCurrency === 'GHS') val = val // data is in GHS
+  else val = val / _xRate // convert to USD
+  return `${_displayCurrency} ${val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 function formatPercent(val) {
@@ -1652,6 +1658,18 @@ export default function Reports() {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [displayCurrency, setDisplayCurrency] = useState('GHS')
+  const [xRate, setXRate] = useState(1)
+
+  useEffect(() => {
+    axios.get('/api/v1/exchange-rates/latest?base=USD&quote=GHS')
+      .then(res => setXRate((res.data.data.rate || 1) + 1.0))
+      .catch(() => setXRate(15.5))
+  }, [])
+
+  // Sync module-level vars so formatCurrency works in all tabs
+  _displayCurrency = displayCurrency
+  _xRate = xRate
 
   // Data states
   const [myPerfData, setMyPerfData] = useState(null)
@@ -1767,8 +1785,17 @@ export default function Reports() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
 
-        {/* Period Selector */}
+        {/* Period Selector + Currency */}
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 mr-2">
+            <span className="text-[10px] text-gray-400">1 USD = {xRate.toFixed(2)} GHS</span>
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+              <button onClick={() => setDisplayCurrency('GHS')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'GHS' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>GHS</button>
+              <button onClick={() => setDisplayCurrency('USD')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${displayCurrency === 'USD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>USD</button>
+            </div>
+          </div>
           <MonthYearPicker
             value={selectedMonth}
             onChange={v => { setSelectedMonth(v); if (v) setPeriod('') }}
