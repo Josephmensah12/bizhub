@@ -723,36 +723,59 @@ function CustomersTab({ data, loading }) {
         />
       </div>
 
-      {/* New vs Returning Pie */}
-      {(period_customers.new_customers > 0 || period_customers.returning_customers > 0) && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">New vs Returning</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={[
-                  { name: 'New', value: period_customers.new_customers },
-                  { name: 'Returning', value: period_customers.returning_customers },
-                ]}
-                cx="50%" cy="50%" innerRadius={55} outerRadius={85}
-                paddingAngle={3} cornerRadius={4}
-                dataKey="value" label={({ name, value }) => `${name}: ${value}`}
-              >
-                <Cell fill={CHART_THEME.colors.secondary} />
-                <Cell fill={CHART_THEME.colors.success} />
-              </Pie>
-              <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} />
-              <Legend />
-              <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" fill="#111827" fontSize={24} fontWeight="bold">
-                {period_customers.new_customers + period_customers.returning_customers}
-              </text>
-              <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" fill="#6b7280" fontSize={11}>
-                customers
-              </text>
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {/* New vs Returning + Top 8 Customers */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {(period_customers.new_customers > 0 || period_customers.returning_customers > 0) && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">New vs Returning</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'New', value: period_customers.new_customers },
+                    { name: 'Returning', value: period_customers.returning_customers },
+                  ]}
+                  cx="50%" cy="50%" innerRadius={55} outerRadius={85}
+                  paddingAngle={3} cornerRadius={4}
+                  dataKey="value" label={({ name, value }) => `${name}: ${value}`}
+                >
+                  <Cell fill={CHART_THEME.colors.secondary} />
+                  <Cell fill={CHART_THEME.colors.success} />
+                </Pie>
+                <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} />
+                <Legend />
+                <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" fill="#111827" fontSize={24} fontWeight="bold">
+                  {period_customers.new_customers + period_customers.returning_customers}
+                </text>
+                <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" fill="#6b7280" fontSize={11}>
+                  customers
+                </text>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {top_customers.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 8 Customers by Revenue</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={top_customers.slice(0, 8)} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                <XAxis type="number" tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" fontSize={11} tickLine={false} axisLine={false} width={100}
+                  tickFormatter={n => n.length > 14 ? n.slice(0, 14) + '...' : n} />
+                <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle}
+                  formatter={(v) => [formatCurrency(v), 'Revenue']} />
+                <Bar dataKey="total_spent" name="Revenue" radius={[0, 4, 4, 0]}>
+                  {top_customers.slice(0, 8).map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
 
       {/* Top Customers */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
