@@ -309,68 +309,32 @@ export default function ExpenseReportsPage() {
 
         <div className="bg-white rounded-xl border p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">
-            Category Breakdown
-            {catFilter && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter}</span>}
+            Largest Expenses
+            {(catFilter || vendorFilter) && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter || vendorFilter}</span>}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
+                  <th className="text-left py-2 px-2 text-gray-500">Date</th>
+                  <th className="text-left py-2 px-2 text-gray-500">Description</th>
                   <th className="text-left py-2 px-2 text-gray-500">Category</th>
                   <th className="text-right py-2 px-2 text-gray-500">Amount ({displayCurrency})</th>
-                  <th className="text-right py-2 px-2 text-gray-500">%</th>
-                  <th className="text-right py-2 px-2 text-gray-500">Count</th>
-                  <th className="text-right py-2 px-2 text-gray-500">Avg</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {(catFilter ? by_category.filter(c => c.category_name === catFilter) : by_category).map((c, i) => (
-                  <tr key={i} className="hover:bg-gray-50 cursor-pointer" onClick={() => setCatFilter(prev => prev === c.category_name ? null : c.category_name)}>
-                    <td className="py-2 px-2 font-medium">{c.category_name}</td>
-                    <td className="py-2 px-2 text-right">{fc(c.total_local, 'GHS')}</td>
-                    <td className="py-2 px-2 text-right text-gray-500">{c.pct_of_total.toFixed(1)}%</td>
-                    <td className="py-2 px-2 text-right text-gray-500">{c.count}</td>
-                    <td className="py-2 px-2 text-right text-gray-500">{fc(c.count > 0 ? c.total_local / c.count : 0, 'GHS')}</td>
+                {filteredLargest.map((e, i) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="py-2 px-2 whitespace-nowrap text-gray-500">{formatDate(e.expense_date)}</td>
+                    <td className="py-2 px-2 max-w-[200px] truncate">{e.description}</td>
+                    <td className="py-2 px-2"><span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">{e.category_name || '—'}</span></td>
+                    <td className="py-2 px-2 text-right font-medium">{fc(e.amount_local, e.currency_code || 'GHS')}</td>
                   </tr>
                 ))}
+                {filteredLargest.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-gray-400">No expenses match filter</td></tr>}
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
-
-      {/* 7. Largest Expenses */}
-      <div className="bg-white rounded-xl border p-5 mb-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          Largest Expenses
-          {(catFilter || vendorFilter) && <span className="ml-2 text-xs font-normal text-gray-500">— {catFilter || vendorFilter}</span>}
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2 px-2 text-gray-500">Date</th>
-                <th className="text-left py-2 px-2 text-gray-500">Description</th>
-                <th className="text-left py-2 px-2 text-gray-500">Vendor</th>
-                <th className="text-left py-2 px-2 text-gray-500">Category</th>
-                <th className="text-left py-2 px-2 text-gray-500">Type</th>
-                <th className="text-right py-2 px-2 text-gray-500">Amount ({displayCurrency})</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredLargest.map((e, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="py-2 px-2 whitespace-nowrap">{formatDate(e.expense_date)}</td>
-                  <td className="py-2 px-2 max-w-[200px] truncate">{e.description}</td>
-                  <td className="py-2 px-2 text-gray-500">{e.vendor_or_payee || '—'}</td>
-                  <td className="py-2 px-2"><span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">{e.category_name || '—'}</span></td>
-                  <td className="py-2 px-2 text-xs text-gray-500">{e.expense_type === 'fixed_recurring' ? 'Recurring' : 'One-time'}</td>
-                  <td className="py-2 px-2 text-right font-medium">{fc(e.amount_local, e.currency_code || 'GHS')}</td>
-                </tr>
-              ))}
-              {filteredLargest.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-gray-400">No expenses match filter</td></tr>}
-            </tbody>
-          </table>
         </div>
       </div>
 
