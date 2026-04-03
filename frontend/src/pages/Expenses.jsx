@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import axios from 'axios'
+import { Treemap, ResponsiveContainer, Tooltip } from 'recharts'
 import { useAuth } from '../context/AuthContext'
 import { usePermissions } from '../hooks/usePermissions'
 import MonthYearPicker from '../components/MonthYearPicker'
+
+const TREE_COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#8b5cf6', '#0ea5e9', '#84cc16']
 
 function formatCurrencyRaw(amount, currency = 'USD') {
   if (amount === null || amount === undefined) return '—'
@@ -842,6 +845,18 @@ export default function Expenses() {
     }
   }, [filters])
 
+  // Compute category totals for treemap from loaded expenses
+  const categoryTreeData = useMemo(() => {
+    const map = {}
+    expenses.forEach(exp => {
+      const name = exp.category?.name || 'Uncategorized'
+      const id = exp.category?.id || ''
+      if (!map[name]) map[name] = { name, size: 0, id }
+      map[name].size += parseFloat(exp.amount_usd) || 0
+    })
+    return Object.values(map).sort((a, b) => b.size - a.size)
+  }, [expenses])
+
   const fetchRecurring = useCallback(async () => {
     if (!canManage) return
     try {
@@ -989,6 +1004,72 @@ export default function Expenses() {
               <p className="text-2xl font-bold text-gray-900 mt-1">{totals.count}</p>
             </div>
           </div>
+
+          {/* Category Treemap */}
+          {categoryTreeData.length > 0 && (
+            <div className="bg-white rounded-xl border p-4 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Expenses by Category</h3>
+                {filters.category_id && (
+                  <button onClick={() => setFilters(f => ({ ...f, category_id: '', page: 1 }))}
+                    className="text-xs text-primary-600 hover:underline">Show all</button>
+                )}
+              </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <Treemap
+                  data={categoryTreeData}
+                  dataKey="size"
+                  nameKey="name"
+                  stroke="#fff"
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                  content={({ x, y, width, height, name, size, index }) => {
+                    const isActive = filters.category_id && String(categoryTreeData[index]?.id) === String(filters.category_id)
+                    const color = TREE_COLORS[index % TREE_COLORS.length]
+                    return (
+                      <g onClick={() => {
+                        const cat = categoryTreeData[index]
+                        if (cat) setFilters(f => ({
+                          ...f,
+                          category_id: String(f.category_id) === String(cat.id) ? '' : String(cat.id),
+                          page: 1
+                        }))
+                      }} style={{ cursor: 'pointer' }}>
+                        <rect x={x} y={y} width={width} height={height} fill={color}
+                          opacity={filters.category_id ? (isActive ? 1 : 0.35) : 0.85}
+                          rx={4} />
+                        {width > 50 && height > 30 && (
+                          <>
+                            <text x={x + 6} y={y + 16} fontSize={11} fontWeight={600} fill="#fff">
+                              {name.length > Math.floor(width / 7) ? name.slice(0, Math.floor(width / 7)) + '...' : name}
+                            </text>
+                            {height > 42 && (
+                              <text x={x + 6} y={y + 30} fontSize={10} fill="rgba(255,255,255,0.8)">
+                                ${parseFloat(size).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                              </text>
+                            )}
+                          </>
+                        )}
+                      </g>
+                    )
+                  }}
+                >
+                  <Tooltip
+                    content={({ payload }) => {
+                      if (!payload?.[0]) return null
+                      const d = payload[0].payload
+                      return (
+                        <div className="bg-gray-900 text-white text-xs px-3 py-2 rounded-lg shadow">
+                          <p className="font-medium">{d.name}</p>
+                          <p>USD {parseFloat(d.size).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                      )
+                    }}
+                  />
+                </Treemap>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {/* Filters */}
           <div className="bg-white rounded-xl border p-4 mb-4">
