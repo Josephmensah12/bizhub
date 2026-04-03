@@ -326,10 +326,12 @@ export default function FinancialReports() {
               <div className="text-center py-12 text-gray-400">No data for this period</div>
             ) : (
               <div className="p-6">
-                {/* Visual bars */}
+                {/* Bar-in-bar chart */}
                 <div className="space-y-4 mb-8">
                   {rveData.comparison.map((m, i) => {
                     const maxVal = Math.max(...rveData.comparison.map(c => Math.max(c.revenue, c.expenses)), 1)
+                    const revPct = (m.revenue / maxVal) * 100
+                    const expPct = (m.expenses / maxVal) * 100
                     return (
                       <div key={i} className="space-y-1">
                         <div className="flex justify-between text-sm">
@@ -338,19 +340,13 @@ export default function FinancialReports() {
                             Profit: {fc(m.profit)}
                           </span>
                         </div>
-                        <div className="flex gap-1">
-                          <div className="flex-1">
-                            <div className="bg-green-100 rounded-full h-3">
-                              <div className="bg-green-500 h-3 rounded-full" style={{ width: `${(m.revenue / maxVal) * 100}%` }} />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          <div className="flex-1">
-                            <div className="bg-red-100 rounded-full h-3">
-                              <div className="bg-red-500 h-3 rounded-full" style={{ width: `${(m.expenses / maxVal) * 100}%` }} />
-                            </div>
-                          </div>
+                        <div className="relative h-8 bg-gray-100 rounded-lg overflow-hidden">
+                          {/* Revenue — outer bar */}
+                          <div className="absolute inset-y-0 left-0 bg-green-400 rounded-lg transition-all"
+                            style={{ width: `${revPct}%` }} />
+                          {/* Expense — inner bar, narrower */}
+                          <div className="absolute left-0 top-1.5 bottom-1.5 bg-red-500 rounded transition-all"
+                            style={{ width: `${expPct}%` }} />
                         </div>
                         <div className="flex gap-4 text-xs text-gray-500">
                           <span>Revenue: {fc(m.revenue)}</span>
