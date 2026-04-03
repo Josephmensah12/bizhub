@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import axios from 'axios'
 import { usePermissions } from '../hooks/usePermissions'
+import MonthYearPicker from '../components/MonthYearPicker'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -1596,6 +1597,7 @@ export default function Reports() {
 
   const [activeTab, setActiveTab] = useState('')
   const [period, setPeriod] = useState('month')
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
 
@@ -1626,13 +1628,17 @@ export default function Reports() {
   const [error, setError] = useState(null)
 
   const buildParams = useCallback(() => {
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-')
+      return { period: 'custom', startDate: `${y}-${m}-01`, endDate: new Date(parseInt(y), parseInt(m), 0).toISOString().slice(0, 10) }
+    }
     const params = { period }
     if (period === 'custom') {
       if (customStart) params.startDate = customStart
       if (customEnd) params.endDate = customEnd
     }
     return params
-  }, [period, customStart, customEnd])
+  }, [period, selectedMonth, customStart, customEnd])
 
   const fetchReport = useCallback(async (endpoint, setData, setLoading) => {
     setLoading(true)
@@ -1711,12 +1717,17 @@ export default function Reports() {
 
         {/* Period Selector */}
         <div className="flex items-center gap-2 flex-wrap">
+          <MonthYearPicker
+            value={selectedMonth}
+            onChange={v => { setSelectedMonth(v); if (v) setPeriod('') }}
+            placeholder="Pick month..."
+          />
           {PERIODS.map((p) => (
             <button
               key={p.id}
-              onClick={() => setPeriod(p.id)}
+              onClick={() => { setPeriod(p.id); setSelectedMonth('') }}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                period === p.id
+                !selectedMonth && period === p.id
                   ? 'bg-violet-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
