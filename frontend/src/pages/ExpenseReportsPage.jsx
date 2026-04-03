@@ -128,6 +128,13 @@ export default function ExpenseReportsPage() {
             onChange={v => { setSelectedMonth(v); if (v) setPeriod(''); setCatFilter(null); setVendorFilter(null); setMonthFilter(null) }}
             placeholder="Pick month..."
           />
+          <select value={selectedMonth ? '' : period} onChange={e => { setPeriod(e.target.value); setSelectedMonth(''); setCatFilter(null); setVendorFilter(null); setMonthFilter(null) }}
+            className="border rounded-lg px-3 py-2 text-sm">
+            <option value="" disabled>Period...</option>
+            <option value="month">This Month</option>
+            <option value="quarter">This Quarter</option>
+            <option value="year">This Year</option>
+          </select>
           {(catFilter || vendorFilter || monthFilter || selectedMonth) && (
             <button onClick={() => { setCatFilter(null); setVendorFilter(null); setMonthFilter(null); setSelectedMonth(''); setPeriod('month'); setData(fullData) }}
               className="text-xs text-gray-500 hover:text-gray-700">Clear filters</button>
