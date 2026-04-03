@@ -68,6 +68,14 @@ async function startServer() {
     console.log(`  API Base: http://localhost:${PORT}/api/v1`);
     console.log(`  Health: http://localhost:${PORT}/health`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // Start forecast scheduler
+    try {
+      const { startScheduler } = require('./services/forecastScheduler');
+      startScheduler();
+    } catch (err) {
+      console.error('⚠️ Forecast scheduler failed to start:', err.message);
+    }
   });
 
   // Graceful shutdown

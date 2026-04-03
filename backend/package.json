@@ -36,6 +36,7 @@
     "libphonenumber-js": "^1.12.36",
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "pdfkit": "^0.17.2",
     "pg": "^8.11.3",
     "pg-hstore": "^2.3.4",

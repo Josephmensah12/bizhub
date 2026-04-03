@@ -400,3 +400,68 @@ exports.forecast = asyncHandler(async (req, res) => {
     }
   });
 });
+
+/**
+ * GET /api/v1/reports/forecast/history
+ * Returns all forecast snapshots with accuracy data
+ */
+exports.snapshotHistory = asyncHandler(async (req, res) => {
+  const snapshots = await sequelize.query(`
+    SELECT id, forecast_month, generated_at,
+           ensemble_forecast, ci_low, ci_high,
+           hw_forecast, sd_forecast, ma_forecast, category_forecast,
+           seasonal_index, actual_revenue, actual_profit, accuracy_pct,
+           inventory_snapshot, category_detail, recommendations
+    FROM forecast_snapshots
+    ORDER BY generated_at DESC
+    LIMIT 100
+  `, { type: QueryTypes.SELECT });
+
+  // Group by forecast_month, pick latest per month for accuracy chart
+  const byMonth = {};
+  for (const s of snapshots) {
+    if (!byMonth[s.forecast_month]) byMonth[s.forecast_month] = s;
+  }
+  const accuracyChart = Object.values(byMonth)
+    .filter(s => s.actual_revenue != null)
+    .sort((a, b) => a.forecast_month.localeCompare(b.forecast_month))
+    .map(s => ({
+      month: s.forecast_month,
+      forecast: parseFloat(s.ensemble_forecast),
+      actual: parseFloat(s.actual_revenue),
+      accuracy: parseFloat(s.accuracy_pct),
+      hw: parseFloat(s.hw_forecast),
+      sd: parseFloat(s.sd_forecast),
+    }));
+
+  res.json({
+    success: true,
+    data: {
+      snapshots: snapshots.map(s => ({
+        ...s,
+        ensemble_forecast: parseFloat(s.ensemble_forecast),
+        ci_low: parseFloat(s.ci_low),
+        ci_high: parseFloat(s.ci_high),
+        hw_forecast: s.hw_forecast ? parseFloat(s.hw_forecast) : null,
+        sd_forecast: parseFloat(s.sd_forecast),
+        ma_forecast: parseFloat(s.ma_forecast),
+        category_forecast: parseFloat(s.category_forecast),
+        actual_revenue: s.actual_revenue ? parseFloat(s.actual_revenue) : null,
+        actual_profit: s.actual_profit ? parseFloat(s.actual_profit) : null,
+        accuracy_pct: s.accuracy_pct ? parseFloat(s.accuracy_pct) : null,
+      })),
+      accuracy_chart: accuracyChart,
+    }
+  });
+});
+
+/**
+ * POST /api/v1/reports/forecast/snapshot
+ * Manually trigger a forecast snapshot
+ */
+exports.triggerSnapshot = asyncHandler(async (req, res) => {
+  const { saveForecastSnapshot, backfillActuals } = require('../services/forecastScheduler');
+  await saveForecastSnapshot();
+  await backfillActuals();
+  res.json({ success: true, message: 'Forecast snapshot generated and actuals backfilled' });
+});

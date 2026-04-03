@@ -23,5 +23,7 @@ router.get('/preorder-sla', adminOnly, reportController.preorderSLAReport);
 router.get('/reconciliation', adminOnly, reportController.reconciliation);
 router.get('/inventory-valuation', adminOnly, reportController.inventoryValuation);
 router.get('/forecast', adminOnly, forecastController.forecast);
+router.get('/forecast/history', adminOnly, forecastController.snapshotHistory);
+router.post('/forecast/snapshot', adminOnly, forecastController.triggerSnapshot);
 
 module.exports = router;

@@ -23,16 +23,32 @@ const COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'
 
 export default function Forecast() {
   const [data, setData] = useState(null)
+  const [history, setHistory] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [snapshotting, setSnapshotting] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    axios.get('/api/v1/reports/forecast')
-      .then(res => setData(res.data.data))
-      .catch(err => setError(err.response?.data?.error?.message || 'Failed to load forecast'))
+    Promise.all([
+      axios.get('/api/v1/reports/forecast'),
+      axios.get('/api/v1/reports/forecast/history').catch(() => ({ data: { data: null } })),
+    ]).then(([forecastRes, historyRes]) => {
+      setData(forecastRes.data.data)
+      setHistory(historyRes.data.data)
+    }).catch(err => setError(err.response?.data?.error?.message || 'Failed to load forecast'))
       .finally(() => setLoading(false))
   }, [])
+
+  const takeSnapshot = async () => {
+    setSnapshotting(true)
+    try {
+      await axios.post('/api/v1/reports/forecast/snapshot')
+      const res = await axios.get('/api/v1/reports/forecast/history')
+      setHistory(res.data.data)
+    } catch {}
+    setSnapshotting(false)
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -47,9 +63,15 @@ export default function Forecast() {
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Sales Forecast</h1>
-        <p className="text-sm text-gray-500 mt-1">Predictive analysis for {forecast_month}</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Sales Forecast</h1>
+          <p className="text-sm text-gray-500 mt-1">Predictive analysis for {forecast_month}</p>
+        </div>
+        <button onClick={takeSnapshot} disabled={snapshotting}
+          className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50">
+          {snapshotting ? 'Saving...' : 'Save Snapshot'}
+        </button>
       </div>
 
       {/* Headline Forecast */}
@@ -243,6 +265,89 @@ export default function Forecast() {
           })}
         </div>
       </div>
+
+      {/* Forecast Accuracy Tracker */}
+      {history && history.accuracy_chart && history.accuracy_chart.length > 0 && (
+        <div className="bg-white rounded-xl border p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Forecast Accuracy Tracker</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={history.accuracy_chart}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis dataKey="month" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis tickFormatter={fmtK} fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                    formatter={(v, name) => [fmt(v), name]} />
+                  <Legend />
+                  <Bar dataKey="forecast" name="Forecast" fill="#7c3aed" opacity={0.6} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="actual" name="Actual" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Accuracy by Month</p>
+              <div className="space-y-2">
+                {history.accuracy_chart.map(m => (
+                  <div key={m.month} className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700">{m.month}</span>
+                    <span className={`text-sm font-semibold ${m.accuracy >= 80 ? 'text-green-600' : m.accuracy >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {m.accuracy.toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+                {history.accuracy_chart.length > 1 && (
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <span className="text-sm font-medium text-gray-900">Average</span>
+                    <span className="text-sm font-bold text-gray-900">
+                      {(history.accuracy_chart.reduce((s, m) => s + m.accuracy, 0) / history.accuracy_chart.length).toFixed(1)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snapshot History */}
+      {history && history.snapshots && history.snapshots.length > 0 && (
+        <div className="bg-white rounded-xl border p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Snapshot History</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Generated</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-500">Target Month</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Forecast</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">CI Range</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Actual</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-500">Accuracy</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {history.snapshots.slice(0, 20).map(s => (
+                  <tr key={s.id} className="hover:bg-gray-50">
+                    <td className="py-2 px-3 text-gray-500">{new Date(s.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                    <td className="py-2 px-3 font-medium">{s.forecast_month}</td>
+                    <td className="py-2 px-3 text-right">{fmt(s.ensemble_forecast)}</td>
+                    <td className="py-2 px-3 text-right text-gray-500 text-xs">{fmt(s.ci_low)} — {fmt(s.ci_high)}</td>
+                    <td className="py-2 px-3 text-right">{s.actual_revenue ? fmt(s.actual_revenue) : <span className="text-gray-400">pending</span>}</td>
+                    <td className="py-2 px-3 text-right">
+                      {s.accuracy_pct != null ? (
+                        <span className={`font-semibold ${s.accuracy_pct >= 80 ? 'text-green-600' : s.accuracy_pct >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
+                          {s.accuracy_pct.toFixed(1)}%
+                        </span>
+                      ) : <span className="text-gray-400">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Disclaimer */}
       <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-xs text-gray-500 leading-relaxed">
