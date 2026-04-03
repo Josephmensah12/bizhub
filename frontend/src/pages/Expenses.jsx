@@ -1009,6 +1009,38 @@ export default function Expenses() {
             </div>
           </div>
 
+          {/* Filters */}
+          <div className="bg-white rounded-xl border p-4 mb-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <input type="text" placeholder="Search..." value={filters.search}
+                onChange={e => setFilters(f => ({ ...f, search: e.target.value, page: 1 }))}
+                className="border rounded-lg px-3 py-2 text-sm w-44" />
+              <MonthYearPicker
+                value={filters.month}
+                onChange={v => setFilters(f => ({ ...f, month: v, dateFrom: '', dateTo: '', page: 1 }))}
+                placeholder="Pick month..."
+              />
+              <select value={filters.category_id}
+                onChange={e => setFilters(f => ({ ...f, category_id: e.target.value, page: 1 }))}
+                className="border rounded-lg px-3 py-2 text-sm">
+                <option value="">All Categories</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              {canManage && (
+                <select value={filters.created_by}
+                  onChange={e => setFilters(f => ({ ...f, created_by: e.target.value, page: 1 }))}
+                  className="border rounded-lg px-3 py-2 text-sm">
+                  <option value="">All Users</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                </select>
+              )}
+              {(filters.search || filters.month || filters.category_id || filters.created_by) && (
+                <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', month: '', page: 1 })}
+                  className="text-xs text-gray-500 hover:text-gray-700">Clear</button>
+              )}
+            </div>
+          </div>
+
           {/* Category Treemap */}
           {categoryTreeData.length > 0 && (() => {
             const grandTotal = categoryTreeData.reduce((s, c) => s + c.size, 0)
@@ -1118,38 +1150,6 @@ export default function Expenses() {
               </div>
             )
           })()}
-
-          {/* Filters */}
-          <div className="bg-white rounded-xl border p-4 mb-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <input type="text" placeholder="Search..." value={filters.search}
-                onChange={e => setFilters(f => ({ ...f, search: e.target.value, page: 1 }))}
-                className="border rounded-lg px-3 py-2 text-sm w-44" />
-              <MonthYearPicker
-                value={filters.month}
-                onChange={v => setFilters(f => ({ ...f, month: v, dateFrom: '', dateTo: '', page: 1 }))}
-                placeholder="Pick month..."
-              />
-              <select value={filters.category_id}
-                onChange={e => setFilters(f => ({ ...f, category_id: e.target.value, page: 1 }))}
-                className="border rounded-lg px-3 py-2 text-sm">
-                <option value="">All Categories</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              {canManage && (
-                <select value={filters.created_by}
-                  onChange={e => setFilters(f => ({ ...f, created_by: e.target.value, page: 1 }))}
-                  className="border rounded-lg px-3 py-2 text-sm">
-                  <option value="">All Users</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                </select>
-              )}
-              {(filters.search || filters.month || filters.category_id || filters.created_by) && (
-                <button onClick={() => setFilters({ dateFrom: '', dateTo: '', category_id: '', created_by: '', search: '', month: '', page: 1 })}
-                  className="text-xs text-gray-500 hover:text-gray-700">Clear</button>
-              )}
-            </div>
-          </div>
 
           {/* Table */}
           <div className="bg-white rounded-xl border overflow-hidden">
