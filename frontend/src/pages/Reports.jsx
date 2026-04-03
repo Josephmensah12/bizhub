@@ -689,10 +689,12 @@ function TopSellersTab({ data, loading }) {
 
 // ─── Customers Tab ────────────────────────────────────────────
 function CustomersTab({ data, loading }) {
+  const [custMetric, setCustMetric] = useState('revenue')
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState message="No customer data available" />
 
   const { total_customers, period_customers, top_customers } = data
+  const top8 = [...top_customers].sort((a, b) => custMetric === 'profit' ? b.total_profit - a.total_profit : b.total_spent - a.total_spent).slice(0, 8)
 
   return (
     <div className="space-y-6">
@@ -757,17 +759,25 @@ function CustomersTab({ data, loading }) {
 
         {top_customers.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 8 Customers by Revenue</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Top 8 Customers</h3>
+              <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+                <button onClick={() => setCustMetric('revenue')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${custMetric === 'revenue' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Revenue</button>
+                <button onClick={() => setCustMetric('profit')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${custMetric === 'profit' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Profit</button>
+              </div>
+            </div>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={top_customers.slice(0, 8)} layout="vertical">
+              <BarChart data={top8} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
                 <XAxis type="number" tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis type="category" dataKey="name" fontSize={11} tickLine={false} axisLine={false} width={100}
                   tickFormatter={n => n.length > 14 ? n.slice(0, 14) + '...' : n} />
                 <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle}
-                  formatter={(v) => [formatCurrency(v), 'Revenue']} />
-                <Bar dataKey="total_spent" name="Revenue" radius={[0, 4, 4, 0]}>
-                  {top_customers.slice(0, 8).map((_, i) => (
+                  formatter={(v) => [formatCurrency(v), custMetric === 'profit' ? 'Profit' : 'Revenue']} />
+                <Bar dataKey={custMetric === 'profit' ? 'total_profit' : 'total_spent'} name={custMetric === 'profit' ? 'Profit' : 'Revenue'} radius={[0, 4, 4, 0]}>
+                  {top8.map((_, i) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Bar>
