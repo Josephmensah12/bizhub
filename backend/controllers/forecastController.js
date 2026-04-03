@@ -1,5 +1,6 @@
 const { sequelize } = require('../models');
 const { QueryTypes } = require('sequelize');
+const { autoTune } = require('../services/forecastAutoTuner');
 const asyncHandler = handler => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
@@ -116,10 +117,14 @@ exports.forecast = asyncHandler(async (req, res) => {
   const forecastMonth = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 1);
   const forecastLabel = forecastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  // 2. Run models
+  // 2. Run models (default)
   const hw = holtWinters(revenues, 12);
   const sd = seasonalDecomposition(revenues, 12);
   const ma = movingAverage(revenues, 3);
+
+  // 2b. Auto-tune
+  let tuning = null;
+  try { tuning = await autoTune(revenues); } catch (e) { console.error('[Forecast] AutoTune error:', e.message); }
 
   // 3. Category sales (last 12 months)
   const categorySales = await sequelize.query(`
@@ -209,13 +214,20 @@ exports.forecast = asyncHandler(async (req, res) => {
   }
   categoryForecasts.sort((a, b) => b.forecast_revenue - a.forecast_revenue);
 
-  // 6. Ensemble
-  const weights = { hw: 0.35, sd: 0.35, cat: 0.30 };
-  const ensemble = (hw ? hw.forecast * weights.hw : sd.forecast * 0.55)
-    + sd.forecast * weights.sd
-    + categoryTotal * weights.cat;
+  // 6. Ensemble — use tuned weights and bias corrections if available
+  const defaultWeights = { hw: 0.35, sd: 0.35, cat: 0.30 };
+  const weights = tuning?.adaptive_weights || defaultWeights;
+  const biasCorr = tuning?.bias_corrections || { hw: 0, sd: 0, ma: 0 };
+
+  // Use tuned forecasts (with bias correction) or default
+  const hwForecast = tuning?.tuned_forecasts?.hw ?? hw?.forecast ?? null;
+  const sdForecast = tuning?.tuned_forecasts?.sd ?? sd.forecast;
+
+  const ensemble = (hwForecast ? hwForecast * (weights.hw || 0.35) : sdForecast * 0.55)
+    + sdForecast * (weights.sd || 0.35)
+    + categoryTotal * (weights.cat || 0.30);
   const blendedRmse = hw
-    ? Math.sqrt(weights.hw * hw.rmse ** 2 + weights.sd * sd.rmse ** 2)
+    ? Math.sqrt((weights.hw || 0.35) * hw.rmse ** 2 + (weights.sd || 0.35) * sd.rmse ** 2)
     : sd.rmse;
 
   // 7. Seasonality insight
@@ -397,6 +409,22 @@ exports.forecast = asyncHandler(async (req, res) => {
       })),
       trend_chart: trendData,
       recommendations,
+      auto_tuning: tuning ? {
+        optimized_params: tuning.optimized_params,
+        default_params: tuning.default_params,
+        improvement: tuning.improvement,
+        adaptive_weights: tuning.adaptive_weights,
+        bias_corrections: tuning.bias_corrections,
+        outliers: tuning.outliers,
+        cross_validation: Object.fromEntries(
+          Object.entries(tuning.cross_validation).map(([k, v]) => [k, {
+            mape: parseFloat(v.mape.toFixed(1)),
+            rmse: Math.round(v.rmse),
+            bias: Math.round(v.bias),
+          }])
+        ),
+        snapshot_learning: tuning.snapshot_learning,
+      } : null,
     }
   });
 });

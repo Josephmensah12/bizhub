@@ -217,6 +217,102 @@ export default function Forecast() {
         </div>
       </div>
 
+      {/* Auto-Tuning Insights */}
+      {data.auto_tuning && (
+        <div className="bg-white rounded-xl border p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Auto-Tuning Engine</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Optimized Parameters */}
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Holt-Winters Parameters</p>
+              <div className="space-y-1.5">
+                {data.auto_tuning.optimized_params && (
+                  <>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">Alpha (level)</span>
+                      <span className="font-mono font-medium">{data.auto_tuning.optimized_params.alpha} <span className="text-gray-400">was {data.auto_tuning.default_params.alpha}</span></span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">Beta (trend)</span>
+                      <span className="font-mono font-medium">{data.auto_tuning.optimized_params.beta} <span className="text-gray-400">was {data.auto_tuning.default_params.beta}</span></span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">Gamma (season)</span>
+                      <span className="font-mono font-medium">{data.auto_tuning.optimized_params.gamma} <span className="text-gray-400">was {data.auto_tuning.default_params.gamma}</span></span>
+                    </div>
+                  </>
+                )}
+                {data.auto_tuning.improvement && (
+                  <div className="mt-2 pt-2 border-t">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-600">RMSE improvement</span>
+                      <span className={`font-semibold ${data.auto_tuning.improvement.pct_improvement > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                        {data.auto_tuning.improvement.pct_improvement > 0 ? '+' : ''}{data.auto_tuning.improvement.pct_improvement}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Adaptive Weights */}
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Adaptive Ensemble Weights</p>
+              <div className="space-y-2">
+                {Object.entries(data.auto_tuning.adaptive_weights).map(([model, weight]) => (
+                  <div key={model}>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span className="text-gray-600">{model === 'hw' ? 'Holt-Winters' : model === 'sd' ? 'Seasonal Decomp' : 'Category Build-Up'}</span>
+                      <span className="font-semibold">{(weight * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-1.5">
+                      <div className="h-full bg-violet-500 rounded-full" style={{ width: `${weight * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {data.auto_tuning.bias_corrections && (
+                <div className="mt-3 pt-2 border-t">
+                  <p className="text-[10px] text-gray-400 uppercase mb-1">Bias Corrections Applied</p>
+                  <div className="flex gap-3 text-xs">
+                    {Object.entries(data.auto_tuning.bias_corrections).map(([m, v]) => (
+                      <span key={m} className={v > 0 ? 'text-green-600' : v < 0 ? 'text-red-600' : 'text-gray-400'}>
+                        {m.toUpperCase()}: {v > 0 ? '+' : ''}{fmt(v)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Cross-Validation + Outliers */}
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Walk-Forward Cross-Validation</p>
+              <div className="space-y-1">
+                {data.auto_tuning.cross_validation && Object.entries(data.auto_tuning.cross_validation).map(([model, m]) => (
+                  <div key={model} className="flex justify-between text-xs">
+                    <span className="text-gray-600">{model}</span>
+                    <span className="text-gray-800">MAPE: {m.mape}% | Bias: {fmt(m.bias)}</span>
+                  </div>
+                ))}
+              </div>
+              {data.auto_tuning.outliers && data.auto_tuning.outliers.count > 0 && (
+                <div className="mt-3 pt-2 border-t">
+                  <p className="text-xs text-gray-600">
+                    <span className="font-semibold text-yellow-600">{data.auto_tuning.outliers.count} outlier{data.auto_tuning.outliers.count > 1 ? 's' : ''}</span> detected and dampened
+                  </p>
+                </div>
+              )}
+              {data.auto_tuning.snapshot_learning && (
+                <div className="mt-2 pt-2 border-t">
+                  <p className="text-[10px] text-gray-400 uppercase mb-1">Learned from {data.auto_tuning.snapshot_learning.snapshotCount} past snapshots</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Methodology */}
       <div className="bg-white rounded-xl border p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Methodology</h3>
