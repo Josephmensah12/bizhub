@@ -300,10 +300,16 @@ function MarginsTab({ data, loading }) {
           info="Sum of all invoice totals in the period. Formula: SUM(invoice total_amount)."
         />
         <MetricCard
+          title="COGS"
+          value={formatCurrency(overall.total_cost)}
+          icon="🏷️"
+          info="Cost of Goods Sold. Sum of cost prices for all items sold. Formula: SUM(invoice total_cost_amount)."
+        />
+        <MetricCard
           title="Total Profit"
           value={formatCurrency(overall.total_profit)}
           icon="📈"
-          info="Total revenue minus total cost. Formula: Total Revenue - Total Cost."
+          info="Total revenue minus COGS. Formula: Total Revenue - COGS."
         />
         <MetricCard
           title="Avg Margin"
@@ -311,12 +317,6 @@ function MarginsTab({ data, loading }) {
           subtitle={`Min: ${formatPercent(overall.min_margin)} / Max: ${formatPercent(overall.max_margin)}`}
           icon="📊"
           info="Average profit margin across invoices. Formula: AVG(Profit / Revenue * 100) per invoice."
-        />
-        <MetricCard
-          title="Total Cost"
-          value={formatCurrency(overall.total_cost)}
-          icon="🏷️"
-          info="Sum of cost prices for all items sold. Formula: SUM(invoice total_cost_amount)."
         />
       </div>
 
