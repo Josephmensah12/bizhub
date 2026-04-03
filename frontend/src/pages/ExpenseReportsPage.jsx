@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, Cell } from 'recharts'
 import MonthYearPicker from '../components/MonthYearPicker'
 
 function formatCurrencyRaw(amount, currency = 'USD') {
@@ -232,6 +232,34 @@ export default function ExpenseReportsPage() {
             {top_vendors.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No data</p>}
           </div>
         </div>
+      </div>
+
+      {/* Net Profit Chart */}
+      <div className="bg-white rounded-xl border p-5 mb-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Net Profit (Revenue - Expenses)</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={trendData.map(m => ({
+            label: new Date(m.month).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+            profit: (m.revenue || 0) - (m.expenses_local || 0),
+            revenue: m.revenue || 0,
+            expenses: m.expenses_local || 0
+          }))}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+            <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} fontSize={11} tickLine={false} axisLine={false} />
+            <Tooltip
+              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+              formatter={(value, name) => [fmtLocal(value), name]}
+            />
+            <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="3 3" />
+            <Bar dataKey="profit" name="Net Profit" radius={[4, 4, 0, 0]}>
+              {trendData.map((m, i) => {
+                const profit = (m.revenue || 0) - (m.expenses_local || 0)
+                return <Cell key={i} fill={profit >= 0 ? '#10b981' : '#ef4444'} />
+              })}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Expenses by Category + Category Breakdown */}
