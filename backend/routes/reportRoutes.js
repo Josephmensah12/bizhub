@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const reportController = require('../controllers/reportController');
+const forecastController = require('../controllers/forecastController');
 const { authenticate, requireRole } = require('../middleware/auth');
 
 router.use(authenticate);
@@ -21,5 +22,6 @@ router.get('/low-stock', adminOnly, reportController.lowStockReport);
 router.get('/preorder-sla', adminOnly, reportController.preorderSLAReport);
 router.get('/reconciliation', adminOnly, reportController.reconciliation);
 router.get('/inventory-valuation', adminOnly, reportController.inventoryValuation);
+router.get('/forecast', adminOnly, forecastController.forecast);
 
 module.exports = router;

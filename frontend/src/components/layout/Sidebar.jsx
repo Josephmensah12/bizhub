@@ -191,6 +191,7 @@ const navGroups = [
           { name: 'Sales Reports', path: '/reports' },
           { name: 'Financial Reports', path: '/financial-reports' },
           { name: 'Expense Reports', path: '/expense-reports' },
+          { name: 'Forecast', path: '/forecast' },
         ]
       },
     ]
