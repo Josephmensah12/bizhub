@@ -502,6 +502,7 @@ function TopSellersTab({ data, loading }) {
 
   return (
     <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Donut Chart — Sales Volume by Category */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-4">
@@ -553,6 +554,53 @@ function TopSellersTab({ data, loading }) {
         ) : (
           <p className="text-gray-500 text-center py-8">No category data</p>
         )}
+      </div>
+
+      {/* Margin % by Category */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Margin % by Category</h3>
+        {by_category.length > 0 ? (
+          <div className="space-y-3 mt-2">
+            {by_category.map((cat, i) => {
+              const color = COLORS[i % COLORS.length]
+              const isActive = categoryFilter === cat.asset_type
+              const dimmed = categoryFilter && !isActive
+              return (
+                <button
+                  key={cat.asset_type}
+                  onClick={() => setCategoryFilter(prev => prev === cat.asset_type ? null : cat.asset_type)}
+                  className={`w-full text-left transition-opacity ${dimmed ? 'opacity-35' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                      <span className={`text-sm ${isActive ? 'font-bold text-gray-900' : 'text-gray-700'}`}>{cat.asset_type}</span>
+                    </div>
+                    <span className={`text-sm font-semibold ${cat.margin_percent >= 20 ? 'text-green-600' : cat.margin_percent >= 10 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {cat.margin_percent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(Math.max(cat.margin_percent, 0), 100)}%`,
+                        backgroundColor: color
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                    <span>Revenue: {formatCurrency(cat.total_revenue)}</span>
+                    <span>Profit: {formatCurrency(cat.total_profit)}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-center py-8">No category data</p>
+        )}
+      </div>
       </div>
 
       {/* Top Sellers — single table with toggle */}
