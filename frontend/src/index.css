@@ -9,7 +9,11 @@
   }
 
   /* Dark mode overrides for common patterns used across all pages */
-  .dark .bg-white { background-color: #1a1a2e !important; }
+  .dark .bg-white,
+  .dark .bg-white.rounded-lg,
+  .dark .bg-white.rounded-xl { background-color: #1a1a2e !important; }
+  .dark .shadow-sm, .dark .shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important; }
+  .dark .bg-gray-50.border-b, .dark .bg-gray-50.rounded { background-color: #141428 !important; }
   .dark .bg-gray-50 { background-color: #0f0f1a !important; }
   .dark .bg-gray-100 { background-color: #1e1e30 !important; }
 
