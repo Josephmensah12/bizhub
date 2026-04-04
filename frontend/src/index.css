@@ -19,12 +19,12 @@
   .dark .border-b { border-bottom-color: #2a2a40 !important; }
   .dark .divide-y > :not([hidden]) ~ :not([hidden]) { border-color: #2a2a40 !important; }
 
-  .dark .text-gray-900 { color: #f1f1f4 !important; }
-  .dark .text-gray-800 { color: #e0e0e8 !important; }
-  .dark .text-gray-700 { color: #c8c8d4 !important; }
-  .dark .text-gray-600 { color: #a0a0b4 !important; }
-  .dark .text-gray-500 { color: #8888a0 !important; }
-  .dark .text-gray-400 { color: #6e6e88 !important; }
+  .dark .text-gray-900 { color: #ffffff !important; }
+  .dark .text-gray-800 { color: #ffffff !important; }
+  .dark .text-gray-700 { color: #f0f0f0 !important; }
+  .dark .text-gray-600 { color: #e8e8e8 !important; }
+  .dark .text-gray-500 { color: #e0e0e0 !important; }
+  .dark .text-gray-400 { color: #d0d0d0 !important; }
 
   .dark .hover\:bg-gray-50:hover { background-color: #22223a !important; }
   .dark .hover\:bg-gray-100:hover { background-color: #28284a !important; }
