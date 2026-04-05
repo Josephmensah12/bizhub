@@ -81,6 +81,43 @@ export default function Sourcing() {
           <h1 className="text-2xl font-bold text-gray-900">Phone Sourcing</h1>
           <p className="text-sm text-gray-500 mt-1">Track batches, margins, and supplier performance</p>
         </div>
+        <div className="flex items-center gap-2">
+          <a href="/api/v1/sourcing/verification-template" download
+            className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700">
+            Download Verification Sheet
+          </a>
+          <label className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 cursor-pointer">
+            Import Phones
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const batchRef = prompt('Batch reference (e.g., PWS5004769):')
+              if (!batchRef) return
+              const supplier = prompt('Supplier name (e.g., ecoATM, CWI):')
+              if (!supplier) return
+              const fx = prompt('FX rate (USD to GHS, e.g., 11.5):')
+              const shipping = prompt('Shipping cost per unit USD (e.g., 12):')
+
+              const formData = new FormData()
+              formData.append('file', file)
+              formData.append('batch_reference', batchRef)
+              formData.append('supplier_name', supplier)
+              formData.append('fx_rate_at_purchase', fx || '11.5')
+              formData.append('shipping_cost_per_unit_usd', shipping || '12')
+              formData.append('import_duty_rate', '0.01')
+              formData.append('handling_per_unit_ghs', '50')
+
+              try {
+                const res = await axios.post('/api/v1/sourcing/import', formData)
+                alert(res.data.message)
+                fetchBatches()
+              } catch (err) {
+                alert(err.response?.data?.error?.message || 'Import failed')
+              }
+              e.target.value = ''
+            }} />
+          </label>
+        </div>
       </div>
 
       {/* Tabs */}

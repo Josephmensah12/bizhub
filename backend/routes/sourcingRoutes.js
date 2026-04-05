@@ -6,6 +6,8 @@
 
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const sourcingController = require('../controllers/sourcingController');
 const warrantyController = require('../controllers/sourcingWarrantyController');
 const reportController = require('../controllers/sourcingReportController');
@@ -23,6 +25,12 @@ router.get('/warranty/claims', adminOrManager, warrantyController.listClaims);
 router.post('/warranty/claims', adminOrManager, warrantyController.createClaim);
 router.patch('/warranty/claims/:id', adminOrManager, warrantyController.updateClaim);
 router.get('/warranty/expiring', adminOrManager, warrantyController.expiring);
+
+// --- Verification template (ALL authenticated users) ---
+router.get('/verification-template', sourcingController.verificationTemplate);
+
+// --- Bulk import (Admin only) ---
+router.post('/import', adminOnly, upload.single('file'), sourcingController.importBatch);
 
 // --- Report routes (BEFORE /:id to avoid param capture) ---
 router.get('/reports/supplier-scorecard', adminOnly, reportController.supplierScorecard);
