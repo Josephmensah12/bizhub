@@ -197,6 +197,12 @@ const navGroups = [
     ]
   },
   {
+    label: 'PROCUREMENT',
+    items: [
+      { name: 'Sourcing', path: '/sourcing', roles: ['Admin'] },
+    ]
+  },
+  {
     label: 'ADMIN',
     items: [
       { name: 'Users', path: '/users', roles: ['Admin'] },

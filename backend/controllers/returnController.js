@@ -416,6 +416,28 @@ exports.finalizeReturn = asyncHandler(async (req, res) => {
         // Log inventory events
         await InventoryItemEvent.logReturnFinalized(asset, invoiceReturn, returnItem, userId, dbTransaction);
         await InventoryItemEvent.logInventoryReleased(asset, invoiceReturn, newStatus, userId, dbTransaction);
+
+        // Clear sourcing actuals on returned serialized unit
+        if (returnItem.invoiceItem?.asset_unit_id) {
+          const { AssetUnit, SourcingBatch } = require('../models');
+          const unit = await AssetUnit.findByPk(returnItem.invoiceItem.asset_unit_id, { transaction: dbTransaction });
+          if (unit) {
+            unit.actual_sell_price_ghs = null;
+            unit.actual_margin_percent = null;
+            unit.margin_variance_percent = null;
+            unit.days_to_sell = null;
+            unit.status = 'Available';
+            unit.sold_date = null;
+            unit.invoice_item_id = null;
+            unit.times_returned = (unit.times_returned || 0) + 1;
+            await unit.save({ transaction: dbTransaction });
+
+            if (unit.sourcing_batch_id && SourcingBatch) {
+              const batch = await SourcingBatch.findByPk(unit.sourcing_batch_id, { transaction: dbTransaction });
+              if (batch) await batch.recomputeTotals(dbTransaction);
+            }
+          }
+        }
       }
     }
 

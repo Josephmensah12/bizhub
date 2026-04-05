@@ -34,6 +34,7 @@ const writeOffRoutes = require('./routes/writeOffRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const expenseCategoryRoutes = require('./routes/expenseCategoryRoutes');
 const financialReportRoutes = require('./routes/financialReportRoutes');
+const sourcingRoutes = require('./routes/sourcingRoutes');
 
 const app = express();
 
@@ -104,6 +105,7 @@ app.use(`${API_BASE}/write-offs`, writeOffRoutes);
 app.use(`${API_BASE}/expenses`, expenseRoutes);
 app.use(`${API_BASE}/expense-categories`, expenseCategoryRoutes);
 app.use(`${API_BASE}/financial-reports`, financialReportRoutes);
+app.use(`${API_BASE}/sourcing`, sourcingRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -448,6 +448,28 @@ module.exports = (sequelize, DataTypes) => {
             unit.status = 'Sold';
             unit.sold_date = new Date().toISOString().split('T')[0];
             unit.invoice_item_id = item.id;
+
+            // Sourcing margin tracking
+            if (unit.sourcing_batch_id && unit.landed_cost_ghs) {
+              const actualUnitPrice = parseFloat(item.line_total_amount) / item.quantity;
+              unit.actual_sell_price_ghs = actualUnitPrice;
+              const landed = parseFloat(unit.landed_cost_ghs);
+              if (actualUnitPrice > 0) {
+                unit.actual_margin_percent = Math.round(((actualUnitPrice - landed) / actualUnitPrice) * 10000) / 100;
+              }
+              unit.margin_variance_percent = (unit.actual_margin_percent || 0) - (parseFloat(unit.projected_margin_percent) || 0);
+
+              const SourcingBatch = sequelize.models.SourcingBatch;
+              if (SourcingBatch) {
+                const batch = await SourcingBatch.findByPk(unit.sourcing_batch_id, { transaction });
+                if (batch && batch.arrival_date) {
+                  const arrival = new Date(batch.arrival_date);
+                  const sold = new Date(unit.sold_date);
+                  unit.days_to_sell = Math.floor((sold - arrival) / (1000 * 60 * 60 * 24));
+                }
+              }
+            }
+
             await unit.save({ transaction });
           }
         }
@@ -458,6 +480,22 @@ module.exports = (sequelize, DataTypes) => {
           await item.asset.updateComputedStatus(transaction);
           await InventoryItemEvent.logSold(item.asset, this, userId, transaction);
         }
+      }
+    }
+
+    // Recompute sourcing batch totals for any affected batches
+    const SourcingBatch = sequelize.models.SourcingBatch;
+    if (SourcingBatch) {
+      const batchIds = new Set();
+      for (const item of items) {
+        if (item.asset_unit_id && AssetUnit) {
+          const unit = await AssetUnit.findByPk(item.asset_unit_id, { transaction });
+          if (unit?.sourcing_batch_id) batchIds.add(unit.sourcing_batch_id);
+        }
+      }
+      for (const batchId of batchIds) {
+        const batch = await SourcingBatch.findByPk(batchId, { transaction });
+        if (batch) await batch.recomputeTotals(transaction);
       }
     }
   };

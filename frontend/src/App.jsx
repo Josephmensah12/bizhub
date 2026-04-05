@@ -39,6 +39,7 @@ import Expenses from './pages/Expenses'
 import FinancialReports from './pages/FinancialReports'
 import ExpenseReportsPage from './pages/ExpenseReportsPage'
 import Forecast from './pages/Forecast'
+import Sourcing from './pages/Sourcing'
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -115,6 +116,7 @@ function App() {
         <Route path="financial-reports" element={<RoleRoute roles={['Admin']}><FinancialReports /></RoleRoute>} />
         <Route path="expense-reports" element={<RoleRoute roles={['Admin']}><ExpenseReportsPage /></RoleRoute>} />
         <Route path="forecast" element={<RoleRoute roles={['Admin']}><Forecast /></RoleRoute>} />
+        <Route path="sourcing" element={<RoleRoute roles={['Admin']}><Sourcing /></RoleRoute>} />
         <Route path="reports" element={<RoleRoute roles={['Admin']}><Reports /></RoleRoute>} />
         <Route path="users" element={<RoleRoute roles={['Admin']}><UserManagement /></RoleRoute>} />
         <Route path="settings/currency" element={<RoleRoute roles={['Admin', 'Manager']}><CurrencySettings /></RoleRoute>} />

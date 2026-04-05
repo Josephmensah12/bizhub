@@ -81,7 +81,7 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     status: {
-      type: DataTypes.ENUM('Available', 'Reserved', 'Sold', 'In Repair', 'Scrapped', 'Written Off'),
+      type: DataTypes.ENUM('Available', 'Reserved', 'Sold', 'In Repair', 'Scrapped', 'Written Off', 'Returned to Supplier'),
       allowNull: false,
       defaultValue: 'Available'
     },
@@ -150,6 +150,108 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       references: { model: 'condition_statuses', key: 'id' },
       comment: 'Stored when entering repair/salvage so we can restore on return to regular'
+    },
+    // ── Phone Sourcing fields ──
+    sourcing_batch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: 'sourcing_batches', key: 'id' }
+    },
+    supplier_sku: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    supplier_grade: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    phone_color: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
+    color_tier: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    esim_only: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    battery_health_percent: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    imei: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    landed_cost_ghs: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('landed_cost_ghs');
+        return val === null ? null : parseFloat(val);
+      }
+    },
+    projected_sell_price_ghs: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('projected_sell_price_ghs');
+        return val === null ? null : parseFloat(val);
+      }
+    },
+    projected_margin_percent: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('projected_margin_percent');
+        return val === null ? null : parseFloat(val);
+      }
+    },
+    actual_sell_price_ghs: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('actual_sell_price_ghs');
+        return val === null ? null : parseFloat(val);
+      }
+    },
+    actual_margin_percent: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('actual_margin_percent');
+        return val === null ? null : parseFloat(val);
+      }
+    },
+    margin_variance_percent: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      get() {
+        const val = this.getDataValue('margin_variance_percent');
+        return val === null ? null : parseFloat(val);
+      }
+    },
+    buy_decision: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
+    days_to_sell: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    return_reason: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    times_returned: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    },
+    battery_flag: {
+      type: DataTypes.STRING(30),
+      allowNull: true
     }
   }, {
     tableName: 'asset_units',
@@ -183,7 +285,23 @@ module.exports = (sequelize, DataTypes) => {
     AssetUnit.belongsTo(models.ConditionStatus, { foreignKey: 'condition_status_id', as: 'conditionStatus' });
     AssetUnit.belongsTo(models.InvoiceItem, { foreignKey: 'invoice_item_id', as: 'invoiceItem' });
     AssetUnit.belongsTo(models.User, { foreignKey: 'repair_updated_by', as: 'repairUpdater' });
+    AssetUnit.belongsTo(models.SourcingBatch, { foreignKey: 'sourcing_batch_id', as: 'sourcingBatch' });
+    AssetUnit.hasMany(models.WarrantyClaim, { foreignKey: 'asset_unit_id', as: 'warrantyClaims' });
   };
+
+  // Auto-set battery_flag based on battery_health_percent
+  AssetUnit.addHook('beforeSave', 'setBatteryFlag', (unit) => {
+    const bh = unit.battery_health_percent;
+    if (bh == null) {
+      unit.battery_flag = null;
+    } else if (bh >= 85) {
+      unit.battery_flag = null;
+    } else if (bh >= 80) {
+      unit.battery_flag = 'LOW';
+    } else {
+      unit.battery_flag = 'SERVICE_WARNING';
+    }
+  });
 
   return AssetUnit;
 };

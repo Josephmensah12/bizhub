@@ -54,6 +54,18 @@ function canAccessFinancialReports(role) {
   return role === 'Admin';
 }
 
+function canSeeSourcing(role) {
+  return role === 'Admin';
+}
+
+function canManageWarranty(role) {
+  return ['Admin', 'Manager'].includes(role);
+}
+
+function canAccessSourcingReports(role) {
+  return role === 'Admin';
+}
+
 function canManageExpenses(role) {
   return ['Admin', 'Manager'].includes(role);
 }
@@ -123,6 +135,9 @@ function buildPermissions(user) {
     canManageExpenses: canManageExpenses(role),
     canCreateExpenses: canCreateExpenses(role),
     canViewSensitiveExpenses: canViewSensitiveExpenses(role),
+    canSeeSourcing: canSeeSourcing(role),
+    canManageWarranty: canManageWarranty(role),
+    canAccessSourcingReports: canAccessSourcingReports(role),
     maxDiscountPercent: maxDiscount,
     accessibleReports: accessibleReports(role)
   };
@@ -148,6 +163,35 @@ function requirePermission(permFn) {
     }
     next();
   };
+}
+
+/**
+ * Strip sourcing fields from a unit object based on role.
+ */
+function sanitizeUnitForRole(unit, role) {
+  const data = typeof unit.toJSON === 'function' ? unit.toJSON() : { ...unit };
+
+  if (!canSeeSourcing(role)) {
+    delete data.sourcing_batch_id;
+    delete data.supplier_sku;
+    delete data.supplier_grade;
+    delete data.buy_decision;
+    delete data.landed_cost_ghs;
+    delete data.projected_sell_price_ghs;
+    delete data.projected_margin_percent;
+    delete data.actual_margin_percent;
+    delete data.margin_variance_percent;
+    delete data.days_to_sell;
+    delete data.sourcingBatch;
+    delete data.SourcingBatch;
+  }
+
+  if (!canSeeCost(role)) {
+    delete data.cost_amount;
+    delete data.actual_sell_price_ghs;
+  }
+
+  return data;
 }
 
 /**
@@ -227,6 +271,10 @@ module.exports = {
   defaultMaxDiscount,
   buildPermissions,
   requirePermission,
+  canSeeSourcing,
+  canManageWarranty,
+  canAccessSourcingReports,
+  sanitizeUnitForRole,
   sanitizeAssetForRole,
   sanitizeInvoiceForRole
 };
