@@ -374,14 +374,61 @@ export default function Payments() {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = {
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        includeVoided: filters.includeVoided ? 'true' : 'false'
+      };
+      if (filters.transactionType.length > 0) params.transactionType = filters.transactionType.join(',');
+      if (filters.paymentMethod.length > 0) params.paymentMethod = filters.paymentMethod.join(',');
+      if (filters.search) params.search = filters.search;
+
+      const response = await axios.get('/api/v1/payments/export', {
+        params,
+        responseType: 'blob'
+      });
+
+      const url = window.URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Payments_${filters.dateFrom}_to_${filters.dateTo}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Failed to export payments');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-[1600px] mx-auto px-4 md:px-6 xl:px-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Payments</h1>
-        <p className="text-base text-gray-500 mt-1">
-          View all payment transactions across invoices
-        </p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Payments</h1>
+          <p className="text-base text-gray-500 mt-1">
+            View all payment transactions across invoices
+          </p>
+        </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="px-4 py-2 text-sm font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 disabled:opacity-50 flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          {exporting ? 'Exporting...' : 'Export XLS'}
+        </button>
       </div>
 
       {/* Summary KPI Cards */}

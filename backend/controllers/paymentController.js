@@ -6,6 +6,7 @@
 
 const { InvoicePayment, Invoice, Customer, User, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const ExcelJS = require('exceljs');
 
 // Async handler wrapper
 const asyncHandler = handler => (req, res, next) => {
@@ -251,6 +252,162 @@ exports.getPaymentMethods = asyncHandler(async (req, res) => {
       transactionTypes: InvoicePayment.TRANSACTION_TYPES
     }
   });
+});
+
+/**
+ * GET /api/v1/payments/export
+ * Export filtered payments as .xlsx
+ */
+exports.exportToExcel = asyncHandler(async (req, res) => {
+  const {
+    dateFrom,
+    dateTo,
+    transactionType,
+    paymentMethod,
+    search,
+    includeVoided = 'false'
+  } = req.query;
+
+  const now = new Date();
+  const defaultDateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+  const defaultDateTo = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+  const startDate = dateFrom ? new Date(dateFrom) : defaultDateFrom;
+  const endDate = dateTo ? new Date(dateTo) : defaultDateTo;
+
+  const where = {
+    payment_date: { [Op.between]: [startDate, endDate] }
+  };
+
+  if (includeVoided !== 'true') {
+    where.voided_at = null;
+  }
+
+  if (transactionType) {
+    const types = transactionType.split(',').map(t => t.trim()).filter(Boolean);
+    if (types.length) where.transaction_type = types.length === 1 ? types[0] : { [Op.in]: types };
+  }
+
+  if (paymentMethod) {
+    const methods = paymentMethod.split(',').map(m => m.trim()).filter(Boolean);
+    if (methods.length) where.payment_method = methods.length === 1 ? methods[0] : { [Op.in]: methods };
+  }
+
+  let invoiceWhere, customerWhere;
+  if (search) {
+    invoiceWhere = { invoice_number: { [Op.iLike]: `%${search}%` } };
+    customerWhere = {
+      [Op.or]: [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { company_name: { [Op.iLike]: `%${search}%` } }
+      ]
+    };
+  }
+
+  const rows = await InvoicePayment.findAll({
+    where,
+    order: [['payment_date', 'DESC']],
+    include: [
+      {
+        model: Invoice, as: 'invoice',
+        attributes: ['id', 'invoice_number', 'currency', 'status', 'total_amount'],
+        where: search ? invoiceWhere : undefined,
+        required: search ? false : true,
+        include: [{
+          model: Customer, as: 'customer',
+          attributes: ['id', 'first_name', 'last_name', 'company_name'],
+          where: search ? customerWhere : undefined,
+          required: false
+        }]
+      },
+      { model: User, as: 'receivedBy', attributes: ['id', 'full_name'] },
+      { model: User, as: 'voidedBy', attributes: ['id', 'full_name'] }
+    ]
+  });
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'BizHub';
+  const ws = wb.addWorksheet('Payments', { properties: { defaultColWidth: 15 } });
+
+  ws.columns = [
+    { header: 'Date', key: 'date', width: 14 },
+    { header: 'Invoice #', key: 'invoice', width: 18 },
+    { header: 'Customer', key: 'customer', width: 28 },
+    { header: 'Type', key: 'type', width: 12 },
+    { header: 'Method', key: 'method', width: 12 },
+    { header: 'Amount', key: 'amount', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'Currency', key: 'currency', width: 10 },
+    { header: 'Invoice Total', key: 'invoiceTotal', width: 14, style: { numFmt: '#,##0.00' } },
+    { header: 'Invoice Status', key: 'invoiceStatus', width: 14 },
+    { header: 'Received By', key: 'receivedBy', width: 18 },
+    { header: 'Comment', key: 'comment', width: 30 },
+    { header: 'Voided', key: 'voided', width: 12 },
+    { header: 'Void Reason', key: 'voidReason', width: 20 }
+  ];
+
+  // Style header row
+  const headerRow = ws.getRow(1);
+  headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } };
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+  headerRow.height = 24;
+
+  rows.forEach(tx => {
+    const data = tx.toJSON();
+    const cust = data.invoice?.customer;
+    const customerName = cust
+      ? (cust.company_name || [cust.first_name, cust.last_name].filter(Boolean).join(' ') || 'Unknown')
+      : 'No Customer';
+
+    ws.addRow({
+      date: data.payment_date ? new Date(data.payment_date) : '',
+      invoice: data.invoice?.invoice_number || '',
+      customer: customerName,
+      type: data.transaction_type,
+      method: data.payment_method === 'Other' && data.payment_method_other_text
+        ? `Other - ${data.payment_method_other_text}` : data.payment_method,
+      amount: parseFloat(data.amount) || 0,
+      currency: data.currency || 'GHS',
+      invoiceTotal: parseFloat(data.invoice?.total_amount) || 0,
+      invoiceStatus: data.invoice?.status || '',
+      receivedBy: data.receivedBy?.full_name || '',
+      comment: data.comment || '',
+      voided: data.voided_at ? 'Yes' : '',
+      voidReason: data.void_reason || ''
+    });
+  });
+
+  // Format date column
+  ws.getColumn('date').numFmt = 'DD-MMM-YYYY';
+
+  // Add totals row
+  const totalRow = ws.addRow({
+    date: '',
+    invoice: '',
+    customer: '',
+    type: '',
+    method: 'TOTAL',
+    amount: rows.reduce((s, tx) => s + (parseFloat(tx.amount) || 0), 0),
+    currency: '',
+    invoiceTotal: '',
+    invoiceStatus: '',
+    receivedBy: '',
+    comment: `${rows.length} transactions`,
+    voided: '',
+    voidReason: ''
+  });
+  totalRow.font = { bold: true, size: 11 };
+  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+
+  const fromStr = startDate.toISOString().slice(0, 10);
+  const toStr = endDate.toISOString().slice(0, 10);
+  const filename = `Payments_${fromStr}_to_${toStr}.xlsx`;
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  await wb.xlsx.write(res);
+  res.end();
 });
 
 module.exports = exports;

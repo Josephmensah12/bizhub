@@ -15,6 +15,9 @@ router.use(authenticate);
 // GET /api/v1/payments - List all payment transactions
 router.get('/', paymentController.list);
 
+// GET /api/v1/payments/export - Export filtered payments as XLSX
+router.get('/export', paymentController.exportToExcel);
+
 // GET /api/v1/payments/methods - Get available payment methods for filters
 router.get('/methods', paymentController.getPaymentMethods);
 
